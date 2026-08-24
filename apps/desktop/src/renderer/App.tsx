@@ -1,5 +1,5 @@
 /**
- * App.tsx — the application shell.
+ * App.tsx Ã¢â‚¬â€ the application shell.
  *
  * Composes the sidebar, the chat view, and the modal panels, and owns the
  * small amount of purely-visual state (which panel is open, theme class).
@@ -9,9 +9,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useGhostbot } from './useGhostbot';
 import { Sidebar, GhostMark } from './Sidebar';
 import { Chat } from './Chat';
-import { AgentPanel, McpPanel, RoutinesPanel, SettingsPanel, SkillsPanel } from './Panels';
+import {
+  AgentPanel,
+  McpPanel,
+  NewAgentPanel,
+  RoutinesPanel,
+  SettingsPanel,
+  SkillsPanel,
+} from './Panels';
+import type { AgentRecord } from '@ghostbot/shared';
 
-type Panel = 'settings' | 'agent' | 'mcp' | 'routines' | 'skills' | null;
+type Panel = 'settings' | 'agent' | 'mcp' | 'routines' | 'skills' | 'new-agent' | null;
 
 export function App() {
   const { state, actions } = useGhostbot();
@@ -72,7 +80,7 @@ export function App() {
       }
       if (mod && e.key.toLowerCase() === 'n') {
         e.preventDefault();
-        void actions.createAgent({ name: 'New agent' });
+        setPanel('new-agent');
       }
     };
     document.addEventListener('keydown', onKey);
@@ -81,7 +89,7 @@ export function App() {
 
   /*
    * Slash-command skills are expanded in the main process (see `expandSkill`
-   * in main.ts), which is the single source of truth — routines and any other
+   * in main.ts), which is the single source of truth Ã¢â‚¬â€ routines and any other
    * non-UI caller need the same behaviour. The renderer sends the raw text.
    */
   const send = useCallback(
@@ -103,7 +111,7 @@ export function App() {
   const needsOnboarding = ready && settings && !hasProvider && !settings.onboarded;
 
   /*
-   * If a CLI on this machine is already signed in, say so — it turns a
+   * If a CLI on this machine is already signed in, say so Ã¢â‚¬â€ it turns a
    * "paste an API key" chore into one click. Offered, never assumed: the
    * user still chooses it in Settings, where the risk is stated.
    */
@@ -113,7 +121,7 @@ export function App() {
     return (
       <div className="boot">
         <GhostMark size={44} />
-        <p className="muted">Starting GhostBot…</p>
+        <p className="muted">Starting GhostBotÃ¢â‚¬Â¦</p>
       </div>
     );
   }
@@ -125,7 +133,7 @@ export function App() {
         selectedId={selectedId}
         runStates={runStates}
         onSelect={actions.selectAgent}
-        onCreate={() => void actions.createAgent({ name: 'New agent' })}
+        onCreate={() => setPanel('new-agent')}
         onOpenSettings={() => setPanel('settings')}
         onOpenPanel={setPanel}
       />
@@ -163,13 +171,13 @@ export function App() {
           <div className="onboard-banner">
             <div>
               <strong>Welcome to GhostBot.</strong> Choose a model provider and paste an API key to
-              begin — your key is stored encrypted on this machine and sent only to the provider you
+              begin Ã¢â‚¬â€ your key is stored encrypted on this machine and sent only to the provider you
               pick.
               {availableCli && (
                 <>
                   {' '}
                   You are already signed in to <strong>{availableCli.source}</strong>
-                  {availableCli.plan ? ` (${availableCli.plan} plan)` : ''} on this machine — you can
+                  {availableCli.plan ? ` (${availableCli.plan} plan)` : ''} on this machine Ã¢â‚¬â€ you can
                   use that instead of a key.
                 </>
               )}
@@ -200,7 +208,7 @@ export function App() {
           onBranch={(id) => void actions.branch(id)}
           retryDraft={retryDraft}
           onRetryDraftConsumed={() => setRetryDraft(null)}
-          onCreateAgent={() => void actions.createAgent({ name: 'New agent' })}
+          onCreateAgent={() => setPanel('new-agent')}
           hasProvider={hasProvider}
         />
       </main>
@@ -215,6 +223,16 @@ export function App() {
         >
           {toast.text}
         </div>
+      )}
+
+      {panel === 'new-agent' && (
+        <NewAgentPanel
+          presets={presets}
+          defaultPresetId={settings?.presetId}
+          onCreate={(patch: Partial<AgentRecord>) => void actions.createAgent(patch)}
+          onOpenSettings={() => setPanel('settings')}
+          onClose={() => setPanel(null)}
+        />
       )}
 
       {panel === 'settings' && settings && (

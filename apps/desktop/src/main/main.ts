@@ -30,6 +30,7 @@ import { attachmentsToPromptText } from './attachments.js';
 import { rebuildHistory } from './branching.js';
 import { initGrants } from './grants.js';
 import { allStatuses, recordUsage, resolveToken, type OAuthVendor } from './oauth-store.js';
+import { migrateLegacyKey, providerSecretKey } from './provider-keys.js';
 import type { UsageSnapshot } from '@ghostbot/llm';
 import {
   isTerminal,
@@ -128,20 +129,26 @@ async function resolveCredential(
   };
 }
 
-/** Read the provider API key from the encrypted store, then env. */
+/**
+ * Read the API key for one provider.
+ *
+ * Keys are stored **per provider** (`GHOSTBOT_KEY_<preset>`), so several can
+ * be configured at once and each agent uses the right one. This matters more
+ * than it sounds: a single shared key meant an agent switched to OpenAI sent
+ * an OpenAI key to whatever host the global settings pointed at — and the
+ * provider that answered was not the one the error named.
+ *
+ * The legacy shared `GHOSTBOT_API_KEY` is still honoured as a last resort so
+ * existing installs keep working; `migrateLegacyKey` moves it to its proper
+ * home on startup.
+ */
 function resolveApiKey(presetId: string): string | undefined {
   const secrets = readSecrets(userDataDir);
-  const perProvider: Record<string, string> = {
-    deepseek: 'DEEPSEEK_API_KEY',
-    openai: 'OPENAI_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
-    groq: 'GROQ_API_KEY',
-    openrouter: 'OPENROUTER_API_KEY',
-  };
-  for (const name of ['GHOSTBOT_API_KEY', perProvider[presetId]].filter(Boolean) as string[]) {
-    if (secrets[name]) return secrets[name];
-  }
-  return process.env.GHOSTBOT_API_KEY;
+  return (
+    secrets[providerSecretKey(presetId)] ??
+    secrets.GHOSTBOT_API_KEY ??
+    process.env.GHOSTBOT_API_KEY
+  );
 }
 
 /**
@@ -155,7 +162,23 @@ async function effectiveConfig(agent: AgentRecord | undefined, settings: GlobalS
   return {
     presetId,
     model: agent?.model ?? settings.model,
-    baseUrl: settings.baseUrl,
+    /*
+     * A custom Base URL belongs to the preset it was entered for.
+     *
+     * `presetId` and `model` honour a per-agent override, but `baseUrl` used
+     * to be taken from global settings unconditionally — so an agent set to
+     * OpenAI while the global provider was NVIDIA sent OpenAI's model name to
+     * NVIDIA's host. The reply ("does not recognise gpt-5.6-terra") was
+     * correct but came from the wrong provider, and the error named OpenAI,
+     * making it look like a valid model had been rejected.
+     *
+     * The override now applies only when the agent is actually on the preset
+     * the URL was configured for; otherwise the preset's own default host is
+     * used. `custom` has no default host, so its URL always applies.
+     */
+    baseUrl:
+      agent?.baseUrl ??
+      (presetId === settings.presetId || presetId === 'custom' ? settings.baseUrl : undefined),
     workspaceRoot: agent?.workspaceRoot ?? settings.workspaceRoot ?? app.getPath('documents'),
     approvalPolicy: agent?.approvalPolicy ?? settings.approvalPolicy ?? 'ask',
     persona: agent?.persona ?? settings.persona,
@@ -681,6 +704,9 @@ app.whenReady().then(async () => {
   userDataDir = migrateUserData();
   store.initStore(userDataDir);
   initGrants(userDataDir);
+  // Attribute a pre-existing shared key to the provider it was set up for,
+  // so adding a second provider does not hand the first one's key to it.
+  migrateLegacyKey(userDataDir, (readSettings(userDataDir, {}) as GlobalSettings).presetId);
 
   // One-time hardening: if an earlier build left the provider key in the
   // plaintext settings file, move it into the encrypted secrets store.

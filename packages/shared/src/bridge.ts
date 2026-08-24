@@ -89,6 +89,14 @@ export interface PresetView {
   keyHint: string;
   /** True when this preset signs in rather than taking an API key. */
   subscription?: boolean;
+  /**
+   * True when this provider already has a stored key or sign-in.
+   *
+   * Several providers can be configured at once and each agent picks one, so
+   * the UI needs to show which are actually usable rather than implying the
+   * currently-selected one is the only choice.
+   */
+  configured?: boolean;
 }
 
 export interface PersonaView {

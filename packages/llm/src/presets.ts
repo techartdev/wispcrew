@@ -175,7 +175,15 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'http://localhost:8000/v1',
     defaultModel: 'model',
     models: [],
-    local: true,
+    /*
+     * Deliberately NOT flagged `local`.
+     *
+     * A custom endpoint may be a local server or a remote one — the user
+     * decides by editing the Base URL. Claiming it is local made it show as
+     * "configured" with no credential at all, which is only true for the
+     * localhost default. Whether a key is required is judged from the actual
+     * URL at request time (`endpointAllowsNoKey`), not from this flag.
+     */
     keyHint: 'API key if your endpoint requires one',
   },
 ];

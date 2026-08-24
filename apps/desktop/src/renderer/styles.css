@@ -1066,6 +1066,35 @@ body {
   font-size: 12.5px;
 }
 
+/* A configured provider is marked so you can see, at a glance, which ones
+   are ready — not merely which is selected. */
+.provider-card.configured .provider-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.provider-check {
+  color: var(--ok);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.provider-card.configured:not(.selected) {
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
+}
+
+/* An inline action inside a sentence, e.g. "Open Settings to add a key". */
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* Subscription sign-in */
 
 .signin-block {

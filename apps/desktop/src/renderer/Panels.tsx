@@ -117,6 +117,128 @@ export function Modal({
 }
 
 /* ------------------------------------------------------------------ */
+/* New agent                                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Create an agent, choosing which configured provider it should use.
+ *
+ * Only providers that actually have a key or sign-in are offered. Listing
+ * every preset would let a user pick one they have not set up, producing a
+ * failure at the agent's first message — and the reason (no key for *this*
+ * provider) is not obvious when another provider is working fine.
+ *
+ * "Use the default" stays first so the common case is one click: most people
+ * want another agent on the provider they already use.
+ */
+function NewAgentPanel({
+  presets,
+  defaultPresetId,
+  onCreate,
+  onOpenSettings,
+  onClose,
+}: {
+  presets: PresetView[];
+  defaultPresetId?: string;
+  onCreate(patch: Partial<AgentRecord>): void;
+  onOpenSettings(): void;
+  onClose(): void;
+}) {
+  const configured = useMemo(() => presets.filter((p) => p.configured), [presets]);
+  const [name, setName] = useState('New agent');
+  const [presetId, setPresetId] = useState('');
+  const [model, setModel] = useState('');
+
+  const chosen = presets.find((p) => p.id === presetId);
+  const fallback = presets.find((p) => p.id === defaultPresetId);
+
+  const create = () => {
+    onCreate({
+      name: name.trim() || 'New agent',
+      presetId: presetId || undefined,
+      model: model.trim() || undefined,
+    });
+    onClose();
+  };
+
+  return (
+    <Modal title="New agent" onClose={onClose}>
+      <label className="field">
+        <span>Name</span>
+        <input
+          value={name}
+          autoFocus
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') create();
+          }}
+        />
+      </label>
+
+      <label className="field">
+        <span>Provider</span>
+        <select
+          value={presetId}
+          onChange={(e) => {
+            setPresetId(e.target.value);
+            setModel('');
+          }}
+        >
+          <option value="">
+            Use the default{fallback ? ` (${fallback.label})` : ''}
+          </option>
+          {configured.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {configured.length === 0 && (
+        <p className="warn-inline">
+          No providers are configured yet.{' '}
+          <button type="button" className="link-button" onClick={onOpenSettings}>
+            Open Settings
+          </button>{' '}
+          to add an API key or sign in.
+        </p>
+      )}
+
+      {chosen && (
+        <label className="field">
+          <span>
+            Model <em className="muted">— optional, defaults to {chosen.defaultModel}</em>
+          </span>
+          <input
+            list="new-agent-models"
+            value={model}
+            placeholder={chosen.defaultModel}
+            onChange={(e) => setModel(e.target.value)}
+          />
+          <datalist id="new-agent-models">
+            {chosen.models.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        </label>
+      )}
+
+      <div className="row-actions">
+        <button type="button" className="btn" onClick={onClose}>
+          Cancel
+        </button>
+        <button type="button" className="btn btn-primary" onClick={create}>
+          Create agent
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+export { NewAgentPanel };
+
+/* ------------------------------------------------------------------ */
 /* Subscription sign-in                                                */
 /* ------------------------------------------------------------------ */
 
@@ -359,11 +481,27 @@ export function SettingsPanel({
             <button
               key={p.id}
               type="button"
-              className={`provider-card ${p.id === presetId ? 'selected' : ''}`}
+              className={`provider-card ${p.id === presetId ? 'selected' : ''} ${
+                p.configured ? 'configured' : ''
+              }`}
               onClick={() => choosePreset(p.id)}
+              // Several providers can be set up at once, so the card says
+              // whether *this* one is ready rather than only which is
+              // selected. Without it there is no way to see what you have
+              // already configured.
+              aria-label={`${p.label}${p.configured ? ', configured' : ', not configured'}`}
             >
-              <span className="provider-name">{p.label}</span>
-              <span className="provider-kind">{p.local ? 'local' : 'cloud'}</span>
+              <span className="provider-name">
+                {p.label}
+                {p.configured && (
+                  <span className="provider-check" aria-hidden="true" title="Configured">
+                    ✓
+                  </span>
+                )}
+              </span>
+              <span className="provider-kind">
+                {p.local ? 'local' : p.subscription ? 'subscription' : 'cloud'}
+              </span>
             </button>
           ))}
         </div>
@@ -613,6 +751,7 @@ export function AgentPanel({
   const [persona, setPersona] = useState(agent.persona ?? '');
   const [presetId, setPresetId] = useState(agent.presetId ?? '');
   const [model, setModel] = useState(agent.model ?? '');
+  const [baseUrl, setBaseUrl] = useState(agent.baseUrl ?? '');
   const [workspaceRoot, setWorkspaceRoot] = useState(agent.workspaceRoot ?? '');
   const [policy, setPolicy] = useState<ApprovalPolicy | ''>(agent.approvalPolicy ?? '');
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -626,6 +765,7 @@ export function AgentPanel({
       persona: persona || undefined,
       presetId: presetId || undefined,
       model: model || undefined,
+      baseUrl: baseUrl.trim() || undefined,
       workspaceRoot: workspaceRoot || undefined,
       approvalPolicy: (policy || undefined) as ApprovalPolicy | undefined,
     });
@@ -674,10 +814,17 @@ export function AgentPanel({
           <label className="field">
             <span>Provider</span>
             <select value={presetId} onChange={(e) => setPresetId(e.target.value)}>
-              <option value="">Inherit</option>
+              <option value="">Inherit from Settings</option>
+              {/*
+                Marking unconfigured providers matters: picking one with no
+                key produces a failure at the first message, and the reason
+                (a key was never entered for *this* provider) is not obvious
+                when another provider is working fine.
+              */}
               {presets.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
+                  {p.configured ? '' : ' — not configured'}
                 </option>
               ))}
             </select>
@@ -697,6 +844,30 @@ export function AgentPanel({
             </datalist>
           </label>
         </div>
+
+        {preset && !preset.configured && (
+          <p className="warn-inline">
+            {preset.label} has no {preset.subscription ? 'sign-in' : 'API key'} yet. Add one in
+            Settings, or this agent will fail on its first message.
+          </p>
+        )}
+
+        {/* Only useful for a self-hosted or proxied endpoint, so it is not
+            given prominence — but without it, an agent on a different
+            provider had no way to reach a non-default host. */}
+        {presetId && !preset?.subscription && (
+          <label className="field">
+            <span>
+              Base URL <em className="muted">— optional, for self-hosted or proxied endpoints</em>
+            </span>
+            <input
+              value={baseUrl}
+              placeholder={preset?.baseUrl ?? 'Provider default'}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              spellCheck={false}
+            />
+          </label>
+        )}
 
         <label className="field">
           <span>Workspace folder</span>

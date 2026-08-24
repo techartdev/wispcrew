@@ -46,6 +46,14 @@ export interface AgentRecord {
   presetId?: string;
   /** Model override; falls back to the preset default. */
   model?: string;
+  /**
+   * Endpoint override for this agent.
+   *
+   * Only meaningful for a self-hosted or proxied endpoint. When unset, the
+   * agent uses its preset's own host — deliberately *not* the global Base
+   * URL, which belongs to whichever preset it was entered for.
+   */
+  baseUrl?: string;
   /** Directory this agent's file/shell tools are confined to. */
   workspaceRoot?: string;
   /** Per-agent tool policy; falls back to the global default. */
