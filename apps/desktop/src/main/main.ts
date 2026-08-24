@@ -293,18 +293,47 @@ async function runPrompt(
     return check.error;
   }
 
-  const assistantId = store.newId('asst');
+  /*
+   * Assistant text is written in *segments*, one per id.
+   *
+   * A turn interleaves prose and tool calls: the model says what it is about
+   * to do, calls tools, then writes its answer. Transcript entries render in
+   * insertion order, so reusing a single id for the whole turn pinned all the
+   * prose at the position of the first token — and every tool card, created
+   * later, appeared *below* the final answer even though it ran before it.
+   * The transcript then read backwards: conclusions first, evidence after.
+   *
+   * Starting a new segment whenever a tool call arrives keeps the visible
+   * order the same as the real order. `settleSegment` is called before any
+   * tool card is pushed; the next token then opens a fresh entry underneath.
+   */
+  let segmentId = store.newId('asst');
   let text = '';
+  /** Text already committed to earlier segments, for the final return value. */
+  let priorText = '';
+
   const flush = (streaming: boolean) => {
+    // An empty segment would render as a blank bubble; skip it. This happens
+    // whenever a turn ends with a tool call rather than prose.
+    if (!text && !streaming) return;
     const entry: TranscriptEntry = {
       kind: 'message',
-      id: assistantId,
+      id: segmentId,
       role: 'assistant',
       content: text,
       isStreaming: streaming,
       createdAt: Date.now(),
     };
     pushTranscript(agentId, entry);
+  };
+
+  /** Close the current text segment so what follows appears after it. */
+  const settleSegment = () => {
+    if (!text) return;
+    flush(false);
+    priorText = priorText ? `${priorText}\n\n${text}` : text;
+    text = '';
+    segmentId = store.newId('asst');
   };
 
   // A delegated run inherits the caller's (possibly narrowed) policy so an
@@ -372,6 +401,9 @@ async function runPrompt(
       text += e.text;
       flush(true);
     } else if (e.type === 'tool_call_start') {
+      // Close any prose written before this call so the card lands *after*
+      // it, and the answer the model writes next lands after the card.
+      settleSegment();
       pushTranscript(agentId, {
         kind: 'tool-call',
         id: e.call.id,
@@ -408,11 +440,27 @@ async function runPrompt(
 
   setRunning(agentId, true);
   emitEvent({ type: 'run-state', agentId, state: 'thinking' });
-  flush(true);
+  /*
+   * No placeholder entry is pushed here.
+   *
+   * Emitting an empty assistant message up front reserved a transcript slot
+   * *above* anything the turn did next, so a turn that began with a tool call
+   * showed the card below the answer — the very ordering this segmenting is
+   * meant to fix. The "thinking" run-state above already tells the UI work
+   * has started; the first delta creates the entry, in the right place.
+   */
 
   try {
     const final = await session.run(prompt, images);
-    text = final.content;
+    /*
+     * `final.content` is the whole turn's text, but streaming has already
+     * placed each segment in the transcript. Overwriting the current segment
+     * with it would repeat everything written before the last tool call.
+     *
+     * So only adopt it when nothing was streamed at all — a non-streaming
+     * provider, or a turn whose text never arrived as deltas.
+     */
+    if (!text && !priorText) text = final.content;
   } catch (err) {
     // Raw provider failures are hostile — an HTTP 401 arrives as a wall of
     // JSON, a wrong base URL as the single word "fetch failed". Translate to
@@ -437,7 +485,9 @@ async function runPrompt(
     flush(false);
     emitEvent({ type: 'run-state', agentId, state: 'idle' });
   }
-  return text;
+  // Callers (routines, delegation) want the turn's whole answer, which may
+  // span several segments.
+  return priorText ? (text ? `${priorText}\n\n${text}` : priorText) : text;
 }
 
 /**
