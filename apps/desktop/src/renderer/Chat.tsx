@@ -288,6 +288,13 @@ export function Chat({
   }, [skills, slashQuery]);
 
   const submit = useCallback(() => {
+    // No provider yet: send the user to Settings instead of letting the
+    // message fail. A first-run dead end ("your API key was rejected" when
+    // you never entered one) is the worst possible first impression.
+    if (!hasProvider) {
+      onOpenSettings();
+      return;
+    }
     const text = draft.trim();
     // An attachment with no words is a legitimate message ("look at this").
     if ((!text && pending.length === 0) || busy) return;
@@ -296,7 +303,7 @@ export function Chat({
     setPending([]);
     // Collapse the textarea back to one row after sending.
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-  }, [draft, pending, busy, onSend]);
+  }, [draft, pending, busy, onSend, hasProvider, onOpenSettings]);
 
   const addFiles = useCallback((paths: string[]) => {
     // De-duplicate: dropping the same file twice should not send it twice.
@@ -530,7 +537,13 @@ export function Chat({
             className="composer-input"
             rows={1}
             value={draft}
-            placeholder={busy ? 'Agent is working — Esc to stop' : `Message ${agent.name}…`}
+            placeholder={
+              !hasProvider
+                ? 'Configure a provider in Settings to start chatting…'
+                : busy
+                  ? 'Agent is working — Esc to stop'
+                  : `Message ${agent.name}…`
+            }
             onChange={(e) => {
               setDraft(e.target.value);
               autosize(e.target);
@@ -547,9 +560,12 @@ export function Chat({
               type="button"
               className="btn btn-primary btn-send"
               onClick={submit}
-              disabled={!draft.trim() && pending.length === 0}
+              // With no provider the button stays live and routes to
+              // Settings — a greyed-out control with no explanation is a
+              // worse dead end than one that tells you what to do.
+              disabled={hasProvider && !draft.trim() && pending.length === 0}
             >
-              Send
+              {hasProvider ? 'Send' : 'Set up'}
             </button>
           )}
         </div>

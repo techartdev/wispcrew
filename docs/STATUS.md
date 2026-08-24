@@ -30,6 +30,7 @@ inspection, or a passing assertion — not by reading the code.
 | Memory across restarts | Live: a fact stated in one process was recalled by a **separate** process |
 | Standing tool grants | Persist across restarts, listed and revocable in Settings, dropped with their agent, fail closed on a corrupt file |
 | Actionable provider errors | A wrong key, model, or base URL produces advice, not an HTTP dump; verified live against each failure |
+| First run on a clean profile | Verified with an empty userData dir: onboarding banner, guided composer, and a missing key reported as "needs an API key", never as "rejected" |
 | Accessibility | Live-region announcements, `aria-expanded` tool cards, modal focus trap with focus restore, visible focus rings |
 | Offline suites | All twelve pass with no API key and no network |
 | **Fresh-clone workflow** | `git clone` → `npm ci` → typecheck → build → tests → `pack` → packaged app boots and renders. Verified from a real clone, not the working tree |

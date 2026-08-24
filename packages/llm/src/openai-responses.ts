@@ -75,8 +75,10 @@ export class OpenAIResponsesProvider implements ChatProvider {
   }
 
   validate(): { ok: true } | { ok: false; error: string } {
-    if (!this.config.apiKey) return { ok: false, error: 'OpenAI requires an API key' };
-    if (!this.config.model) return { ok: false, error: 'model is required' };
+    if (!this.config.apiKey) {
+      return { ok: false, error: 'OpenAI needs an API key. Open Settings and paste one to get started.' };
+    }
+    if (!this.config.model) return { ok: false, error: 'No model is set. Choose one in Settings.' };
     return { ok: true };
   }
 

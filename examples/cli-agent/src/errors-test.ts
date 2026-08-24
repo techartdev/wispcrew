@@ -9,7 +9,13 @@
  *
  * Run: npm run test:errors --workspace @ghostbot/examples-cli
  */
-import { describeHttpFailure, describeProviderError } from '@ghostbot/llm';
+import {
+  configFromPreset,
+  createProvider,
+  describeHttpFailure,
+  describeProviderError,
+  endpointAllowsNoKey,
+} from '@ghostbot/llm';
 
 let failures = 0;
 
@@ -115,6 +121,65 @@ function main(): void {
     const msg = describeProviderError(new Error('something unusual happened'), ctx);
     eq('passes the message through', msg, 'something unusual happened');
     eq('non-Error input is stringified', describeProviderError('oops', ctx), 'oops');
+  }
+
+  console.log('\n[first run] a missing key is caught before the request');
+  {
+    // The bug this covers: with no key at all, the request went out anyway
+    // and the resulting 401 was reported as "your API key was rejected —
+    // check it is correct". Nonsense advice when the user never entered one,
+    // and it is the very first thing a new user would see.
+    for (const preset of ['deepseek', 'openai', 'anthropic', 'groq', 'openrouter']) {
+      const p = createProvider(configFromPreset(preset, { model: 'm' }));
+      const v = p.validate();
+      eq(`${preset}: rejected without a key`, v.ok, false);
+      const msg = v.ok ? '' : v.error;
+      check(`${preset}: says a key is needed`, /needs an api key/i.test(msg), msg);
+      check(`${preset}: points at Settings`, /settings/i.test(msg), msg);
+      check(`${preset}: does not claim rejection`, !/rejected|incorrect/i.test(msg), msg);
+    }
+  }
+
+  console.log('\n[first run] keyless local servers are still allowed');
+  {
+    // Ollama and LM Studio are keyless by design; demanding a key would
+    // block a perfectly valid setup.
+    for (const preset of ['ollama', 'lmstudio']) {
+      const v = createProvider(configFromPreset(preset, { model: 'm' })).validate();
+      check(`${preset}: allowed without a key`, v.ok, v.ok ? '' : v.error);
+    }
+    // A custom preset pointed at localhost is equally legitimate.
+    const custom = createProvider(
+      configFromPreset('custom', { model: 'm', baseUrl: 'http://localhost:8000/v1' }),
+    ).validate();
+    check('custom localhost: allowed without a key', custom.ok);
+
+    // ...but a custom preset pointed at a remote host is not.
+    const remote = createProvider(
+      configFromPreset('custom', { model: 'm', baseUrl: 'https://api.example.com/v1' }),
+    ).validate();
+    eq('custom remote: needs a key', remote.ok, false);
+  }
+
+  console.log('\n[first run] endpoint classification');
+  {
+    for (const url of [
+      'http://localhost:11434/v1',
+      'http://127.0.0.1:1234/v1',
+      'http://[::1]:8000/v1',
+      'http://host.docker.internal:11434/v1',
+    ]) {
+      check(`${url} counts as local`, endpointAllowsNoKey(url));
+    }
+    for (const url of [
+      'https://api.openai.com/v1',
+      'https://api.deepseek.com',
+      // Must not be fooled by a hostname that merely contains "localhost".
+      'https://localhost.evil.com/v1',
+    ]) {
+      check(`${url} requires a key`, !endpointAllowsNoKey(url));
+    }
+    check('undefined is not local', !endpointAllowsNoKey(undefined));
   }
 
   console.log('');

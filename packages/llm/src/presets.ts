@@ -111,6 +111,22 @@ export function getPreset(id: string): ProviderPreset | undefined {
   return PROVIDER_PRESETS.find((p) => p.id === id);
 }
 
+/**
+ * Does this endpoint legitimately run without an API key?
+ *
+ * Ollama, LM Studio and other self-hosted servers are keyless by design, so
+ * demanding a key would block a perfectly valid setup. Everything else needs
+ * one, and saying so up front is far better than letting the request go out
+ * and reporting the resulting 401 as "your key was rejected" — which is
+ * actively misleading when the user never entered a key.
+ */
+export function endpointAllowsNoKey(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false;
+  return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0|host\.docker\.internal)(:|\/|$)/i.test(
+    baseUrl,
+  );
+}
+
 /** Build a ProviderConfig from a preset + overrides. */
 export function configFromPreset(
   presetId: string,

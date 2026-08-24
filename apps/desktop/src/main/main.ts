@@ -209,11 +209,13 @@ async function runPrompt(
       kind: 'notice',
       id: store.newId('err'),
       level: 'error',
-      text: `Provider misconfigured: ${check.error}`,
+      // `validate()` already returns a complete, actionable sentence;
+      // prefixing it just adds jargon in front of the useful part.
+      text: check.error,
       createdAt: Date.now(),
     });
     emitEvent({ type: 'run-state', agentId, state: 'error' });
-    return `Provider misconfigured: ${check.error}`;
+    return check.error;
   }
 
   const assistantId = store.newId('asst');

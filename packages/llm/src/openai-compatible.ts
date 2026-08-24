@@ -10,6 +10,7 @@ import type {
   ProviderConfig,
   ToolDefinition,
 } from '@ghostbot/shared';
+import { endpointAllowsNoKey } from './presets.js';
 
 /**
  * True for an OpenAI **reasoning** model served from OpenAI's own endpoint.
@@ -51,11 +52,18 @@ export class OpenAICompatibleProvider implements ChatProvider {
   }
 
   validate(): { ok: true } | { ok: false; error: string } {
-    if (!this.config.baseUrl) return { ok: false, error: 'baseUrl is required' };
-    if (!this.config.model) return { ok: false, error: 'model is required' };
-    const url = this.config.baseUrl.replace(/\/+$/, '');
-    if (url.endsWith('/v1')) return { ok: true };
-    return { ok: true }; // nonstandard bases allowed; we always append /chat/completions
+    if (!this.config.baseUrl) return { ok: false, error: 'No Base URL is set. Open Settings to choose a provider.' };
+    if (!this.config.model) return { ok: false, error: 'No model is set. Choose one in Settings.' };
+    // Catch a missing key here rather than letting the request go out and
+    // reporting the 401 as "your API key was rejected" — which is nonsense
+    // when the user has not entered one. Local servers are keyless by design.
+    if (!this.config.apiKey && !endpointAllowsNoKey(this.config.baseUrl)) {
+      return {
+        ok: false,
+        error: `${this.label} needs an API key. Open Settings and paste one to get started.`,
+      };
+    }
+    return { ok: true };
   }
 
   async *chat(request: ChatRequest): AsyncIterable<ProviderChunk> {
