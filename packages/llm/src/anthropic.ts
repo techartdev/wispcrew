@@ -39,10 +39,50 @@ export class AnthropicProvider implements ChatProvider {
 
   validate(): { ok: true } | { ok: false; error: string } {
     if (!this.config.apiKey) {
-      return { ok: false, error: 'Anthropic needs an API key. Open Settings and paste one to get started.' };
+      return {
+        ok: false,
+        error:
+          'Anthropic needs an API key, or a Claude sign-in. Open Settings to add one.',
+      };
     }
     if (!this.config.model) return { ok: false, error: 'No model is set. Choose one in Settings.' };
     return { ok: true };
+  }
+
+  /**
+   * Authentication headers for one request.
+   *
+   * Anthropic accepts two different credentials on this endpoint and they are
+   * **not** interchangeable:
+   *
+   *  - An API key (`sk-ant-api…`) goes in `x-api-key`.
+   *  - A subscription OAuth access token (`sk-ant-oat…`) goes in
+   *    `Authorization: Bearer`, and the request must also carry the OAuth
+   *    beta header plus the Claude Code identity headers. Sent as `x-api-key`
+   *    an OAuth token is simply rejected.
+   *
+   * The token's own prefix says which it is, so callers never have to
+   * declare the mode and cannot get it wrong.
+   */
+  private authHeaders(): Record<string, string> {
+    const credential = this.config.apiKey ?? '';
+    const base: Record<string, string> = {
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    };
+
+    if (credential.startsWith('sk-ant-oat')) {
+      return {
+        ...base,
+        authorization: `Bearer ${credential}`,
+        'anthropic-beta': 'oauth-2025-04-20',
+        // Identity headers the subscription endpoint expects from a
+        // Claude Code-style client.
+        'user-agent': 'claude-cli/1.0.0 (external)',
+        'x-app': 'cli',
+      };
+    }
+    return { ...base, 'x-api-key': credential };
   }
 
   async *chat(request: ChatRequest): AsyncIterable<ProviderChunk> {
@@ -117,11 +157,7 @@ export class AnthropicProvider implements ChatProvider {
 
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': this.config.apiKey ?? '',
-        'anthropic-version': '2023-06-01',
-      },
+      headers: this.authHeaders(),
       body: JSON.stringify(body),
       signal: request.signal,
     });
