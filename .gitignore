@@ -3,11 +3,19 @@ node_modules/
 .pnp
 .pnp.js
 
-# Build output
+# Compiler / bundler output
 dist/
-build/
-*.tsbuildinfo
 out/
+*.tsbuildinfo
+
+# Electron build artefacts
+apps/desktop/dist/
+apps/desktop/release/
+
+# NOTE: `build/` is deliberately NOT ignored.
+# It holds the mascot source (build/icon.svg) and the generated icons that
+# electron-builder and the runtime window need. Ignoring it left fresh clones
+# unable to package the app at all. Regenerate with `npm run icons`.
 
 # Logs
 *.log
@@ -29,27 +37,19 @@ Thumbs.db
 .vscode/
 *.swp
 
-# Electron
-apps/desktop/dist/
-apps/desktop/release/
-apps/desktop/boot*.log
-boot-shot*.png
-setup-shot*.png
-
-# Local agent data
-.grokbot-data-root-v1/
-settings.json
-
-# Never commit local credentials or agent state (AGENTS.md: no secrets in repo)
+# Never commit credentials or local agent state.
+# The broad *key*.txt pattern is intentional: it is far better to ignore an
+# innocuous file than to publish a real API key.
 testkey.txt
 *key*.txt
 *.key
 *.pem
-openagent-secrets.json
-openagent-settings.json
-openagent-agents.json
-openagent-transcript-*.json
+ghostbot-secrets.json
+ghostbot-secrets.enc
+ghostbot-settings.json
+ghostbot-agents.json
+ghostbot-transcript-*.json
 client-persistence.json
 
-# Screenshots at repo root (OPENAGENT_CAPTURE output)
+# Debug screenshots at the repo root (GHOSTBOT_CAPTURE output)
 /*.png
