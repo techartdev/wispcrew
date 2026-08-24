@@ -1,0 +1,31 @@
+# Normalize line endings so a checkout on Windows, macOS and Linux produces
+# identical files. Without this, contributors on different platforms generate
+# whole-file diffs that hide the real change.
+* text=auto eol=lf
+
+# Shell scripts must keep LF even on Windows — CRLF breaks the shebang.
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Windows-only scripts are the mirror case.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets must never be line-ending converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+*.exe binary
+*.dll binary
+*.node binary
+
+# Generated; collapse in diffs and mark as not-language for GitHub stats.
+package-lock.json -diff linguist-generated

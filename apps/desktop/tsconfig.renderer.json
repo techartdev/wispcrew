@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    // The renderer is bundled by Vite, not resolved by Node, so it uses
+    // bundler resolution (extensionless relative imports are correct here).
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["src/renderer"]
+}

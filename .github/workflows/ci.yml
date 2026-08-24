@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same branch to keep queues short.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: ${{ matrix.os }} · node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The app is developed on Windows but should build everywhere; the
+        # matrix is what actually catches path and shell assumptions.
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ['20', '22']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      # Every suite is offline: no API key, no network. That is what makes it
+      # safe to run on pull requests from forks.
+      - name: Offline tests
+        run: npm run test --workspace @ghostbot/examples-cli
+
+  # The offline suites never launch Electron, so they cannot catch a renderer
+  # or main-process failure that only happens off Windows. This job actually
+  # boots the app headlessly and fails if it does not paint.
+  boot:
+    name: App boots (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # GitHub's Linux runners have no display server; xvfb provides one.
+      - name: Boot headlessly (Linux)
+        if: runner.os == 'Linux'
+        working-directory: apps/desktop
+        env:
+          GHOSTBOT_CAPTURE: ${{ github.workspace }}/boot.png
+          GHOSTBOT_CAPTURE_DELAY: '10000'
+        run: xvfb-run --auto-servernum npx electron . --no-sandbox
+
+      - name: Boot headlessly (macOS/Windows)
+        if: runner.os != 'Linux'
+        working-directory: apps/desktop
+        env:
+          GHOSTBOT_CAPTURE: ${{ github.workspace }}/boot.png
+          GHOSTBOT_CAPTURE_DELAY: '10000'
+        run: npx electron .
+
+      # A window that failed to render is a nearly-uniform image and
+      # compresses to a few KB. A painted UI is an order of magnitude larger,
+      # so file size is a crude but reliable "did anything draw" signal.
+      - name: Verify the window actually painted
+        shell: bash
+        run: |
+          shot="${{ github.workspace }}/boot.png"
+          if [ ! -f "$shot" ]; then
+            echo "::error::No screenshot produced — the app did not reach the capture point."
+            exit 1
+          fi
+          size=$(wc -c < "$shot")
+          echo "screenshot: ${size} bytes"
+          if [ "$size" -lt 10000 ]; then
+            echo "::error::Screenshot is ${size} bytes — the window appears blank."
+            exit 1
+          fi
+          echo "Window rendered — OK"
+
+      - name: Upload the screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-${{ matrix.os }}
+          path: ${{ github.workspace }}/boot.png
+          if-no-files-found: ignore
+
+  licence-hygiene:
+    name: Licence hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # GhostBot is entirely original work. This guards against a vendored
+      # third-party application tree reappearing anywhere in the repository —
+      # checked at every depth, because a nested copy under apps/ once
+      # survived a cleanup that only looked at the repo root.
+      - name: Reject vendored application trees
+        run: |
+          found=$(find . -type d -name vendor -not -path './node_modules/*' -not -path '*/node_modules/*' || true)
+          if [ -n "$found" ]; then
+            echo "::error::vendor/ director(ies) present: $found"
+            echo "GhostBot must not vendor third-party application code."
+            exit 1
+          fi
+          echo "No vendor/ directory at any depth — OK"
+
+      # Catch identifiers from the proprietary application this project no
+      # longer derives from, in tracked source and docs.
+      - name: Reject proprietary identifiers
+        run: |
+          if git grep -nEI 'Anysphere|sand-protocol|dune-rpc' -- \
+               ':!*.lock' ':!package-lock.json' ':!.github/workflows/ci.yml'; then
+            echo "::error::Found identifiers from a proprietary codebase."
+            exit 1
+          fi
+          echo "No proprietary identifiers — OK"
+
+      - name: Check LICENSE exists
+        run: test -f LICENSE && head -1 LICENSE

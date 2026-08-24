@@ -1,0 +1,66 @@
+name: Bug report
+description: Something is not working as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this.
+
+        **Please do not paste API keys.** If you include a transcript or log,
+        remove keys and any private paths first.
+
+        For security vulnerabilities, please use
+        [private reporting](../security/advisories/new) instead of this form.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Settings and select …
+        2. Send the message "…"
+        3. Observe …
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11 / macOS 15 / Ubuntu 24.04
+    validations:
+      required: true
+
+  - type: input
+    id: provider
+    attributes:
+      label: Provider and model
+      placeholder: OpenAI / gpt-4o-mini
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: GhostBot version
+      description: From the app menu, or the commit you built from.
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or transcript (optional)
+      description: |
+        Run with `GHOSTBOT_LOG=path\to\log.txt` for a protocol log.
+        Redact keys and private paths before pasting.
+      render: shell

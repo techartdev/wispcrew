@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Strict CSP. The renderer is a local file bundle that talks to the main
+      process over IPC only: it never loads remote code, never evaluates
+      strings, and never issues network requests of its own (all provider
+      traffic happens in main). Locking this down means a malicious string in
+      a model response cannot bootstrap remote content.
+      `style-src 'unsafe-inline'` is required because React inline styles and
+      Vite's injected CSS use style attributes.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"
+    />
+    <title>GhostBot</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

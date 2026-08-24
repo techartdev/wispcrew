@@ -1,0 +1,242 @@
+/**
+ * App.tsx — the application shell.
+ *
+ * Composes the sidebar, the chat view, and the modal panels, and owns the
+ * small amount of purely-visual state (which panel is open, theme class).
+ * All data lives in `useGhostbot`.
+ */
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useGhostbot } from './useGhostbot';
+import { Sidebar, GhostMark } from './Sidebar';
+import { Chat } from './Chat';
+import { AgentPanel, McpPanel, RoutinesPanel, SettingsPanel, SkillsPanel } from './Panels';
+
+type Panel = 'settings' | 'agent' | 'mcp' | 'routines' | 'skills' | null;
+
+export function App() {
+  const { state, actions } = useGhostbot();
+  const [panel, setPanel] = useState<Panel>(null);
+
+  const {
+    ready,
+    agents,
+    selectedId,
+    selected,
+    transcript,
+    runState,
+    runStates,
+    settings,
+    presets,
+    personas,
+    mcpServers,
+    routines,
+    skills,
+    toast,
+  } = state;
+
+  /* Theme: honour the setting, defaulting to the OS preference. */
+  useEffect(() => {
+    const pref = settings?.theme ?? 'system';
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const apply = () => {
+      const light = pref === 'light' || (pref === 'system' && mq.matches);
+      document.body.classList.toggle('theme-light', light);
+    };
+    apply();
+    if (pref === 'system') {
+      mq.addEventListener('change', apply);
+      return () => mq.removeEventListener('change', apply);
+    }
+  }, [settings?.theme]);
+
+  /* Open Settings from the application menu. */
+  useEffect(() => {
+    const off = window.ghostbot.onEvent((e) => {
+      if ((e as { type: string }).type === 'open-settings') setPanel('settings');
+    });
+    return off;
+  }, []);
+
+  /* Global shortcuts. */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key === ',') {
+        e.preventDefault();
+        setPanel('settings');
+      }
+      if (mod && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        void actions.createAgent({ name: 'New agent' });
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [actions]);
+
+  /*
+   * Slash-command skills are expanded in the main process (see `expandSkill`
+   * in main.ts), which is the single source of truth — routines and any other
+   * non-UI caller need the same behaviour. The renderer sends the raw text.
+   */
+  const send = useCallback(
+    (prompt: string, attachmentPaths?: string[]) => void actions.send(prompt, attachmentPaths),
+    [actions],
+  );
+
+  const configuredServers = useMemo(() => settings?.mcpServers ?? [], [settings?.mcpServers]);
+
+  const hasProvider = Boolean(settings?.hasApiKey);
+
+  /* First run: no provider configured yet. */
+  const needsOnboarding = ready && settings && !settings.hasApiKey && !settings.onboarded;
+
+  if (!ready) {
+    return (
+      <div className="boot">
+        <GhostMark size={44} />
+        <p className="muted">Starting GhostBot…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app">
+      <Sidebar
+        agents={agents}
+        selectedId={selectedId}
+        runStates={runStates}
+        onSelect={actions.selectAgent}
+        onCreate={() => void actions.createAgent({ name: 'New agent' })}
+        onOpenSettings={() => setPanel('settings')}
+        onOpenPanel={setPanel}
+      />
+
+      <main className="main">
+        <header className="topbar">
+          <div className="topbar-title">
+            <strong>{selected?.name ?? 'GhostBot'}</strong>
+            {selected && (
+              <span className="muted topbar-sub">
+                {selected.model || settings?.model || 'default model'}
+              </span>
+            )}
+          </div>
+          <div className="topbar-actions">
+            {selected && (
+              <>
+                <button type="button" className="btn" onClick={() => setPanel('agent')}>
+                  Configure
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void actions.clearConversation()}
+                  disabled={transcript.length === 0}
+                >
+                  Clear chat
+                </button>
+              </>
+            )}
+          </div>
+        </header>
+
+        {needsOnboarding && (
+          <div className="onboard-banner">
+            <div>
+              <strong>Welcome to GhostBot.</strong> Choose a model provider and paste an API key to
+              begin — your key is stored encrypted on this machine and sent only to the provider you
+              pick.
+            </div>
+            <button type="button" className="btn btn-primary" onClick={() => setPanel('settings')}>
+              Open settings
+            </button>
+          </div>
+        )}
+
+        <Chat
+          agent={selected}
+          transcript={transcript}
+          runState={runState}
+          skills={skills}
+          onSend={send}
+          onInterrupt={() => void actions.interrupt()}
+          onResolveApproval={(id, res) => void actions.resolveApproval(id, res)}
+          onOpenSettings={() => setPanel('settings')}
+          onPickFiles={actions.pickFiles}
+          hasProvider={hasProvider}
+        />
+      </main>
+
+      {toast && (
+        <div className={`toast toast-${toast.level}`} onClick={actions.dismissToast}>
+          {toast.text}
+        </div>
+      )}
+
+      {panel === 'settings' && settings && (
+        <SettingsPanel
+          settings={settings}
+          presets={presets}
+          personas={personas}
+          onSave={actions.saveSettings}
+          onTest={actions.testConnection}
+          onPickDirectory={actions.pickDirectory}
+          onClose={() => setPanel(null)}
+        />
+      )}
+
+      {panel === 'agent' && selected && (
+        <AgentPanel
+          agent={selected}
+          presets={presets}
+          personas={personas}
+          onSave={(patch) => void actions.updateAgent(selected.id, patch)}
+          onDelete={() => {
+            void actions.deleteAgent(selected.id);
+            setPanel(null);
+          }}
+          onDuplicate={() => {
+            void actions.duplicateAgent(selected.id);
+            setPanel(null);
+          }}
+          onPickDirectory={actions.pickDirectory}
+          onClose={() => setPanel(null)}
+        />
+      )}
+
+      {panel === 'mcp' && (
+        <McpPanel
+          servers={mcpServers}
+          configured={configuredServers}
+          onAdd={actions.addMcpServer}
+          onUpdate={(name, patch) => void actions.updateMcpServer(name, patch)}
+          onRemove={(name) => void actions.removeMcpServer(name)}
+          onClose={() => setPanel(null)}
+        />
+      )}
+
+      {panel === 'routines' && (
+        <RoutinesPanel
+          routines={routines}
+          agents={agents}
+          onCreate={(patch) => void actions.createRoutine(patch)}
+          onUpdate={(id, patch) => void actions.updateRoutine(id, patch)}
+          onDelete={(id) => void actions.deleteRoutine(id)}
+          onRunNow={(id) => void actions.runRoutineNow(id)}
+          onClose={() => setPanel(null)}
+        />
+      )}
+
+      {panel === 'skills' && (
+        <SkillsPanel
+          skills={skills}
+          onCreate={(patch) => void actions.createSkill(patch)}
+          onUpdate={(id, patch) => void actions.updateSkill(id, patch)}
+          onDelete={(id) => void actions.deleteSkill(id)}
+          onClose={() => setPanel(null)}
+        />
+      )}
+    </div>
+  );
+}

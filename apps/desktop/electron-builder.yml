@@ -1,0 +1,74 @@
+# electron-builder configuration for GhostBot.
+#
+# Notes specific to this project:
+#  * npm workspaces hoist dependencies to the repo root, so
+#    `nodeGypRebuild`/`npmRebuild` are disabled and node_modules are
+#    resolved from the root during packaging.
+#  * The renderer, preload, and main bundle are all produced into `dist/`
+#    before packaging (`npm run build`), so `files` needs nothing else.
+appId: dev.ghostbot.desktop
+productName: GhostBot
+copyright: MIT licensed. Bring your own LLM provider.
+
+# electron-builder requires an exact version (package.json carries a ^range
+# it cannot resolve to a platform binary). Keep in sync with the electron
+# devDependency in package.json.
+electronVersion: 37.10.3
+
+directories:
+  output: release
+  # Repo-root build/ holds the generated mascot icons (icon.ico/.png/.icns),
+  # produced from build/icon.svg by `node scripts/make-icons.mjs`.
+  buildResources: ../../build
+
+files:
+  - dist/**/*
+  - package.json
+  - '!**/*.map'
+  - '!**/node_modules/**/{test,__tests__,tests,example,examples,doc,docs}/**'
+
+extraResources:
+  # Runtime window/taskbar icon (see ICON_PATH in main.ts).
+  - from: ../../build/icons/256x256.png
+    to: icon.png
+
+asar: true
+asarUnpack:
+  - '**/*.node'
+
+npmRebuild: false
+nodeGypRebuild: false
+buildDependenciesFromSource: false
+
+win:
+  icon: ../../build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: GhostBot
+  uninstallDisplayName: GhostBot ${version}
+
+mac:
+  # electron-builder derives the .icns from this 1024px master.
+  icon: ../../build/icon.png
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  category: public.app-category.developer-tools
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+
+linux:
+  icon: ../../build/icons
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Development
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}

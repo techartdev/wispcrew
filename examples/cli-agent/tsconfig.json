@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // `markdown-test.ts` renders the desktop app's React components through
+    // react-dom/server. The automatic runtime means those .tsx files need no
+    // `import React` — matching how Vite builds them in the app itself.
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src"]
+}

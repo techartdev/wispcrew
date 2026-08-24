@@ -1,0 +1,434 @@
+/**
+ * Chat.tsx — the conversation view: transcript, tool cards, approval
+ * prompts, and the composer.
+ */
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
+import type { AgentRecord, AgentRunState, SkillRecord, TranscriptEntry } from '@ghostbot/shared';
+import { Markdown } from './Markdown';
+
+interface ChatProps {
+  agent: AgentRecord | null;
+  transcript: TranscriptEntry[];
+  runState: AgentRunState;
+  skills: SkillRecord[];
+  onSend(prompt: string, attachmentPaths?: string[]): void;
+  onInterrupt(): void;
+  onResolveApproval(requestId: string, resolution: 'allow-once' | 'allow-always' | 'deny'): void;
+  onOpenSettings(): void;
+  onPickFiles(): Promise<string[]>;
+  hasProvider: boolean;
+}
+
+/** Basename of a path, handling both separators. */
+function baseName(p: string): string {
+  const parts = p.split(/[\\/]/);
+  return parts[parts.length - 1] || p;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Tool call card                                                      */
+/* ------------------------------------------------------------------ */
+
+function ToolCard({ entry }: { entry: Extract<TranscriptEntry, { kind: 'tool-call' }> }) {
+  // Long tool output is collapsed by default: a 4000-character file dump
+  // would otherwise bury the assistant's actual answer.
+  const [open, setOpen] = useState(false);
+  const args = entry.args ? JSON.stringify(entry.args) : '';
+  const preview = args.length > 90 ? `${args.slice(0, 90)}…` : args;
+
+  const statusLabel: Record<typeof entry.status, string> = {
+    running: 'Running',
+    completed: 'Done',
+    failed: 'Failed',
+    denied: 'Denied',
+  };
+
+  return (
+    <div className={`tool-card tool-${entry.status}`}>
+      <button type="button" className="tool-head" onClick={() => setOpen((v) => !v)}>
+        <span className="tool-caret">{open ? '▾' : '▸'}</span>
+        <span className="tool-name">{entry.toolName}</span>
+        {preview && <span className="tool-args">{preview}</span>}
+        <span className={`tool-status tool-status-${entry.status}`}>
+          {entry.status === 'running' && <span className="spinner" />}
+          {statusLabel[entry.status]}
+        </span>
+      </button>
+      {open && (
+        <div className="tool-body">
+          {entry.args && Object.keys(entry.args).length > 0 && (
+            <pre className="tool-pre">{JSON.stringify(entry.args, null, 2)}</pre>
+          )}
+          {entry.content && <pre className="tool-pre">{entry.content}</pre>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Approval card                                                       */
+/* ------------------------------------------------------------------ */
+
+function ApprovalCard({
+  entry,
+  onResolve,
+}: {
+  entry: Extract<TranscriptEntry, { kind: 'approval' }>;
+  onResolve: ChatProps['onResolveApproval'];
+}) {
+  if (entry.status !== 'pending') {
+    return (
+      <div className={`approval-card approval-${entry.status}`}>
+        <span className="approval-icon">{entry.status === 'approved' ? '✓' : '✕'}</span>
+        <span>
+          {entry.status === 'approved' ? 'Approved' : 'Denied'}: <code>{entry.toolName}</code>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="approval-card approval-pending">
+      <div className="approval-head">
+        <span className="approval-icon">!</span>
+        <strong>Permission required</strong>
+      </div>
+      <p className="approval-summary">{entry.summary}</p>
+      {entry.detail && <p className="approval-detail">{entry.detail}</p>}
+      <div className="approval-actions">
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => onResolve(entry.requestId, 'allow-once')}
+        >
+          Allow once
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => onResolve(entry.requestId, 'allow-always')}
+        >
+          Always allow {entry.toolName}
+        </button>
+        <button
+          type="button"
+          className="btn btn-danger"
+          onClick={() => onResolve(entry.requestId, 'deny')}
+        >
+          Deny
+        </button>
+      </div>
+      <p className="approval-hint">
+        “Always allow” applies to this agent until GhostBot restarts.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Chat                                                                */
+/* ------------------------------------------------------------------ */
+
+export function Chat({
+  agent,
+  transcript,
+  runState,
+  skills,
+  onSend,
+  onInterrupt,
+  onResolveApproval,
+  onOpenSettings,
+  onPickFiles,
+  hasProvider,
+}: ChatProps) {
+  const [draft, setDraft] = useState('');
+  /** Absolute paths staged for the next message. */
+  const [pending, setPending] = useState<string[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Only auto-scroll when the user is already at the bottom, so reading
+  // scrollback isn't yanked away by streaming tokens.
+  const pinnedRef = useRef(true);
+
+  const busy = runState === 'thinking' || runState === 'awaiting-approval';
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (pinnedRef.current) {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+  }, [transcript]);
+
+  // Reset the pin when switching agents so a new conversation starts at the end.
+  useEffect(() => {
+    pinnedRef.current = true;
+  }, [agent?.id]);
+
+  /* Slash-command completion for skills. */
+  const slashQuery = useMemo(() => {
+    const m = /^\/([\w-]*)$/.exec(draft);
+    return m ? (m[1] ?? '') : null;
+  }, [draft]);
+
+  const skillMatches = useMemo(() => {
+    if (slashQuery === null) return [];
+    const q = slashQuery.toLowerCase();
+    return skills.filter((s) => s.enabled && s.name.toLowerCase().startsWith(q)).slice(0, 6);
+  }, [skills, slashQuery]);
+
+  const submit = useCallback(() => {
+    const text = draft.trim();
+    // An attachment with no words is a legitimate message ("look at this").
+    if ((!text && pending.length === 0) || busy) return;
+    onSend(text, pending.length ? pending : undefined);
+    setDraft('');
+    setPending([]);
+    // Collapse the textarea back to one row after sending.
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+  }, [draft, pending, busy, onSend]);
+
+  const addFiles = useCallback((paths: string[]) => {
+    // De-duplicate: dropping the same file twice should not send it twice.
+    setPending((prev) => [...new Set([...prev, ...paths])].slice(0, 10));
+  }, []);
+
+  const attach = useCallback(() => {
+    void onPickFiles().then((paths) => {
+      if (paths.length) addFiles(paths);
+    });
+  }, [onPickFiles, addFiles]);
+
+  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter sends; Shift+Enter inserts a newline.
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      submit();
+    }
+    if (e.key === 'Tab' && skillMatches.length > 0) {
+      e.preventDefault();
+      setDraft(`/${skillMatches[0]!.name} `);
+    }
+    if (e.key === 'Escape' && busy) onInterrupt();
+  };
+
+  /** Grow the composer with its content, up to a ceiling. */
+  const autosize = (el: HTMLTextAreaElement) => {
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+  };
+
+  if (!agent) {
+    return (
+      <div className="chat empty-state">
+        <p>No agent selected.</p>
+      </div>
+    );
+  }
+
+  /*
+   * Drag-and-drop. Electron exposes the real filesystem path on the dropped
+   * File object via `webUtils.getPathForFile` in newer versions; the legacy
+   * `file.path` property still works in this Electron line and needs no
+   * additional preload surface. We read only the path — never the contents —
+   * so the sandboxed renderer never touches file data.
+   */
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const paths: string[] = [];
+    for (const file of Array.from(e.dataTransfer.files)) {
+      const p = (file as File & { path?: string }).path;
+      if (p) paths.push(p);
+    }
+    if (paths.length) addFiles(paths);
+  };
+
+  return (
+    <div
+      className={`chat ${dragging ? 'chat-dragging' : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!dragging) setDragging(true);
+      }}
+      onDragLeave={(e) => {
+        // Only clear when the pointer actually leaves the chat area, not when
+        // it crosses between child elements.
+        if (e.currentTarget === e.target) setDragging(false);
+      }}
+      onDrop={onDrop}
+    >
+      {dragging && <div className="drop-overlay">Drop files to attach</div>}
+      <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
+        {transcript.length === 0 && (
+          <div className="chat-welcome">
+            <h2>{agent.name}</h2>
+            <p className="muted">
+              {agent.description?.trim() ||
+                'Ask a question, or give it a task. It can read and write files, run commands, and search the web — with your approval.'}
+            </p>
+            {!hasProvider && (
+              <button type="button" className="btn btn-primary" onClick={onOpenSettings}>
+                Configure a model provider to begin
+              </button>
+            )}
+          </div>
+        )}
+
+        {transcript.map((entry) => {
+          switch (entry.kind) {
+            case 'message':
+              return (
+                <div key={entry.id} className={`msg msg-${entry.role}`}>
+                  <div className="msg-role">{entry.role === 'user' ? 'You' : agent.name}</div>
+                  <div className="msg-body">
+                    {entry.role === 'assistant' ? (
+                      <>
+                        <Markdown text={entry.content} />
+                        {entry.isStreaming && !entry.content && (
+                          <span className="thinking">
+                            <span className="spinner" /> Thinking…
+                          </span>
+                        )}
+                        {entry.isStreaming && entry.content && <span className="caret" />}
+                      </>
+                    ) : (
+                      <>
+                        {entry.content && <div className="user-text">{entry.content}</div>}
+                        {entry.attachments && entry.attachments.length > 0 && (
+                          <div className="attach-row">
+                            {entry.attachments.map((a, i) => (
+                              <span key={i} className={`attach-chip attach-${a.kind}`}>
+                                <span className="attach-icon">
+                                  {a.kind === 'image' ? '▣' : a.kind === 'text' ? '≡' : '◼'}
+                                </span>
+                                {a.name}
+                                <span className="muted"> · {formatBytes(a.size)}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            case 'tool-call':
+              return <ToolCard key={entry.id} entry={entry} />;
+            case 'approval':
+              return <ApprovalCard key={entry.id} entry={entry} onResolve={onResolveApproval} />;
+            case 'notice':
+              return (
+                <div key={entry.id} className={`notice notice-${entry.level}`}>
+                  {entry.text}
+                </div>
+              );
+            default:
+              return null;
+          }
+        })}
+      </div>
+
+      <div className="composer">
+        {skillMatches.length > 0 && (
+          <div className="skill-hints">
+            {skillMatches.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="skill-hint"
+                onClick={() => {
+                  setDraft(`/${s.name} `);
+                  textareaRef.current?.focus();
+                }}
+              >
+                <strong>/{s.name}</strong>
+                {s.description && <span className="muted"> — {s.description}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+        {pending.length > 0 && (
+          <div className="attach-row attach-pending">
+            {pending.map((p) => (
+              <span key={p} className="attach-chip" title={p}>
+                {baseName(p)}
+                <button
+                  type="button"
+                  className="attach-remove"
+                  onClick={() => setPending((prev) => prev.filter((x) => x !== p))}
+                  aria-label={`Remove ${baseName(p)}`}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="composer-row">
+          <button
+            type="button"
+            className="btn btn-attach"
+            onClick={attach}
+            title="Attach files"
+            disabled={busy}
+          >
+            +
+          </button>
+          <textarea
+            ref={textareaRef}
+            className="composer-input"
+            rows={1}
+            value={draft}
+            placeholder={busy ? 'Agent is working — Esc to stop' : `Message ${agent.name}…`}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              autosize(e.target);
+            }}
+            onKeyDown={onKeyDown}
+            spellCheck
+          />
+          {busy ? (
+            <button type="button" className="btn btn-stop" onClick={onInterrupt} title="Stop (Esc)">
+              Stop
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary btn-send"
+              onClick={submit}
+              disabled={!draft.trim() && pending.length === 0}
+            >
+              Send
+            </button>
+          )}
+        </div>
+        <div className="composer-hint muted">
+          Enter to send · Shift+Enter for a new line · drop files to attach
+          {skills.length > 0 ? ' · / for skills' : ''}
+        </div>
+      </div>
+    </div>
+  );
+}

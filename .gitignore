@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+out/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Electron
+apps/desktop/dist/
+apps/desktop/release/
+apps/desktop/boot*.log
+boot-shot*.png
+setup-shot*.png
+
+# Local agent data
+.grokbot-data-root-v1/
+settings.json
+
+# Never commit local credentials or agent state (AGENTS.md: no secrets in repo)
+testkey.txt
+*key*.txt
+*.key
+*.pem
+openagent-secrets.json
+openagent-settings.json
+openagent-agents.json
+openagent-transcript-*.json
+client-persistence.json
+
+# Screenshots at repo root (OPENAGENT_CAPTURE output)
+/*.png

@@ -1,0 +1,36 @@
+{
+  "name": "@ghostbot/examples-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Headless CLI agent example for GhostBot.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "agent": "tsx src/index.ts",
+    "smoke": "tsx src/smoke.ts",
+    "test:provider": "tsx src/provider-test.ts",
+    "test:mcp": "tsx src/mcp-test.ts",
+    "test:memory": "tsx src/memory-test.ts",
+    "test:cron": "tsx src/cron-test.ts",
+    "test:markdown": "tsx src/markdown-test.ts",
+    "test:attachments": "tsx src/attachment-test.ts",
+    "test:delegation": "tsx src/delegation-test.ts",
+    "test:sandbox": "tsx src/sandbox-test.ts",
+    "test": "npm run smoke && npm run test:provider && npm run test:mcp && npm run test:memory && npm run test:cron && npm run test:markdown && npm run test:attachments && npm run test:delegation && npm run test:sandbox"
+  },
+  "dependencies": {
+    "@ghostbot/shared": "0.1.0",
+    "@ghostbot/llm": "0.1.0",
+    "@ghostbot/core": "0.1.0",
+    "@ghostbot/tools": "0.1.0",
+    "@ghostbot/mcp": "0.1.0",
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0"
+  }
+}

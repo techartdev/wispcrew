@@ -1,0 +1,25 @@
+{
+  "name": "ghostbot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GhostBot — a free, open-source desktop AI agent. Bring your own LLM (DeepSeek, OpenAI, Anthropic, Ollama, any OpenAI-compatible endpoint).",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "agent": "npm run agent --workspace @ghostbot/examples-cli",
+    "desktop": "npm run dev --workspace @ghostbot/desktop",
+    "icons": "electron scripts/make-icons.mjs",
+    "rebrand": "node scripts/rebrand.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
