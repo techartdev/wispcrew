@@ -20,7 +20,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readFileTool, writeFileTool, listDirTool } from '@ghostbot/tools';
+import { readFileTool, writeFileTool, listDirTool, shellTool } from '@ghostbot/tools';
 import type { ToolContext } from '@ghostbot/shared';
 
 let failures = 0;
@@ -135,6 +135,72 @@ async function main(): Promise<void> {
     check('listing the parent fails', !r.ok);
     const abs = await listDirTool.run({ path: sibling }, ctx);
     check('listing an absolute sibling fails', !abs.ok);
+  }
+
+  console.log('\n[missing workspace] a deleted folder fails loudly, not silently');
+  {
+    // Users move, rename and delete folders. An agent pointed at one that no
+    // longer exists must say so — the original behaviour was worse than an
+    // error: write_file silently *recreated* the deleted workspace, and
+    // shell produced "spawn cmd.exe ENOENT", which reads as if the shell
+    // itself were missing.
+    const gone = path.join(base, 'deleted-workspace');
+    fs.rmSync(gone, { recursive: true, force: true });
+    const goneCtx: ToolContext = {
+      workspaceRoot: gone,
+      defaultTimeoutMs: 5_000,
+      requestApproval: async () => true,
+    };
+
+    for (const [label, run] of [
+      ['list_dir', () => listDirTool.run({ path: '.' }, goneCtx)],
+      ['read_file', () => readFileTool.run({ path: 'a.txt' }, goneCtx)],
+      ['write_file', () => writeFileTool.run({ path: 'a.txt', content: 'x' }, goneCtx)],
+    ] as const) {
+      const r = await run();
+      check(`${label} fails`, !r.ok);
+      check(`${label} names the workspace`, /workspace folder does not exist/i.test(r.content), r.content);
+      check(`${label} says how to fix it`, /configure/i.test(r.content), r.content);
+      check(`${label} has no raw errno`, !/ENOENT|scandir|stat '/.test(r.content), r.content);
+    }
+
+    // The important one: a write must not resurrect the folder the user
+    // deleted, scattering files where nobody will look for them.
+    check('workspace was NOT recreated', !fs.existsSync(gone));
+  }
+
+  console.log('\n[missing workspace] shell refuses rather than running elsewhere');
+  {
+    const gone = path.join(base, 'deleted-workspace-2');
+    fs.rmSync(gone, { recursive: true, force: true });
+    const goneCtx: ToolContext = {
+      workspaceRoot: gone,
+      defaultTimeoutMs: 5_000,
+      requestApproval: async () => true,
+    };
+    const r = await shellTool.run({ command: process.platform === 'win32' ? 'cd' : 'pwd' }, goneCtx);
+    check('shell fails', !r.ok);
+    check('shell explains the missing directory', /working directory does not exist/i.test(r.content), r.content);
+    // The containment concern: it must not fall back to the process cwd and
+    // execute somewhere outside the intended workspace.
+    check('shell did not run anywhere', !r.content.includes('exit code: 0'), r.content);
+  }
+
+  console.log('\n[healthy workspace] ordinary errors stay specific');
+  {
+    const okCtx: ToolContext = {
+      workspaceRoot: ws,
+      defaultTimeoutMs: 5_000,
+      requestApproval: async () => true,
+    };
+    const missing = await readFileTool.run({ path: 'no-such-file.txt' }, okCtx);
+    check('missing file fails', !missing.ok);
+    check('missing file names the file', missing.content.includes('no-such-file.txt'));
+    // Must NOT be misreported as a missing workspace when the workspace is fine.
+    check('missing file is not blamed on the workspace', !/workspace folder/i.test(missing.content));
+
+    const stillWorks = await writeFileTool.run({ path: 'healthy.txt', content: 'yes' }, okCtx);
+    check('writes still succeed in a real workspace', stillWorks.ok);
   }
 
   console.log('');

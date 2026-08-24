@@ -1,7 +1,7 @@
-/**
- * File tools — read/write/list within the agent workspace.
+﻿/**
+ * File tools â€” read/write/list within the agent workspace.
  */
-import { promises as fs } from 'node:fs';
+import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
 import type { Tool, ToolContext, ToolResult } from '@ghostbot/shared';
 
@@ -21,6 +21,41 @@ class PathOutsideWorkspaceError extends Error {
     super(`Path ${target} is outside the workspace root ${root}`);
     this.name = 'PathOutsideWorkspaceError';
   }
+}
+
+/**
+ * Turn a filesystem error into something the model (and user) can act on.
+ *
+ * A raw `ENOENT: no such file or directory, scandir '/very/long/path'` tells
+ * the model almost nothing and leads it to retry the identical call. Saying
+ * *which* thing is missing â€” the workspace itself, or just this file â€” lets
+ * it either fix the path or report the real problem.
+ */
+function describeFsError(err: unknown, ctx: ToolContext, p: string, tool: string): ToolResult {
+  const e = err as NodeJS.ErrnoException;
+  const root = path.resolve(ctx.workspaceRoot || process.cwd());
+  const workspaceGone = !existsSync(root);
+
+  let content: string;
+  if (e.code === 'ENOENT' && workspaceGone) {
+    content =
+      `The workspace folder does not exist: ${root}. ` +
+      'Set a valid workspace folder for this agent in its Configure panel.';
+  } else if (e.code === 'ENOENT') {
+    content = `No such file or directory: ${p}`;
+  } else if (e.code === 'EACCES' || e.code === 'EPERM') {
+    content = `Permission denied: ${p}`;
+  } else if (e.code === 'EISDIR') {
+    content = `${p} is a directory, not a file.`;
+  } else if (e.code === 'ENOTDIR') {
+    content = `${p} is not a directory.`;
+  } else if (e.name === 'PathOutsideWorkspaceError') {
+    content = (err as Error).message;
+  } else {
+    content = `${tool} failed: ${(err as Error).message}`;
+  }
+
+  return { id: '', name: tool, ok: false, errorCode: e.code ?? 'error', content };
 }
 
 interface ReadArgs {
@@ -79,11 +114,7 @@ export const readFileTool: Tool<ReadArgs> = {
       }
     } catch (err) {
       return {
-        id: '',
-        name: 'read_file',
-        ok: false,
-        errorCode: (err as NodeJS.ErrnoException).code ?? 'error',
-        content: `read_file failed: ${(err as Error).message}`,
+        ...describeFsError(err, ctx, args.path, 'read_file'),
       };
     }
   },
@@ -114,6 +145,26 @@ export const writeFileTool: Tool<WriteArgs> = {
   async run(args: WriteArgs, ctx: ToolContext): Promise<ToolResult> {
     try {
       const full = resolveInRoot(ctx, args.path);
+
+      // Creating parent directories inside the workspace is expected. Silently
+      // recreating the *workspace itself* is not: if the user deleted or
+      // unmounted that folder, resurrecting it hides the mistake and scatters
+      // files where they will not be looked for.
+      const root = path.resolve(ctx.workspaceRoot || process.cwd());
+      try {
+        await fs.access(root);
+      } catch {
+        return {
+          id: '',
+          name: 'write_file',
+          ok: false,
+          errorCode: 'missing_workspace',
+          content:
+            `The workspace folder does not exist: ${root}. ` +
+            'Set a valid workspace folder for this agent in its Configure panel.',
+        };
+      }
+
       await fs.mkdir(path.dirname(full), { recursive: true });
       const flags = args.append ? 'a' : 'w';
       await fs.writeFile(full, args.content, { encoding: 'utf8', flag: flags });
@@ -127,11 +178,7 @@ export const writeFileTool: Tool<WriteArgs> = {
       };
     } catch (err) {
       return {
-        id: '',
-        name: 'write_file',
-        ok: false,
-        errorCode: (err as NodeJS.ErrnoException).code ?? 'error',
-        content: `write_file failed: ${(err as Error).message}`,
+        ...describeFsError(err, ctx, args.path, 'write_file'),
       };
     }
   },
@@ -177,11 +224,7 @@ export const listDirTool: Tool<ListArgs> = {
       return { id: '', name: 'list_dir', ok: true, content, data: { entries: out } };
     } catch (err) {
       return {
-        id: '',
-        name: 'list_dir',
-        ok: false,
-        errorCode: (err as NodeJS.ErrnoException).code ?? 'error',
-        content: `list_dir failed: ${(err as Error).message}`,
+        ...describeFsError(err, ctx, args.path || '.', 'list_dir'),
       };
     }
   },

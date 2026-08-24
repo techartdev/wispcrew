@@ -6,6 +6,7 @@
  * and output is truncated to protect the model context.
  */
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import type { Tool, ToolContext, ToolResult } from '@ghostbot/shared';
 
 interface ShellArgs {
@@ -59,6 +60,27 @@ export const shellTool: Tool<ShellArgs> = {
 
     const timeoutMs = Math.min(Math.max(args.timeoutMs ?? ctx.defaultTimeoutMs, 100), 300_000);
     const cwd = args.cwd ?? ctx.workspaceRoot ?? process.cwd();
+
+    // Refuse to run when the working directory does not exist.
+    //
+    // Two reasons. First, honesty: Windows reports this as
+    // "spawn cmd.exe ENOENT", which reads as if the shell were missing
+    // rather than the folder. Second, containment: on POSIX the behaviour of
+    // spawning with a bad cwd is less predictable, and a command that
+    // silently runs somewhere *other* than the workspace would defeat the
+    // boundary the workspace root is there to provide.
+    if (!existsSync(cwd)) {
+      return {
+        id: '',
+        name: 'shell',
+        ok: false,
+        errorCode: 'missing_cwd',
+        content:
+          `The working directory does not exist: ${cwd}. ` +
+          'Set a valid workspace folder for this agent in its Configure panel.',
+      };
+    }
+
     const isWin = process.platform === 'win32';
     const shell = isWin ? 'cmd.exe' : '/bin/sh';
     const shellArgs = isWin ? ['/d', '/s', '/c', args.command] : ['-c', args.command];

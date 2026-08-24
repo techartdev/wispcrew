@@ -177,6 +177,7 @@ export function App() {
           onBranch={(id) => void actions.branch(id)}
           retryDraft={retryDraft}
           onRetryDraftConsumed={() => setRetryDraft(null)}
+          onCreateAgent={() => void actions.createAgent({ name: 'New agent' })}
           hasProvider={hasProvider}
         />
       </main>

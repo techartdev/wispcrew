@@ -29,6 +29,8 @@ interface ChatProps {
   /** Text from a retried message, to prefill the composer. */
   retryDraft?: string | null;
   onRetryDraftConsumed?(): void;
+  /** Recovery action when the roster is empty. */
+  onCreateAgent(): void;
   hasProvider: boolean;
 }
 
@@ -228,6 +230,7 @@ export function Chat({
   onBranch,
   retryDraft,
   onRetryDraftConsumed,
+  onCreateAgent,
   hasProvider,
 }: ChatProps) {
   const [draft, setDraft] = useState('');
@@ -336,9 +339,21 @@ export function Chat({
   };
 
   if (!agent) {
+    // Reachable by deleting the last agent while the app is running. A bare
+    // "No agent selected." would strand the user with no way forward, so
+    // offer the one action that fixes it.
     return (
       <div className="chat empty-state">
-        <p>No agent selected.</p>
+        <div className="chat-welcome">
+          <h2>No agents yet</h2>
+          <p className="muted">
+            Agents are durable teammates — each has its own instructions, model and
+            workspace. Create one to start a conversation.
+          </p>
+          <button type="button" className="btn btn-primary" onClick={onCreateAgent}>
+            Create an agent
+          </button>
+        </div>
       </div>
     );
   }
