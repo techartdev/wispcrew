@@ -29,7 +29,9 @@ inspection, or a passing assertion — not by reading the code.
 | Conversation rewind / branch | Branch leaves the original untouched; every transcript prefix rebuilds to a provider-valid history |
 | Memory across restarts | Live: a fact stated in one process was recalled by a **separate** process |
 | Standing tool grants | Persist across restarts, listed and revocable in Settings, dropped with their agent, fail closed on a corrupt file |
-| Offline suites | All eleven pass with no API key and no network |
+| Actionable provider errors | A wrong key, model, or base URL produces advice, not an HTTP dump; verified live against each failure |
+| Accessibility | Live-region announcements, `aria-expanded` tool cards, modal focus trap with focus restore, visible focus rings |
+| Offline suites | All twelve pass with no API key and no network |
 | **Fresh-clone workflow** | `git clone` → `npm ci` → typecheck → build → tests → `pack` → packaged app boots and renders. Verified from a real clone, not the working tree |
 | Typecheck / build | Clean across all workspaces |
 

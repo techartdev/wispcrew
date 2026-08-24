@@ -2,6 +2,7 @@ export * from './openai-compatible.js';
 export * from './openai-responses.js';
 export * from './anthropic.js';
 export * from './presets.js';
+export * from './errors.js';
 import type { ChatProvider, ProviderConfig } from '@ghostbot/shared';
 import { OpenAICompatibleProvider, isOpenAiReasoningModel } from './openai-compatible.js';
 import { OpenAIResponsesProvider } from './openai-responses.js';

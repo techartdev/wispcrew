@@ -16,7 +16,12 @@
  *    `hasApiKey`/`isEncrypted` only.
  */
 import { BrowserWindow, dialog, ipcMain, shell, app } from 'electron';
-import { createProvider, configFromPreset, PROVIDER_PRESETS } from '@ghostbot/llm';
+import {
+  createProvider,
+  configFromPreset,
+  describeProviderError,
+  PROVIDER_PRESETS,
+} from '@ghostbot/llm';
 import { PERSONAS } from '@ghostbot/core';
 import type {
   AgentRecord,
@@ -444,7 +449,21 @@ export function registerBridge(context: BridgeContext): void {
         }
         return { ok, error: error || undefined, latencyMs: Date.now() - started };
       } catch (err) {
-        return { ok: false, error: (err as Error).message };
+        // "Test connection" is exactly where a misconfiguration should be
+        // explained rather than dumped, so translate here too.
+        const target = configFromPreset(cfg.presetId, {
+          model: cfg.model,
+          baseUrl: cfg.baseUrl,
+        });
+        return {
+          ok: false,
+          error:
+            describeProviderError(err, {
+              label: target.label,
+              baseUrl: target.baseUrl,
+              model: target.model,
+            }) ?? 'Cancelled.',
+        };
       }
     },
   );

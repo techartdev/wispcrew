@@ -6,7 +6,7 @@
  * loop and the provider freedom, not chrome; a settings screen that is
  * obvious beats one that is clever.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AgentRecord,
   ApprovalPolicy,
@@ -36,19 +36,62 @@ export function Modal({
   children: React.ReactNode;
   wide?: boolean;
 }) {
-  // Escape closes; the listener is document-level so it works regardless of
-  // which control currently holds focus.
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  /*
+   * Escape closes, and Tab is trapped inside the dialog.
+   *
+   * Without the trap, tabbing walks out of an `aria-modal` dialog into the
+   * page behind it — the focus ring disappears somewhere invisible and
+   * keyboard users are stranded. Focus is also moved into the dialog on open
+   * and returned to the trigger on close, so the keyboard position does not
+   * jump to the top of the document.
+   */
   useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    const focusable = (): HTMLElement[] =>
+      Array.from(
+        panelRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((el) => el.offsetParent !== null);
+
+    // Focus the first control rather than the dialog itself, so the first
+    // Tab moves to the second control instead of re-entering at the start.
+    focusable()[0]?.focus();
+
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const items = focusable();
+      if (items.length === 0) return;
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !panelRef.current?.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
+
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      previouslyFocused?.focus?.();
+    };
   }, [onClose]);
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div
+        ref={panelRef}
         className={`modal ${wide ? 'modal-wide' : ''}`}
         onMouseDown={(e) => e.stopPropagation()}
         role="dialog"

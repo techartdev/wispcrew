@@ -182,7 +182,13 @@ export function App() {
       </main>
 
       {toast && (
-        <div className={`toast toast-${toast.level}`} onClick={actions.dismissToast}>
+        <div
+          className={`toast toast-${toast.level}`}
+          onClick={actions.dismissToast}
+          // Errors interrupt; informational toasts wait for a pause.
+          role={toast.level === 'error' ? 'alert' : 'status'}
+          aria-live={toast.level === 'error' ? 'assertive' : 'polite'}
+        >
           {toast.text}
         </div>
       )}

@@ -89,7 +89,7 @@ export function Sidebar({
         />
       )}
 
-      <nav className="agent-list">
+      <nav className="agent-list" aria-label="Agents">
         {visible.map((agent) => {
           const state = runStates[agent.id] ?? 'idle';
           return (
@@ -98,8 +98,18 @@ export function Sidebar({
               type="button"
               className={`agent-row ${agent.id === selectedId ? 'selected' : ''}`}
               onClick={() => onSelect(agent.id)}
+              aria-current={agent.id === selectedId ? 'true' : undefined}
+              aria-label={
+                state === 'idle'
+                  ? agent.name
+                  : `${agent.name}, ${state === 'awaiting-approval' ? 'needs approval' : state}`
+              }
             >
-              <span className="agent-avatar" style={{ background: avatarColor(agent) }}>
+              <span
+                className="agent-avatar"
+                style={{ background: avatarColor(agent) }}
+                aria-hidden="true"
+              >
                 {initials(agent.name)}
               </span>
               <span className="agent-meta">

@@ -103,6 +103,13 @@ A message flows: **renderer → preload → bridge-host → agent loop → provi
 with tool calls gated by the approval policy and results streamed back as
 events. There is no polling and no hidden network path.
 
+### When something goes wrong
+
+Misconfiguration is the expected first-run state for a bring-your-own-provider
+app, so failures explain themselves. A rejected key says to check Settings; an
+unknown model names the model; an unreachable local endpoint tells you to
+start Ollama or LM Studio. You should never see a raw HTTP dump.
+
 ### Security posture
 
 This app runs commands on your machine, so the boundaries are deliberate:

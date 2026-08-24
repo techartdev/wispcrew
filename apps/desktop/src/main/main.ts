@@ -16,7 +16,7 @@ import { app, BrowserWindow, Menu, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createProvider, configFromPreset } from '@ghostbot/llm';
+import { createProvider, configFromPreset, describeProviderError } from '@ghostbot/llm';
 import { personaById } from '@ghostbot/core';
 import { ToolRegistry } from '@ghostbot/tools';
 import type {
@@ -313,6 +313,12 @@ async function runPrompt(
         createdAt: Date.now(),
       });
     } else if (e.type === 'error') {
+      // A fatal error is rethrown by `Agent.run` and reported below with a
+      // message the user can act on. Emitting the raw text here too would
+      // show the same failure twice — once as "fetch failed", once as the
+      // explanation. Non-fatal notices (e.g. "Turn aborted by user") have no
+      // second chance, so they are still shown.
+      if (e.fatal) return;
       pushTranscript(agentId, {
         kind: 'notice',
         id: store.newId('err'),
@@ -331,13 +337,24 @@ async function runPrompt(
     const final = await session.run(prompt, images);
     text = final.content;
   } catch (err) {
-    pushTranscript(agentId, {
-      kind: 'notice',
-      id: store.newId('err'),
-      level: 'error',
-      text: (err as Error).message,
-      createdAt: Date.now(),
+    // Raw provider failures are hostile — an HTTP 401 arrives as a wall of
+    // JSON, a wrong base URL as the single word "fetch failed". Translate to
+    // something that says what to change. A user-initiated Stop returns null
+    // and is not reported as an error at all.
+    const friendly = describeProviderError(err, {
+      label: preset.label,
+      baseUrl: preset.baseUrl,
+      model: preset.model,
     });
+    if (friendly) {
+      pushTranscript(agentId, {
+        kind: 'notice',
+        id: store.newId('err'),
+        level: 'error',
+        text: friendly,
+        createdAt: Date.now(),
+      });
+    }
   } finally {
     setRunning(agentId, false);
     flush(false);

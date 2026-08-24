@@ -121,12 +121,20 @@ function ToolCard({ entry }: { entry: Extract<TranscriptEntry, { kind: 'tool-cal
 
   return (
     <div className={`tool-card tool-${entry.status}`}>
-      <button type="button" className="tool-head" onClick={() => setOpen((v) => !v)}>
-        <span className="tool-caret">{open ? '▾' : '▸'}</span>
+      <button
+        type="button"
+        className="tool-head"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={`${entry.toolName}, ${statusLabel[entry.status]}. ${open ? 'Hide' : 'Show'} details`}
+      >
+        <span className="tool-caret" aria-hidden="true">
+          {open ? '▾' : '▸'}
+        </span>
         <span className="tool-name">{entry.toolName}</span>
         {preview && <span className="tool-args">{preview}</span>}
         <span className={`tool-status tool-status-${entry.status}`}>
-          {entry.status === 'running' && <span className="spinner" />}
+          {entry.status === 'running' && <span className="spinner" aria-hidden="true" />}
           {statusLabel[entry.status]}
         </span>
       </button>
@@ -361,7 +369,29 @@ export function Chat({
       onDrop={onDrop}
     >
       {dragging && <div className="drop-overlay">Drop files to attach</div>}
-      <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
+
+      {/*
+        Screen-reader announcements. The transcript itself is not a live
+        region — announcing every streamed token would be unusable — so
+        instead we announce discrete state changes: the agent started
+        thinking, needs a decision, or finished. `polite` waits for a pause
+        rather than interrupting whatever is being read.
+      */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {runState === 'thinking'
+          ? `${agent?.name ?? 'Agent'} is working`
+          : runState === 'awaiting-approval'
+            ? 'Permission required'
+            : ''}
+      </div>
+
+      <div
+        className="chat-scroll"
+        ref={scrollRef}
+        onScroll={handleScroll}
+        role="log"
+        aria-label="Conversation"
+      >
         {transcript.length === 0 && (
           <div className="chat-welcome">
             <h2>{agent.name}</h2>
@@ -432,7 +462,14 @@ export function Chat({
               return <ApprovalCard key={entry.id} entry={entry} onResolve={onResolveApproval} />;
             case 'notice':
               return (
-                <div key={entry.id} className={`notice notice-${entry.level}`}>
+                <div
+                  key={entry.id}
+                  className={`notice notice-${entry.level}`}
+                  // Errors are announced assertively: they usually mean the
+                  // turn failed and the user must act, so waiting for a pause
+                  // would bury the one message that matters.
+                  role={entry.level === 'error' ? 'alert' : undefined}
+                >
                   {entry.text}
                 </div>
               );
