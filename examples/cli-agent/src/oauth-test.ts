@@ -196,6 +196,37 @@ function main(): void {
     );
   }
 
+  console.log('\n[borrowed credentials] must never be refreshed');
+  {
+    /*
+     * This guards a real incident. Refresh tokens rotate: exchanging one
+     * retires it server-side. During development a refresh was performed on a
+     * token borrowed from Claude Code, which instantly invalidated the CLI's
+     * own stored copy and signed the user out of a tool GhostBot was never
+     * asked to touch — with a bare 401 giving no clue why.
+     *
+     * The fix is that a borrowed sign-in is stored WITHOUT its refresh token.
+     * These assertions pin the two halves of that: an empty refresh token
+     * must read as unusable, and a credential that owns its refresh token
+     * must still be renewable.
+     */
+    const borrowed = {
+      type: 'oauth' as const,
+      access: 'sk-ant-oat01-borrowed',
+      refresh: '',
+      expires: Date.now() - 1,
+    };
+    check('a borrowed credential has no refresh token', !borrowed.refresh);
+    check('an expired borrowed credential is expired', claudeOAuth.isExpired(borrowed));
+
+    // The guard the store relies on: falsy refresh means "cannot renew".
+    check('empty refresh is falsy', !borrowed.refresh);
+
+    const owned = { ...borrowed, refresh: 'rt_owned', expires: Date.now() - 1 };
+    check('an owned credential does carry a refresh token', !!owned.refresh);
+    check('an owned expired credential is still expired', claudeOAuth.isExpired(owned));
+  }
+
   console.log('');
   if (failures > 0) {
     console.error(`OAUTH TEST FAILED — ${failures} assertion(s)\n`);

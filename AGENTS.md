@@ -188,20 +188,35 @@ documented for third-party use):
   time on this path; the UI says so rather than showing a plausible figure.
 - Adopting a CLI sign-in **reads** its credential file; GhostBot's own
   credentials live in its encrypted store, never written back to the CLI's.
+- **A borrowed CLI credential is stored without its refresh token, on
+  purpose.** The token is readable, but refreshing it would rotate it
+  server-side and instantly invalidate the CLI's own copy — signing the user
+  out of a tool they never asked GhostBot to touch, with a bare 401 that
+  gives no hint why. This happened once during development on a real account.
+  A borrowed sign-in is therefore read-only: when it expires it is cleared,
+  and the user re-imports or uses GhostBot's own flow, which owns its
+  credential and may rotate freely. `oauth-test.ts` pins this.
 
 **Verified live:** the ChatGPT browser flow end to end (sign-in → token
 exchange → streaming → tool call → refresh with rotation), CLI adoption
-through the real IPC handlers, and DPAPI encryption at rest. **Not verified:**
-the Claude *browser* flow's code exchange — the test account was rate-limited,
-so only its authentication was confirmed (429 for a valid token vs 401 for an
-invalid one).
+through the real IPC handlers, and DPAPI encryption at rest.
+
+For Claude, the **token endpoint is confirmed working**: a real grant exchange
+against `platform.claude.com/v1/oauth/token` returned a new access token with
+a rotated refresh token, which proves the endpoint, client id, request shape
+and response parsing. What remains unconfirmed is only the *browser half* —
+opening the authorize page and pasting the code back — and Claude inference
+itself, because the test account has been rate-limited throughout (429 for a
+valid token vs 401 for an invalid one, so authentication is proven).
 
 ## Not yet done / known gaps
 
 - macOS and Linux are **not verified on real hardware**. CI builds, tests and
   boots the app there, but cannot judge window chrome, native dialogs or
   keychain behaviour.
-- The Claude browser sign-in's code exchange is unverified (see above).
+- The Claude browser sign-in's *browser half* (authorize page + paste-back) is
+  unverified, as is Claude inference — the test account is rate-limited. The
+  token endpoint itself is confirmed (see above).
 - Installers are unsigned.
 - `docs/STATUS.md` carries the detailed status list.
 

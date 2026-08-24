@@ -519,9 +519,23 @@ export function registerBridge(context: BridgeContext): void {
     saveCredential(ctx.userDataDir, vendor, {
       type: 'oauth',
       access: auth.accessToken,
-      // A CLI-held credential may carry no refresh token we can see; the
-      // store treats an absent one as "cannot refresh", and the user is told
-      // to sign in properly when it lapses.
+      /*
+       * The borrowed credential is stored WITHOUT its refresh token, even
+       * though the CLI's file contains one.
+       *
+       * This is deliberate and was learned the hard way. Refresh tokens
+       * rotate: exchanging one retires it server-side. If GhostBot refreshed
+       * a token it borrowed from Claude Code or Codex, the CLI's stored copy
+       * would instantly become invalid and the user would be signed out of a
+       * tool they never asked us to touch — with a 401 that gives no hint
+       * why. (Observed exactly once, during development, on a real account.)
+       *
+       * So a borrowed sign-in is read-only and expires naturally. When it
+       * lapses, `resolveToken` finds no refresh token, clears it, and the UI
+       * says "signed in" is no longer true — at which point the user can
+       * re-import, or sign in through GhostBot's own flow, which owns its
+       * credential and may rotate it freely.
+       */
       refresh: '',
       expires: auth.expiresAt ?? Date.now() + 60 * 60 * 1000,
       ...(auth.accountId ? { accountId: auth.accountId } : {}),

@@ -154,6 +154,19 @@ export async function resolveToken(
       : chatgptOAuth.isExpired(current as ChatGptCredential);
   if (!expired) return current;
 
+  /*
+   * A borrowed CLI sign-in is stored without a refresh token on purpose (see
+   * `oauthImportFromCli`): refreshing it would rotate the token and sign the
+   * user out of their CLI. So an expired one is simply cleared, not renewed —
+   * skipping a network call that could only fail, and leaving the UI honest
+   * about no longer being signed in.
+   */
+  if (!current.refresh) {
+    fileLog('[oauth] borrowed credential expired, clearing', vendor);
+    signOut(userDataDir, vendor);
+    return undefined;
+  }
+
   const previous = refreshChains.get(vendor) ?? Promise.resolve(undefined);
   const run = previous
     .catch(() => undefined)

@@ -33,7 +33,8 @@ inspection, or a passing assertion — not by reading the code.
 | First run on a clean profile | Verified with an empty userData dir: onboarding banner, guided composer, and a missing key reported as "needs an API key", never as "rejected" |
 | Accessibility | Live-region announcements, `aria-expanded` tool cards, modal focus trap with focus restore, visible focus rings |
 | ChatGPT subscription sign-in | Browser OAuth verified end to end: sign-in, token exchange, streaming, tool call, refresh with rotation |
-| Claude subscription sign-in | Authentication proven (valid token 429 vs invalid 401); the browser code exchange is **unverified** — the test account was rate-limited |
+| Claude subscription sign-in | Token endpoint confirmed by a real grant exchange (new access token + rotated refresh). Authentication proven (valid 429 vs invalid 401). The **browser half** and Claude inference remain unverified — the test account is rate-limited |
+| Borrowed CLI credentials | Stored without their refresh token by design: refreshing one rotates it and would sign the user out of their own CLI. Verified the CLI's file is left byte-identical |
 | Subscription credentials | Stored DPAPI-encrypted (`v10`), absent from the ciphertext and from settings; verified through the real app's IPC handlers |
 | Plan usage display | Live: "0% of your premium limit used · resets in 7 days". No usage endpoint exists, so this appears only after a turn |
 | Offline suites | All thirteen pass with no API key and no network |
