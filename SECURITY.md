@@ -45,6 +45,11 @@ commands and write files — that is the product. The security boundary is not
    of named methods.
 5. **Keys stay out of the renderer and off disk in plaintext.** API keys are
    encrypted with the OS keychain and are never sent to the UI.
+6. **Standing permissions are visible and revocable.** "Always allow" is
+   remembered per agent *and* per tool — never wildcarded — and every grant is
+   listed in Settings with the date it was made. A corrupt grants file fails
+   closed (back to asking), never open. Grants are deleted with their agent so
+   a reused id cannot inherit them.
 
 ### In scope
 

@@ -18,6 +18,7 @@ import type {
   RoutineRecord,
   SettingsView,
   SkillRecord,
+  ToolGrant,
 } from '@ghostbot/shared';
 
 /* ------------------------------------------------------------------ */
@@ -74,6 +75,12 @@ interface SettingsPanelProps {
   settings: SettingsView;
   presets: PresetView[];
   personas: PersonaView[];
+  /** Standing "always allow" permissions, so the user can review them. */
+  grants: ToolGrant[];
+  /** Resolves an agent id to its display name for the grants list. */
+  agentName(agentId: string): string;
+  onRevokeGrant(agentId: string, toolName: string): void;
+  onRevokeAllGrants(): void;
   onSave(patch: Partial<GlobalSettings> & { apiKey?: string }): Promise<unknown>;
   onTest(cfg: {
     presetId: string;
@@ -89,6 +96,10 @@ export function SettingsPanel({
   settings,
   presets,
   personas,
+  grants,
+  agentName,
+  onRevokeGrant,
+  onRevokeAllGrants,
   onSave,
   onTest,
   onPickDirectory,
@@ -289,6 +300,54 @@ export function SettingsPanel({
             The agent will be able to run shell commands and modify files without confirmation.
             Only use this in a workspace you are willing to lose.
           </p>
+        )}
+      </section>
+
+      <section className="panel-section">
+        <h3>Standing permissions</h3>
+        {grants.length === 0 ? (
+          <p className="muted">
+            None. When you choose “Always allow” on a permission prompt, it is
+            recorded here so you can review or withdraw it later.
+          </p>
+        ) : (
+          <>
+            <p className="muted">
+              These tools run without asking. Revoke any you no longer want.
+            </p>
+            <div className="list">
+              {grants.map((g) => (
+                <div key={`${g.agentId}\u0000${g.toolName}`} className="list-row">
+                  <div className="list-main">
+                    <div className="list-title">
+                      <code>{g.toolName}</code>
+                      <span className="muted">
+                        {' '}
+                        — {agentName(g.agentId)}
+                      </span>
+                    </div>
+                    <div className="muted list-sub">
+                      Granted {new Date(g.grantedAt).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="list-actions">
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      onClick={() => onRevokeGrant(g.agentId, g.toolName)}
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="row-actions">
+              <button type="button" className="btn btn-danger" onClick={onRevokeAllGrants}>
+                Revoke all
+              </button>
+            </div>
+          </>
         )}
       </section>
 

@@ -22,6 +22,7 @@ import type {
   RoutineRecord,
   SettingsView,
   SkillRecord,
+  ToolGrant,
   TranscriptEntry,
 } from '@ghostbot/shared';
 
@@ -56,6 +57,7 @@ export function useGhostbot() {
   const [mcpServers, setMcpServers] = useState<McpServerStatus[]>([]);
   const [routines, setRoutines] = useState<RoutineRecord[]>([]);
   const [skills, setSkills] = useState<SkillRecord[]>([]);
+  const [grants, setGrants] = useState<ToolGrant[]>([]);
   const [ready, setReady] = useState(false);
   const [toast, setToast] = useState<GhostbotState['toast']>(null);
 
@@ -83,7 +85,7 @@ export function useGhostbot() {
     let cancelled = false;
     void (async () => {
       try {
-        const [a, s, p, pe, m, r, sk] = await Promise.all([
+        const [a, s, p, pe, m, r, sk, gr] = await Promise.all([
           api.listAgents(),
           api.getSettings(),
           api.getPresets(),
@@ -91,6 +93,7 @@ export function useGhostbot() {
           api.listMcpServers(),
           api.listRoutines(),
           api.listSkills(),
+          api.listToolGrants(),
         ]);
         if (cancelled) return;
         // Defence in depth: main already repairs malformed stores, but a
@@ -106,6 +109,7 @@ export function useGhostbot() {
         setMcpServers(arr<McpServerStatus>(m));
         setRoutines(arr<RoutineRecord>(r));
         setSkills(arr<SkillRecord>(sk));
+        setGrants(arr<ToolGrant>(gr));
         setSelectedId((prev) => prev ?? agentList[0]?.id ?? null);
         setReady(true);
       } catch (err) {
@@ -154,6 +158,9 @@ export function useGhostbot() {
           return;
         case 'routines-changed':
           setRoutines(event.routines);
+          return;
+        case 'grants-changed':
+          setGrants(event.grants);
           return;
         case 'notice':
           setToast({ level: event.level, text: event.text });
@@ -412,6 +419,22 @@ export function useGhostbot() {
         }
       },
 
+      async revokeGrant(agentId: string, toolName: string) {
+        try {
+          setGrants(await api.revokeToolGrant(agentId, toolName));
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      async revokeAllGrants() {
+        try {
+          setGrants(await api.revokeAllToolGrants());
+        } catch (err) {
+          fail(err);
+        }
+      },
+
       dismissToast: () => setToast(null),
       notify: (text: string, level: 'info' | 'error' = 'info') => setToast({ level, text }),
     }),
@@ -433,6 +456,7 @@ export function useGhostbot() {
       mcpServers,
       routines,
       skills,
+      grants,
       toast,
     },
     actions,

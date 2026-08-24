@@ -38,6 +38,7 @@ import { statuses as mcpStatuses, syncMcpServers } from './mcp-manager.js';
 import { runRoutineNow, refreshNextRunTime, refreshNextRunTimes } from './scheduler.js';
 import { abortSession, clearSession, seedSessionHistory } from './agent-sessions.js';
 import { prefixBefore, prefixThrough, rebuildHistory } from './branching.js';
+import { grant, isGranted, listGrants, revoke, revokeAll, revokeForAgent } from './grants.js';
 import { fileLog } from './filelog.js';
 
 /**
@@ -75,7 +76,12 @@ let ctx: BridgeContext;
 /** Pending approvals: requestId → resolver awaiting the user's decision. */
 const pendingApprovals = new Map<string, (approved: boolean) => void>();
 /** Tools the user chose "always allow" for, per agent, for this app run. */
-const alwaysAllowed = new Map<string, Set<string>>();
+/**
+ * Approvals still awaiting a decision, keyed by requestId. The tool name is
+ * kept alongside the resolver so "always allow" can record a grant for the
+ * right tool once the user answers.
+ */
+const pendingMeta = new Map<string, { agentId: string; toolName: string }>();
 
 /* ------------------------------------------------------------------ */
 /* Event fan-out                                                       */
@@ -122,7 +128,10 @@ export function requestApproval(
   agentId: string,
   req: { toolName: string; summary: string; detail?: string },
 ): Promise<boolean> {
-  if (alwaysAllowed.get(agentId)?.has(req.toolName)) return Promise.resolve(true);
+  // A standing grant the user made earlier, in this session or a previous
+  // one. Persisted grants are listed and revocable in Settings — a permission
+  // the user cannot see or withdraw would be worse than asking every time.
+  if (isGranted(agentId, req.toolName)) return Promise.resolve(true);
 
   const requestId = store.newId('appr');
   const entry: TranscriptEntry = {
@@ -139,8 +148,11 @@ export function requestApproval(
   emitEvent({ type: 'run-state', agentId, state: 'awaiting-approval' });
   emitEvent({ type: 'approval', agentId, requestId, ...req });
 
+  pendingMeta.set(requestId, { agentId, toolName: req.toolName });
+
   return new Promise<boolean>((resolve) => {
     pendingApprovals.set(requestId, (approved) => {
+      pendingMeta.delete(requestId);
       pushTranscript(agentId, {
         ...entry,
         status: approved ? 'approved' : 'denied',
@@ -219,6 +231,10 @@ export function registerBridge(context: BridgeContext): void {
   handle('deleteAgent', (id: string) => {
     clearSession(id);
     store.deleteAgent(id);
+    // Drop standing grants with the agent, so an id that happens to be
+    // reused can never inherit a permission granted to something else.
+    revokeForAgent(id);
+    emitEvent({ type: 'grants-changed', grants: listGrants() });
     // Routines belonging to a deleted agent would never fire again; remove
     // them rather than leaving invisible orphans in the store.
     for (const r of store.listRoutines(id)) store.deleteRoutine(r.id);
@@ -347,7 +363,31 @@ export function registerBridge(context: BridgeContext): void {
     const resolve = pendingApprovals.get(requestId);
     if (!resolve) return;
     pendingApprovals.delete(requestId);
+
+    // "Always allow" records a standing grant for this agent + tool. Only an
+    // explicit allow-always does so — a denial never creates a grant.
+    if (resolution === 'allow-always') {
+      const meta = pendingMeta.get(requestId);
+      if (meta) {
+        grant(meta.agentId, meta.toolName);
+        emitEvent({ type: 'grants-changed', grants: listGrants() });
+      }
+    }
     resolve(resolution !== 'deny');
+  });
+
+  handle('listToolGrants', () => listGrants());
+
+  handle('revokeToolGrant', (agentId: string, toolName: string) => {
+    revoke(agentId, toolName);
+    emitEvent({ type: 'grants-changed', grants: listGrants() });
+    return listGrants();
+  });
+
+  handle('revokeAllToolGrants', () => {
+    revokeAll();
+    emitEvent({ type: 'grants-changed', grants: listGrants() });
+    return listGrants();
   });
 
   /* -- settings & providers ------------------------------------ */

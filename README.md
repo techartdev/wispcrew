@@ -42,6 +42,7 @@ monthly fee, or the requirement to run your work on someone else's computer.
 | **Agent delegation** | Agents can hand tasks to each other, with depth, cycle and permission guards |
 | **Rewind & branch** | Undo a bad turn, or fork a conversation into a new agent from any point |
 | **Permission gates** | Every write or command asks first — or set an agent to read-only, or let it run free |
+| **Standing permissions** | “Always allow” is remembered per agent and tool, and listed in Settings so you can revoke it |
 | **Routines** | Cron-scheduled prompts, so an agent can work while you are away |
 | **Skills** | Reusable instruction sets, invoked with `/name` |
 | **MCP plugins** | Extend agents with any Model Context Protocol server |
@@ -54,7 +55,7 @@ monthly fee, or the requirement to run your work on someone else's computer.
 Requires **Node.js 20+**.
 
 ```bash
-git clone https://github.com/ghostbot-app/ghostbot
+git clone https://github.com/techartdev/ghostbot
 cd ghostbot
 npm install
 npm run desktop

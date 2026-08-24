@@ -28,7 +28,8 @@ inspection, or a passing assertion — not by reading the code.
 | Workspace confinement | 30 assertions: traversal, absolute paths, prefix siblings, case variants, NUL bytes, writes and listings |
 | Conversation rewind / branch | Branch leaves the original untouched; every transcript prefix rebuilds to a provider-valid history |
 | Memory across restarts | Live: a fact stated in one process was recalled by a **separate** process |
-| Offline suites | All ten pass with no API key and no network |
+| Standing tool grants | Persist across restarts, listed and revocable in Settings, dropped with their agent, fail closed on a corrupt file |
+| Offline suites | All eleven pass with no API key and no network |
 | **Fresh-clone workflow** | `git clone` → `npm ci` → typecheck → build → tests → `pack` → packaged app boots and renders. Verified from a real clone, not the working tree |
 | Typecheck / build | Clean across all workspaces |
 
@@ -72,9 +73,7 @@ OpenAI model name is *not* rerouted.
 2. **Installers are unsigned.** Windows SmartScreen and macOS Gatekeeper will
    warn. Signing needs certificates the project does not have.
 3. **No auto-update channel.**
-5. **`allow-always` approvals are per-session.** Deliberate — a standing grant
-   does not survive a restart — but some users will want persistence.
-6. **Web search quality depends on the configured backend.** See
+5. **Web search quality depends on the configured backend.** See
    `packages/tools/src/web.ts`.
 
 ## Agent delegation
@@ -110,7 +109,10 @@ Roughly in order of value to a new user:
    be a genuine improvement over products whose agents share one environment.
 3. **Signed installers + an update channel.**
 4. **i18n.**
-5. **Persistent tool grants**, with clear UI showing what is standing.
+5. **Per-tool argument scoping** for grants — e.g. allow `shell` only for
+   commands matching a pattern. Deliberately not built yet: argument matching
+   is exactly where sandbox escapes live, so it needs a careful design rather
+   than a regex.
 
 ## Contributing
 

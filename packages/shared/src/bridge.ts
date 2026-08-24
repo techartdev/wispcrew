@@ -26,6 +26,7 @@ import type {
   McpServerStatus,
   RoutineRecord,
   SkillRecord,
+  ToolGrant,
   TranscriptEntry,
 } from './domain.js';
 
@@ -57,6 +58,8 @@ export type BridgeEvent =
   | { type: 'mcp-changed'; servers: McpServerStatus[] }
   /** A routine started or finished. */
   | { type: 'routines-changed'; routines: RoutineRecord[] }
+  /** Standing tool permissions changed (granted, revoked, agent deleted). */
+  | { type: 'grants-changed'; grants: ToolGrant[] }
   /** Non-fatal problem worth surfacing in the UI. */
   | { type: 'notice'; level: 'info' | 'error'; text: string };
 
@@ -158,6 +161,13 @@ export interface GhostBridge {
    */
   branchConversation(agentId: string, entryId: string): Promise<AgentRecord>;
   resolveApproval(requestId: string, resolution: ApprovalResolution): Promise<void>;
+
+  /* -- standing tool permissions --------------------------------- */
+
+  /** Every "always allow" the user has granted, newest first. */
+  listToolGrants(): Promise<ToolGrant[]>;
+  revokeToolGrant(agentId: string, toolName: string): Promise<ToolGrant[]>;
+  revokeAllToolGrants(): Promise<ToolGrant[]>;
 
   /* -- settings & providers -------------------------------------- */
 

@@ -223,6 +223,24 @@ export interface McpServerStatus {
 }
 
 /* ------------------------------------------------------------------ */
+/* Tool grants                                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A standing "always allow" permission for one agent + one tool.
+ *
+ * Persisted so the decision survives a restart, and surfaced in Settings so
+ * the user can see and revoke it — a permission that cannot be reviewed is
+ * worse than one that is asked for every time.
+ */
+export interface ToolGrant {
+  agentId: string;
+  toolName: string;
+  /** Epoch ms, shown in the UI so a stale grant is recognisable. */
+  grantedAt: number;
+}
+
+/* ------------------------------------------------------------------ */
 /* Settings                                                            */
 /* ------------------------------------------------------------------ */
 

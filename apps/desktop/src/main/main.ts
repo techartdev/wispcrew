@@ -28,6 +28,7 @@ import type {
 } from '@ghostbot/shared';
 import { attachmentsToPromptText } from './attachments.js';
 import { rebuildHistory } from './branching.js';
+import { initGrants } from './grants.js';
 import {
   isTerminal,
   makeAskAgentTool,
@@ -57,6 +58,12 @@ import { startScheduler, stopScheduler } from './scheduler.js';
 // Electron caches the userData path on first access and otherwise derives it
 // from the package name (@ghostbot/desktop → %APPDATA%\@ghostbot\desktop).
 app.setName('GhostBot');
+
+/**
+ * The project's home. Single constant so moving the repository is a one-line
+ * change rather than a hunt through menus, docs and templates.
+ */
+export const PROJECT_URL = 'https://github.com/techartdev/ghostbot';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RENDERER_HTML = path.join(__dirname, 'renderer', 'index.html');
@@ -424,7 +431,7 @@ function buildMenu(): void {
         submenu: [
           {
             label: 'Project on GitHub',
-            click: () => void shell.openExternal('https://github.com/ghostbot-app/ghostbot'),
+            click: () => void shell.openExternal(PROJECT_URL),
           },
         ],
       },
@@ -529,6 +536,7 @@ app.whenReady().then(async () => {
   initFileLog();
   userDataDir = migrateUserData();
   store.initStore(userDataDir);
+  initGrants(userDataDir);
 
   // One-time hardening: if an earlier build left the provider key in the
   // plaintext settings file, move it into the encrypted secrets store.

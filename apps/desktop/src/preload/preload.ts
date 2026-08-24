@@ -44,6 +44,12 @@ const bridge: GhostBridge = {
   resolveApproval: (requestId, resolution) =>
     ipcRenderer.invoke('gb:resolveApproval', requestId, resolution),
 
+  /* standing tool permissions */
+  listToolGrants: () => ipcRenderer.invoke('gb:listToolGrants'),
+  revokeToolGrant: (agentId, toolName) =>
+    ipcRenderer.invoke('gb:revokeToolGrant', agentId, toolName),
+  revokeAllToolGrants: () => ipcRenderer.invoke('gb:revokeAllToolGrants'),
+
   /* settings & providers */
   getSettings: () => ipcRenderer.invoke('gb:getSettings'),
   saveSettings: (patch) => ipcRenderer.invoke('gb:saveSettings', patch),

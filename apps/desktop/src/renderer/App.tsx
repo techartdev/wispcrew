@@ -33,6 +33,7 @@ export function App() {
     mcpServers,
     routines,
     skills,
+    grants,
     toast,
   } = state;
 
@@ -191,6 +192,10 @@ export function App() {
           settings={settings}
           presets={presets}
           personas={personas}
+          grants={grants}
+          agentName={(id) => agents.find((a) => a.id === id)?.name ?? 'a deleted agent'}
+          onRevokeGrant={(id, tool) => void actions.revokeGrant(id, tool)}
+          onRevokeAllGrants={() => void actions.revokeAllGrants()}
           onSave={actions.saveSettings}
           onTest={actions.testConnection}
           onPickDirectory={actions.pickDirectory}
