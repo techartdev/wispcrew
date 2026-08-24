@@ -70,6 +70,11 @@ export interface SubscriptionAuth {
   scopes?: string[];
   /** Which CLI the credentials came from, for the UI to name. */
   source: string;
+  /**
+   * ChatGPT account id. The subscription endpoint requires it alongside the
+   * token, so an OpenAI sign-in without one is unusable.
+   */
+  accountId?: string;
 }
 
 /** Result of looking for a usable local sign-in. */
@@ -222,7 +227,43 @@ export function findOpenAiSubscription(): SubscriptionLookup {
     };
   }
 
-  return { status: 'found', auth: { vendor: 'openai', accessToken: token, source } };
+  const accountId = typeof tokens?.account_id === 'string' ? tokens.account_id : undefined;
+  if (!accountId) {
+    return {
+      status: 'unavailable',
+      vendor: 'openai',
+      source,
+      reason: 'The sign-in carries no ChatGPT account id — sign in with `codex` again.',
+    };
+  }
+
+  // The plan is recorded inside the token's own claims rather than the file,
+  // so read it from there for display.
+  const plan = planFromChatGptToken(token);
+
+  return {
+    status: 'found',
+    auth: { vendor: 'openai', accessToken: token, source, accountId, plan },
+  };
+}
+
+/** Read `chatgpt_plan_type` out of a ChatGPT access token's claims. */
+function planFromChatGptToken(jwt: string): string | undefined {
+  try {
+    const payload = jwt.split('.')[1];
+    if (!payload) return undefined;
+    const normalised = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalised + '='.repeat((4 - (normalised.length % 4)) % 4);
+    const claims = JSON.parse(Buffer.from(padded, 'base64').toString('utf8')) as Record<
+      string,
+      unknown
+    >;
+    const auth = claims['https://api.openai.com/auth'] as Record<string, unknown> | undefined;
+    const plan = auth?.chatgpt_plan_type;
+    return typeof plan === 'string' ? plan : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function findSubscription(vendor: SubscriptionVendor): SubscriptionLookup {

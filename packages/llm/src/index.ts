@@ -5,6 +5,7 @@ export * from './presets.js';
 export * from './errors.js';
 export * from './subscription-auth.js';
 export * from './oauth-flow.js';
+export * from './codex-backend.js';
 import type { ChatProvider, ProviderConfig } from '@ghostbot/shared';
 import { OpenAICompatibleProvider, isOpenAiReasoningModel } from './openai-compatible.js';
 import { OpenAIResponsesProvider } from './openai-responses.js';
