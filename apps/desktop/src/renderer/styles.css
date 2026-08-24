@@ -110,7 +110,18 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /*
+   * `min-height: 0` is load-bearing, not decoration.
+   *
+   * A grid item's automatic minimum size is its content height, so without
+   * this a long transcript grows the grid track past the viewport: the whole
+   * column gets taller instead of `.chat-scroll` scrolling inside it, and the
+   * conversation becomes unreachable with no scrollbar anywhere. `height:
+   * 100%` alone does not prevent it — the automatic minimum overrides it.
+   */
+  min-height: 0;
   height: 100%;
+  overflow: hidden;
 }
 
 /* ---------------------------------------------------------------- */

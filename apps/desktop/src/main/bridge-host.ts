@@ -1,12 +1,12 @@
-/**
- * bridge-host.ts — main-process implementation of the `GhostBridge` contract.
+﻿/**
+ * bridge-host.ts â€” main-process implementation of the `GhostBridge` contract.
  *
  * This is the entire renderer-facing surface of the app. It replaces the
  * reverse-engineered protocol shim with ~30 explicit, typed handlers we own.
  *
  * Conventions:
  *  - One `ipcMain.handle` per bridge method, named `gb:<method>`. Electron
- *    has no wildcard channels, so the list is explicit by necessity — which
+ *    has no wildcard channels, so the list is explicit by necessity â€” which
  *    is also what makes the attack surface reviewable.
  *  - Handlers return plain values and throw on failure. The preload converts
  *    a rejection into a rejected promise in the renderer; there are no
@@ -52,6 +52,7 @@ import { prefixBefore, prefixThrough, rebuildHistory } from './branching.js';
 import { grant, isGranted, listGrants, revoke, revokeAll, revokeForAgent } from './grants.js';
 import {
   allStatuses,
+  resolveToken,
   saveCredential,
   signOut,
   status,
@@ -99,7 +100,7 @@ async function promptForAuthCode(): Promise<string | null> {
  .primary{background:#1b8fd4;border-color:#1b8fd4;color:#fff;font-weight:550}
 </style>
 <h3>Paste the code from your browser</h3>
-<p>Claude's page shows a code after you approve the sign-in. Paste it here —
+<p>Claude's page shows a code after you approve the sign-in. Paste it here â€”
 codes expire after about a minute.</p>
 <input id="c" autofocus placeholder="code#state" spellcheck="false">
 <div class="row">
@@ -124,7 +125,7 @@ codes expire after about a minute.</p>
     };
 
     // The page signals its result by navigating to a custom scheme, which we
-    // intercept — no preload or IPC channel needed for a one-shot dialog.
+    // intercept â€” no preload or IPC channel needed for a one-shot dialog.
     prompt.webContents.on('will-navigate', (event, url) => {
       if (!url.startsWith('ghostbot-code://')) return;
       event.preventDefault();
@@ -168,7 +169,7 @@ export interface BridgeContext {
 
 let ctx: BridgeContext;
 
-/** Pending approvals: requestId → resolver awaiting the user's decision. */
+/** Pending approvals: requestId â†’ resolver awaiting the user's decision. */
 const pendingApprovals = new Map<string, (approved: boolean) => void>();
 /** Tools the user chose "always allow" for, per agent, for this app run. */
 /**
@@ -216,7 +217,7 @@ export function emitMcp(): void {
  *
  * Returns a promise that settles when the renderer calls `resolveApproval`.
  * "Always allow" is remembered per agent+tool for the lifetime of the
- * process — deliberately not persisted, so a standing grant cannot outlive
+ * process â€” deliberately not persisted, so a standing grant cannot outlive
  * the session that granted it without the user knowing.
  */
 export function requestApproval(
@@ -224,7 +225,7 @@ export function requestApproval(
   req: { toolName: string; summary: string; detail?: string },
 ): Promise<boolean> {
   // A standing grant the user made earlier, in this session or a previous
-  // one. Persisted grants are listed and revocable in Settings — a permission
+  // one. Persisted grants are listed and revocable in Settings â€” a permission
   // the user cannot see or withdraw would be worse than asking every time.
   if (isGranted(agentId, req.toolName)) return Promise.resolve(true);
 
@@ -460,7 +461,7 @@ export function registerBridge(context: BridgeContext): void {
     pendingApprovals.delete(requestId);
 
     // "Always allow" records a standing grant for this agent + tool. Only an
-    // explicit allow-always does so — a denial never creates a grant.
+    // explicit allow-always does so â€” a denial never creates a grant.
     if (resolution === 'allow-always') {
       const meta = pendingMeta.get(requestId);
       if (meta) {
@@ -527,12 +528,12 @@ export function registerBridge(context: BridgeContext): void {
        * rotate: exchanging one retires it server-side. If GhostBot refreshed
        * a token it borrowed from Claude Code or Codex, the CLI's stored copy
        * would instantly become invalid and the user would be signed out of a
-       * tool they never asked us to touch — with a 401 that gives no hint
+       * tool they never asked us to touch â€” with a 401 that gives no hint
        * why. (Observed exactly once, during development, on a real account.)
        *
        * So a borrowed sign-in is read-only and expires naturally. When it
        * lapses, `resolveToken` finds no refresh token, clears it, and the UI
-       * says "signed in" is no longer true — at which point the user can
+       * says "signed in" is no longer true â€” at which point the user can
        * re-import, or sign in through GhostBot's own flow, which owns its
        * credential and may rotate it freely.
        */
@@ -596,13 +597,51 @@ export function registerBridge(context: BridgeContext): void {
     async (cfg: { presetId: string; apiKey?: string; model?: string; baseUrl?: string }) => {
       const started = Date.now();
       try {
-        // Fall back to the stored key so "Test" works without retyping it.
-        const key = cfg.apiKey || readSecrets(ctx.userDataDir).GHOSTBOT_API_KEY;
-        const preset = configFromPreset(cfg.presetId, {
-          apiKey: key,
-          model: cfg.model,
-          baseUrl: cfg.baseUrl,
-        });
+        /*
+         * Resolve the credential exactly as a real turn does.
+         *
+         * A subscription preset authenticates with an OAuth token and, for
+         * ChatGPT, an account id â€” neither of which is an API key. Reading
+         * only the key made "Test connection" report "the ChatGPT sign-in is
+         * missing its account id" for a sign-in that worked perfectly in
+         * conversation: a false failure, and a confusing one, because the
+         * advice it offered ("sign in again") could not have helped.
+         */
+        const vendor: OAuthVendor | null =
+          cfg.presetId === 'chatgpt-subscription'
+            ? 'chatgpt'
+            : cfg.presetId === 'claude-subscription'
+              ? 'anthropic'
+              : null;
+
+        let key: string | undefined;
+        let accountId: string | undefined;
+        if (vendor) {
+          const credential = await resolveToken(ctx.userDataDir, vendor);
+          if (!credential) {
+            return {
+              ok: false,
+              error:
+                vendor === 'chatgpt'
+                  ? 'Not signed in to ChatGPT. Sign in above, then test again.'
+                  : 'Not signed in to Claude. Sign in above, then test again.',
+            };
+          }
+          key = credential.access;
+          accountId = (credential as { accountId?: string }).accountId;
+        } else {
+          // Fall back to the stored key so "Test" works without retyping it.
+          key = cfg.apiKey || readSecrets(ctx.userDataDir).GHOSTBOT_API_KEY;
+        }
+
+        const preset = {
+          ...configFromPreset(cfg.presetId, {
+            apiKey: key,
+            model: cfg.model,
+            baseUrl: cfg.baseUrl,
+          }),
+          ...(accountId ? { accountId } : {}),
+        };
         const provider = createProvider(preset);
         const check = provider.validate();
         if (!check.ok) return { ok: false, error: check.error };

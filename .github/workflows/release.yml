@@ -1,0 +1,163 @@
+# Build installers for all three platforms and attach them to a GitHub
+# Release.
+#
+# Triggered by pushing a tag like `v0.2.0`, or manually from the Actions tab.
+# Each platform builds its own installer natively — cross-building an NSIS
+# installer or a DMG from Linux is possible but produces artifacts nobody has
+# actually launched, which defeats the point of shipping them.
+#
+# The release is created as a **draft**, so a human reviews the notes and the
+# artifact list before anything becomes public. Publishing is one click.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g. 0.2.0). Defaults to package.json.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing should not discard installers that already built.
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows installer
+            command: dist:win
+            artifacts: 'apps/desktop/release/*.exe'
+          - os: macos-latest
+            name: macOS disk image
+            command: dist:mac
+            artifacts: 'apps/desktop/release/*.dmg'
+          - os: ubuntu-latest
+            name: Linux AppImage
+            command: dist:linux
+            artifacts: 'apps/desktop/release/*.AppImage'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify before shipping
+        # An installer that fails its own test suite should never reach a
+        # release page, so the gate runs here too rather than trusting that CI
+        # already passed on this commit.
+        run: |
+          npm run typecheck
+          npm run test --workspace @ghostbot/examples-cli
+
+      - name: Set version from tag
+        # The tag is the source of truth for a tagged release; package.json is
+        # kept in step so the About box and installer filenames agree.
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          node -e "
+            const fs = require('fs');
+            for (const f of ['package.json', 'apps/desktop/package.json']) {
+              const p = JSON.parse(fs.readFileSync(f, 'utf8'));
+              p.version = '$VERSION';
+              fs.writeFileSync(f, JSON.stringify(p, null, 2) + '\n');
+            }
+          "
+          echo "Building version $VERSION"
+
+      - name: Generate icons
+        run: node scripts/make-icons.mjs
+
+      - name: Build installer
+        run: npm run ${{ matrix.command }} --workspace @ghostbot/desktop
+        env:
+          # Without a token electron-builder will not try to publish by
+          # itself; the upload step below owns that.
+          GH_TOKEN: ''
+
+      - name: List what was produced
+        shell: bash
+        run: ls -la apps/desktop/release/ || dir apps\desktop\release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-installer
+          path: ${{ matrix.artifacts }}
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Draft GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect installers
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' \) \
+            -exec cp {} release/ \;
+          ls -la release/
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: GhostBot ${{ github.ref_name }}
+          files: release/*
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            | Platform | File |
+            |---|---|
+            | Windows | `GhostBot-*-win-x64.exe` |
+            | macOS | `GhostBot-*-mac-*.dmg` |
+            | Linux | `GhostBot-*-linux-x64.AppImage` |
+
+            ### Installers are unsigned
+
+            GhostBot has no code-signing certificate, so:
+
+            - **Windows** shows a SmartScreen warning — choose *More info* →
+              *Run anyway*.
+            - **macOS** refuses to open it directly — right-click the app →
+              *Open*, or run
+              `xattr -dr com.apple.quarantine /Applications/GhostBot.app`.
+            - **Linux** needs the AppImage marked executable:
+              `chmod +x GhostBot-*.AppImage`.
+
+            If that is not acceptable, build from source — it is the same
+            code, and `npm run dist:win|dist:mac|dist:linux` produces these
+            exact artifacts.
+
+            ### First run
+
+            GhostBot needs a model provider. Either paste an API key
+            (DeepSeek, OpenAI, Anthropic, Groq, OpenRouter, or any
+            OpenAI-compatible endpoint), point it at a local Ollama or
+            LM Studio server, or sign in with a Claude/ChatGPT subscription —
+            reading the caveats in the README first.
