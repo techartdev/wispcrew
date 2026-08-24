@@ -11,6 +11,12 @@ import type {
   ToolDefinition,
 } from '@ghostbot/shared';
 import { endpointAllowsNoKey } from './presets.js';
+import {
+  backoffDelay,
+  fetchWithRetry,
+  isTransientErrorMessage,
+  type RetryOptions,
+} from './retry.js';
 
 /**
  * True for an OpenAI **reasoning** model served from OpenAI's own endpoint.
@@ -43,11 +49,16 @@ interface OpenAiChunk {
   error?: { message?: string };
 }
 
+export interface OpenAICompatibleConfig extends ProviderConfig {
+  /** Notified before each backoff wait, so the UI can explain the pause. */
+  onRetry?: RetryOptions['onRetry'];
+}
+
 export class OpenAICompatibleProvider implements ChatProvider {
   readonly kind = 'openai-compatible' as const;
   readonly label: string;
 
-  constructor(private readonly config: ProviderConfig) {
+  constructor(private readonly config: OpenAICompatibleConfig) {
     this.label = config.label || config.id;
   }
 
@@ -73,21 +84,73 @@ export class OpenAICompatibleProvider implements ChatProvider {
     if (this.config.apiKey) headers.Authorization = `Bearer ${this.config.apiKey}`;
 
     const useStream = request.stream !== false;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ ...body, stream: useStream }),
-      signal: request.signal,
-    });
+    const maxRetries = 3;
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`OpenAI-compatible endpoint returned HTTP ${res.status}: ${text.slice(0, 500)}`);
+    /*
+     * Two kinds of transient failure, handled in two places.
+     *
+     * `fetchWithRetry` covers the honest case: a 429 or 5xx status. But some
+     * providers smuggle a capacity error into a **200 response** — NVIDIA
+     * returns `{"error":{"message":"ResourceExhausted: Worker local total
+     * request limit reached (16/16)", ...}}` inside the SSE stream, so the
+     * HTTP layer sees success. Buffering the first chunk lets that be caught
+     * and the whole request retried, instead of killing an agent turn for a
+     * condition that clears in seconds.
+     */
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetchWithRetry(
+        url,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ ...body, stream: useStream }),
+          signal: request.signal,
+        },
+        { signal: request.signal, onRetry: this.config.onRetry },
+      );
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(
+          `OpenAI-compatible endpoint returned HTTP ${res.status}: ${text.slice(0, 500)}`,
+        );
+      }
+
+      if (!useStream) {
+        yield* this.nonStreaming(res);
+        return;
+      }
+
+      // Peek at the stream: if it opens with a transient error, retry rather
+      // than surfacing it. Anything else is replayed to the caller intact.
+      const chunks = this.parseStream(res);
+      const iterator = chunks[Symbol.asyncIterator]();
+      const first = await iterator.next();
+
+      if (
+        !first.done &&
+        first.value.kind === 'error' &&
+        isTransientErrorMessage(first.value.message) &&
+        attempt < maxRetries
+      ) {
+        const delayMs = backoffDelay(attempt);
+        this.config.onRetry?.({ attempt: attempt + 1, delayMs, status: 503 });
+        await new Promise((r) => setTimeout(r, delayMs));
+        continue;
+      }
+
+      if (!first.done) yield first.value;
+      for (;;) {
+        const next = await iterator.next();
+        if (next.done) return;
+        yield next.value;
+      }
     }
+  }
 
-    if (useStream) {
-      yield* this.parseStream(res);
-    } else {
+  /** Read a complete (non-streamed) response. */
+  private async *nonStreaming(res: Response): AsyncIterable<ProviderChunk> {
+    {
       const json = (await res.json()) as {
         choices?: Array<{ message?: { content?: string | null; tool_calls?: unknown[] } }>;
         usage?: unknown;

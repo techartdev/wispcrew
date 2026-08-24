@@ -122,6 +122,35 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     keyHint: 'Leave empty — LM Studio runs locally',
   },
   {
+    id: 'nvidia',
+    label: 'NVIDIA NIM',
+    kind: 'openai-compatible',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    /*
+     * Model list is deliberately short and was chosen by testing, not by
+     * copying the 100+ entry catalogue.
+     *
+     * GhostBot is an agent: a model that cannot call tools is close to
+     * useless here, and several NVIDIA-hosted models advertise tool support
+     * they do not deliver. `llama-3.3-nemotron-super-49b` emitted a raw `<T`
+     * into its reply instead of a tool call, and one catalogue entry answered
+     * HTTP 410 Gone. The models below returned real `tool_calls` when asked.
+     *
+     * The Model field is a free-text combo box, so anything else in the
+     * catalogue can still be typed in.
+     */
+    defaultModel: 'meta/llama-3.3-70b-instruct',
+    models: [
+      'meta/llama-3.3-70b-instruct',
+      'nvidia/nemotron-3-ultra-550b-a55b',
+      'nvidia/nemotron-3-super-120b-a12b',
+      'meta/llama-3.1-70b-instruct',
+      'meta/llama-3.1-8b-instruct',
+      'mistralai/mistral-large-2-instruct',
+    ],
+    keyHint: 'NVIDIA API key from build.nvidia.com (free tier available)',
+  },
+  {
     id: 'groq',
     label: 'Groq',
     kind: 'openai-compatible',

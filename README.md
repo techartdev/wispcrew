@@ -44,6 +44,7 @@ monthly fee, or the requirement to run your work on someone else's computer.
 | **Permission gates** | Every write or command asks first — or set an agent to read-only, or let it run free |
 | **Standing permissions** | “Always allow” is remembered per agent and tool, and listed in Settings so you can revoke it |
 | **Subscription sign-in** | Optionally use a Claude or ChatGPT subscription instead of an API key — see the caveats below |
+| **Free inference** | NVIDIA NIM has a free tier (~40 requests/minute) with Llama, Nemotron and Mistral models — get a key at [build.nvidia.com](https://build.nvidia.com/) |
 | **Routines** | Cron-scheduled prompts, so an agent can work while you are away |
 | **Skills** | Reusable instruction sets, invoked with `/name` |
 | **MCP plugins** | Extend agents with any Model Context Protocol server |
@@ -125,6 +126,21 @@ when it resets.
 It is off by default, never enabled silently, and the warning appears above
 the button rather than under it. **An API key is the supported path**, and the
 one we recommend.
+
+### Rate limits
+
+Free tiers throttle. NVIDIA's is roughly 40 requests per minute, and an agent
+turn is several requests — think, call a tool, think again — so a busy turn
+can brush against it.
+
+GhostBot retries transient failures (429 and 5xx) with exponential backoff
+and jitter, honouring `Retry-After` when the provider sends one. It also
+catches capacity errors that arrive *inside* a successful response, which
+NVIDIA does under load. Permanent failures — a bad key, an unknown model — are
+never retried, because retrying them only delays a clear error.
+
+This smooths bursts inside your allowance. It does not rotate keys or work
+around a provider's limits, and it never will.
 
 ### When something goes wrong
 

@@ -1,4 +1,4 @@
-export * from './openai-compatible.js';
+﻿export * from './openai-compatible.js';
 export * from './openai-responses.js';
 export * from './anthropic.js';
 export * from './presets.js';
@@ -6,6 +6,7 @@ export * from './errors.js';
 export * from './subscription-auth.js';
 export * from './codex-backend.js';
 export * from './usage-limits.js';
+export * from './retry.js';
 
 /**
  * The two OAuth flows are namespaced rather than re-exported flat.
@@ -13,7 +14,7 @@ export * from './usage-limits.js';
  * Both define `generatePkce`, `buildAuthorizeUrl`, `exchangeAuthorizationCode`
  * and `refreshCredential`, so a flat `export *` would silently drop one
  * vendor's version. Namespacing also keeps call sites explicit about which
- * provider they are signing into — a mix-up there produces a confusing
+ * provider they are signing into â€” a mix-up there produces a confusing
  * "invalid client" rather than a type error.
  */
 export * as claudeOAuth from './oauth-flow.js';
@@ -37,7 +38,7 @@ import { CodexSubscriptionProvider, type CodexConfig } from './codex-backend.js'
  *    rejects those tokens outright.
  *  - **OpenAI reasoning models** (gpt-5.x, o-series) go to the Responses API,
  *    because `/v1/chat/completions` refuses function tools for them unless
- *    reasoning is switched off — and switching it off measurably degrades
+ *    reasoning is switched off â€” and switching it off measurably degrades
  *    answers.
  *  - Everything else keeps chat-completions, which is the only thing
  *    DeepSeek, Ollama, Groq, LM Studio and OpenRouter implement.
