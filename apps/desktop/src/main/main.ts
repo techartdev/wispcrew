@@ -29,7 +29,8 @@ import type {
 import { attachmentsToPromptText } from './attachments.js';
 import { rebuildHistory } from './branching.js';
 import { initGrants } from './grants.js';
-import { resolveToken, type OAuthVendor } from './oauth-store.js';
+import { allStatuses, recordUsage, resolveToken, type OAuthVendor } from './oauth-store.js';
+import type { UsageSnapshot } from '@ghostbot/llm';
 import {
   isTerminal,
   makeAskAgentTool,
@@ -250,6 +251,13 @@ async function runPrompt(
     return cfg.credentialError;
   }
 
+  const oauthVendor: OAuthVendor | null =
+    cfg.presetId === 'chatgpt-subscription'
+      ? 'chatgpt'
+      : cfg.presetId === 'claude-subscription'
+        ? 'anthropic'
+        : null;
+
   const preset = {
     ...configFromPreset(cfg.presetId, {
       apiKey: cfg.apiKey,
@@ -258,6 +266,16 @@ async function runPrompt(
     }),
     // The Codex backend requires the account id alongside the token.
     ...(cfg.accountId ? { accountId: cfg.accountId } : {}),
+    // Quota is only reported on a real response, so record it as turns run
+    // and push it so an open Settings panel updates live.
+    ...(oauthVendor
+      ? {
+          onUsage: (usage: UsageSnapshot) => {
+            recordUsage(oauthVendor, usage);
+            emitEvent({ type: 'oauth-changed', statuses: allStatuses(userDataDir) });
+          },
+        }
+      : {}),
   };
   const provider = createProvider(preset);
   const check = provider.validate();

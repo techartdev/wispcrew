@@ -19,7 +19,8 @@
     "test:branching": "tsx src/branching-test.ts",
     "test:grants": "tsx src/grants-test.ts",
     "test:errors": "tsx src/errors-test.ts",
-    "test": "npm run smoke && npm run test:provider && npm run test:mcp && npm run test:memory && npm run test:cron && npm run test:markdown && npm run test:attachments && npm run test:delegation && npm run test:sandbox && npm run test:branching && npm run test:grants && npm run test:errors"
+    "test:oauth": "tsx src/oauth-test.ts",
+    "test": "npm run smoke && npm run test:provider && npm run test:mcp && npm run test:memory && npm run test:cron && npm run test:markdown && npm run test:attachments && npm run test:delegation && npm run test:sandbox && npm run test:branching && npm run test:grants && npm run test:errors && npm run test:oauth"
   },
   "dependencies": {
     "@ghostbot/shared": "0.1.0",

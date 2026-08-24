@@ -19,7 +19,14 @@
  *    error; clearing it makes the UI say "signed out", which is both true
  *    and actionable.
  */
-import { chatgptOAuth, claudeOAuth, type ChatGptCredential, type OAuthCredential } from '@ghostbot/llm';
+import {
+  chatgptOAuth,
+  claudeOAuth,
+  describeUsage,
+  type ChatGptCredential,
+  type OAuthCredential,
+  type UsageSnapshot,
+} from '@ghostbot/llm';
 import { getSecret, upsertSecrets, removeSecrets } from './secrets-store.js';
 import { fileLog } from './filelog.js';
 
@@ -39,6 +46,21 @@ export interface OAuthStatus {
   plan?: string;
   /** Epoch ms of the access token's expiry. */
   expiresAt?: number;
+  /** Quota as of the last request, when the provider reported any. */
+  usage?: UsageSnapshot & { summary: string };
+}
+
+/**
+ * Last known quota per vendor.
+ *
+ * Held in memory rather than persisted: it is a point-in-time reading that
+ * goes stale, and showing a figure from a previous session as if it were
+ * current would be worse than showing nothing.
+ */
+const lastUsage = new Map<OAuthVendor, UsageSnapshot>();
+
+export function recordUsage(vendor: OAuthVendor, usage: UsageSnapshot): void {
+  lastUsage.set(vendor, usage);
 }
 
 type StoredCredential = OAuthCredential | ChatGptCredential;
@@ -76,11 +98,13 @@ export function saveCredential(
 export function status(userDataDir: string, vendor: OAuthVendor): OAuthStatus {
   const credential = read(userDataDir, vendor);
   if (!credential) return { vendor, signedIn: false };
+  const usage = lastUsage.get(vendor);
   return {
     vendor,
     signedIn: true,
     plan: (credential as ChatGptCredential).plan,
     expiresAt: credential.expires,
+    ...(usage ? { usage: { ...usage, summary: describeUsage(usage) } } : {}),
   };
 }
 

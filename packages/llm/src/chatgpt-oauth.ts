@@ -40,7 +40,13 @@ import { createServer, type Server } from 'node:http';
 export const CHATGPT_OAUTH = {
   /** Codex's public client, from the `client_id` claim of a real token. */
   clientId: 'app_EMoamEEZ73f0CkXaXp7hrann',
-  /** From OpenAI's OIDC discovery document. */
+  /*
+   * OpenAI's discovery document advertises `/api/accounts/authorize` and
+   * `/api/accounts/oauth/token`. The shorter paths below are what this
+   * client actually uses and are the ones verified by a complete live
+   * sign-in, so they are kept — but if a future OpenAI change breaks the
+   * flow, the discovery paths are the first thing to try.
+   */
   authorizeUrl: 'https://auth.openai.com/oauth/authorize',
   tokenUrl: 'https://auth.openai.com/oauth/token',
   /** Codex binds this port for the loopback redirect (observed live). */

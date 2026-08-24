@@ -6,7 +6,11 @@
  * loop and the provider freedom, not chrome; a settings screen that is
  * obvious beats one that is clever.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+// The explicit React import keeps these components renderable by toolchains
+// that compile JSX with the classic runtime (the offline UI tests render them
+// through react-dom/server outside the Vite build). It is a no-op under the
+// automatic runtime Vite uses.
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AgentRecord,
   ApprovalPolicy,
@@ -166,19 +170,50 @@ function SubscriptionSignIn({
       </p>
 
       {status?.signedIn ? (
-        <div className="signin-state">
-          <span className="state-dot state-connected" />
-          <span>
-            Signed in to {vendorName}
-            {status.plan ? ` (${status.plan} plan)` : ''}
-            {status.expiresAt ? (
-              <span className="muted"> · renews automatically</span>
-            ) : null}
-          </span>
-          <button type="button" className="btn" onClick={() => onSignOut(vendor)}>
-            Sign out
-          </button>
-        </div>
+        <>
+          <div className="signin-state">
+            <span className="state-dot state-connected" />
+            <span>
+              Signed in to {vendorName}
+              {status.plan ? ` (${status.plan} plan)` : ''}
+              {status.expiresAt ? <span className="muted"> · renews automatically</span> : null}
+            </span>
+            <button type="button" className="btn" onClick={() => onSignOut(vendor)}>
+              Sign out
+            </button>
+          </div>
+
+          {/*
+            Quota, when the provider reports it. There is no usage endpoint to
+            query, so this appears only after a turn has been run — saying
+            that plainly is better than showing a stale or invented figure.
+          */}
+          {status.usage ? (
+            <div className="usage-block">
+              {status.usage.percentUsed !== undefined && (
+                <div
+                  className="usage-bar"
+                  role="progressbar"
+                  aria-valuenow={Math.round(status.usage.percentUsed)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${vendorName} plan usage`}
+                >
+                  <div
+                    className={`usage-fill${status.usage.percentUsed >= 90 ? ' usage-high' : ''}`}
+                    style={{ width: `${Math.min(100, Math.max(0, status.usage.percentUsed))}%` }}
+                  />
+                </div>
+              )}
+              <p className="muted usage-text">{status.usage.summary}</p>
+            </div>
+          ) : (
+            <p className="muted usage-text">
+              Usage appears here after your first message — the provider only
+              reports it with a response.
+            </p>
+          )}
+        </>
       ) : (
         <div className="row-actions">
           <button

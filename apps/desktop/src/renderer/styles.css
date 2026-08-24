@@ -1088,6 +1088,37 @@ body {
   font-size: 12.5px;
 }
 
+/* Plan usage */
+
+.usage-block {
+  margin-top: 10px;
+}
+
+.usage-bar {
+  height: 6px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.usage-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+/* Near the limit is worth noticing before the turn that fails. */
+.usage-fill.usage-high {
+  background: var(--warn, #d98324);
+}
+
+.usage-text {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+}
+
 .test-ok {
   color: var(--ok);
   font-size: 13px;
