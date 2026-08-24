@@ -29,6 +29,13 @@ npm run desktop
 `npm install` uses **npm workspaces** — not pnpm or yarn. Please keep
 `package-lock.json` in the tree.
 
+**Build order matters.** Every package imports `@ghostbot/shared`, and
+TypeScript resolves it through that package's generated `.d.ts` files. The
+root `typecheck`, `test` and `build` scripts therefore build the packages in
+dependency order first. If you add a package, add it to `build:packages` in
+the root `package.json` — otherwise a fresh clone fails with `TS2307` while
+your machine, which still has stale `dist/` output, looks fine.
+
 ## Before you open a pull request
 
 Run these three. All must pass:

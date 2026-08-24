@@ -474,16 +474,27 @@ async function createWindow(): Promise<void> {
   }
 
   // Debug helper: GHOSTBOT_CAPTURE=<path.png> screenshots then quits.
+  //
+  // CI uses this as its "does the app actually render" gate, so a failure
+  // must exit non-zero. Quitting 0 after failing to capture would let a
+  // broken build pass silently — which is worse than no check at all.
   if (process.env.GHOSTBOT_CAPTURE) {
     setTimeout(() => {
       void (async () => {
+        let ok = false;
         try {
           const img = await mainWindow?.webContents.capturePage();
-          if (img) fs.writeFileSync(process.env.GHOSTBOT_CAPTURE!, img.toPNG());
+          if (img && !img.isEmpty()) {
+            fs.writeFileSync(process.env.GHOSTBOT_CAPTURE!, img.toPNG());
+            ok = true;
+          } else {
+            fileLog('[capture] window produced an empty image');
+          }
         } catch (err) {
           fileLog('[capture] failed', (err as Error).message);
         } finally {
-          app.quit();
+          if (ok) app.quit();
+          else app.exit(1);
         }
       })();
     }, Number(process.env.GHOSTBOT_CAPTURE_DELAY ?? 8000));

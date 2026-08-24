@@ -27,6 +27,7 @@ inspection, or a passing assertion — not by reading the code.
 | Agent delegation | Live: one agent asked another and relayed its answer; a deliberately cyclic pair terminated after exactly one hop |
 | Workspace confinement | 30 assertions: traversal, absolute paths, prefix siblings, case variants, NUL bytes, writes and listings |
 | Offline suites | All nine pass with no API key and no network |
+| **Fresh-clone workflow** | `git clone` → `npm ci` → typecheck → build → tests → `pack` → packaged app boots and renders. Verified from a real clone, not the working tree |
 | Typecheck / build | Clean across all workspaces |
 
 ## Architecture note
