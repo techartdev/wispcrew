@@ -150,7 +150,9 @@ CI additionally **boots the app headlessly on Linux, macOS and Windows** and
 fails if the window does not render.
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for depth.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for depth, and
+[docs/HANDOVER.md](docs/HANDOVER.md) for an honest account of what is
+verified and what is not.
 
 ## Contributing
 
