@@ -32,7 +32,11 @@ inspection, or a passing assertion — not by reading the code.
 | Actionable provider errors | A wrong key, model, or base URL produces advice, not an HTTP dump; verified live against each failure |
 | First run on a clean profile | Verified with an empty userData dir: onboarding banner, guided composer, and a missing key reported as "needs an API key", never as "rejected" |
 | Accessibility | Live-region announcements, `aria-expanded` tool cards, modal focus trap with focus restore, visible focus rings |
-| Offline suites | All twelve pass with no API key and no network |
+| ChatGPT subscription sign-in | Browser OAuth verified end to end: sign-in, token exchange, streaming, tool call, refresh with rotation |
+| Claude subscription sign-in | Authentication proven (valid token 429 vs invalid 401); the browser code exchange is **unverified** — the test account was rate-limited |
+| Subscription credentials | Stored DPAPI-encrypted (`v10`), absent from the ciphertext and from settings; verified through the real app's IPC handlers |
+| Plan usage display | Live: "0% of your premium limit used · resets in 7 days". No usage endpoint exists, so this appears only after a turn |
+| Offline suites | All thirteen pass with no API key and no network |
 | **Fresh-clone workflow** | `git clone` → `npm ci` → typecheck → build → tests → `pack` → packaged app boots and renders. Verified from a real clone, not the working tree |
 | Typecheck / build | Clean across all workspaces |
 

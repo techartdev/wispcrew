@@ -43,6 +43,7 @@ monthly fee, or the requirement to run your work on someone else's computer.
 | **Rewind & branch** | Undo a bad turn, or fork a conversation into a new agent from any point |
 | **Permission gates** | Every write or command asks first — or set an agent to read-only, or let it run free |
 | **Standing permissions** | “Always allow” is remembered per agent and tool, and listed in Settings so you can revoke it |
+| **Subscription sign-in** | Optionally use a Claude or ChatGPT subscription instead of an API key — see the caveats below |
 | **Routines** | Cron-scheduled prompts, so an agent can work while you are away |
 | **Skills** | Reusable instruction sets, invoked with `/name` |
 | **MCP plugins** | Extend agents with any Model Context Protocol server |
@@ -102,6 +103,28 @@ examples/cli-agent/    headless CLI and the offline test suite
 A message flows: **renderer → preload → bridge-host → agent loop → provider**,
 with tool calls gated by the approval policy and results streamed back as
 events. There is no polling and no hidden network path.
+
+### Subscription sign-in (optional, and read this first)
+
+GhostBot can sign in with a **Claude Pro/Max** or **ChatGPT** subscription
+instead of an API key, either through your browser or by adopting a sign-in
+that Claude Code or Codex CLI already holds on your machine. Where the
+provider reports it, Settings shows how much of your plan you have used and
+when it resets.
+
+**The caveats are real, and they are yours to weigh:**
+
+- **Anthropic prohibits this.** Their Claude Code documentation forbids using
+  Free/Pro/Max OAuth tokens in third-party products, and accounts can be
+  suspended without warning. The account at risk is yours.
+- **OpenAI does not document it for third-party apps.** "Sign in with ChatGPT"
+  is a real product, but the subscription-billing path is documented for
+  OpenAI's own surfaces. The endpoint GhostBot uses is private and can change
+  at any time.
+
+It is off by default, never enabled silently, and the warning appears above
+the button rather than under it. **An API key is the supported path**, and the
+one we recommend.
 
 ### When something goes wrong
 

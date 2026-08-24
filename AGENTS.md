@@ -9,9 +9,13 @@ verify a change, and what not to break.
 
 GhostBot is a free, MIT-licensed, **local-first** desktop AI agent. The user
 brings their own model (DeepSeek, OpenAI, Anthropic, Ollama, LM Studio, Groq,
-OpenRouter, or any OpenAI-compatible endpoint). There is no account, no
-subscription, and no cloud component: conversations and API keys stay on the
-user's machine.
+OpenRouter, or any OpenAI-compatible endpoint). GhostBot itself has no account
+and no cloud component: conversations and credentials stay on the user's
+machine.
+
+A Claude or ChatGPT **subscription** can optionally be used instead of an API
+key. That is opt-in and carries provider-policy risk — see "Subscription
+sign-in" below before touching it.
 
 **All code in this repository is original work.** See "Provenance" below —
 this constraint is load-bearing, not decorative.
@@ -29,6 +33,7 @@ apps/desktop/            Electron app (the deliverable)
     delegation.ts        agent-to-agent `ask_agent` tool + its safety limits
     attachments.ts       file/image classification for the model
     branching.ts         rewind/fork + transcript -> model-history rebuild
+    oauth-store.ts       encrypted subscription credentials + refresh
     agent-sessions.ts    one persistent Agent per agentId (memory + Stop)
     mcp-manager.ts       MCP server lifecycle
     secrets-store.ts     safeStorage-encrypted API keys
@@ -48,7 +53,7 @@ packages/
   core/                  agent loop + personas
   tools/                 shell, files, edit, search, web + registry
   mcp/                   MCP stdio client
-examples/cli-agent/      headless CLI + ten offline test suites
+examples/cli-agent/      headless CLI + thirteen offline test suites
 scripts/make-icons.mjs   build/icon.svg -> app icons
 ```
 
@@ -70,7 +75,7 @@ scripts/make-icons.mjs   build/icon.svg -> app icons
 npm install                                     # npm workspaces (NOT pnpm)
 npm run typecheck                               # tsc --noEmit everywhere
 npm run build                                   # packages + desktop bundles
-npm run test --workspace @ghostbot/examples-cli # all ten offline suites
+npm run test --workspace @ghostbot/examples-cli # all thirteen offline suites
 npm run desktop                                 # build + launch
 npm run dist:win | dist:mac | dist:linux        # installers
 ```
@@ -140,16 +145,63 @@ OpenAI-compatible endpoint keeps chat-completions. `test:attachments` pins the
 routing, including that a local server borrowing an OpenAI model name is not
 rerouted.
 
-**Test coverage**: ten offline suites (`smoke`, `provider`, `mcp`, `memory`,
-`cron`, `markdown`, `attachments`, `delegation`, `sandbox`, `branching`) — no
-API key, no network. Several caught real bugs when written; keep them green.
-CI additionally boots the app headlessly on all three platforms and fails if
-the window does not paint.
+**Test coverage**: thirteen offline suites (`smoke`, `provider`, `mcp`,
+`memory`, `cron`, `markdown`, `attachments`, `delegation`, `sandbox`,
+`branching`, `grants`, `errors`, `oauth`) — no API key, no network. Several
+caught real bugs when written; keep them green. CI additionally boots the app
+headlessly on all three platforms and fails if the window does not paint.
 
-**Not yet done / known gaps**
+## Subscription sign-in
+
+GhostBot can use a **Claude Pro/Max** or **ChatGPT** subscription instead of
+an API key, either through a browser OAuth flow or by adopting a sign-in that
+Claude Code / Codex CLI already holds. Read this before changing any of it.
+
+**The policy risk is the user's, so the UI must stay honest.** Anthropic
+prohibits third-party tools from using Claude subscription tokens and can
+suspend accounts without warning; OpenAI does not document subscription
+billing for third-party apps. The feature is opt-in, off by default, and the
+warning renders *above* the sign-in button. Do not soften, move or bury it,
+and do not enable any of it automatically.
+
+**Facts that were expensive to establish** (all verified live; none are
+documented for third-party use):
+
+| Thing | Value / behaviour |
+|---|---|
+| Claude token endpoint | `platform.claude.com/v1/oauth/token` — **not** `console.anthropic.com`, which an early draft guessed and which silently never works |
+| Claude redirect | One registered non-loopback URI; localhost is rejected, hence the paste-back step |
+| Claude auth header | `sk-ant-oat…` needs `Authorization: Bearer` + OAuth beta + Claude Code identity headers. Sent as `x-api-key` it returns 401 |
+| ChatGPT endpoint | `chatgpt.com/backend-api/codex/responses`. `api.openai.com` returns 401 for these tokens |
+| ChatGPT required fields | `instructions` **and** `store: false`. Omit either and the backend returns HTTP 400 with an **empty body** |
+| ChatGPT redirect | Loopback on port **1455** — fixed by the client registration, not free choice |
+| Usage data | Response headers only. `/codex/usage`, `/rate_limits`, `/credits` and `/accounts/check` all return 403, and the SSE stream has no rate-limit events |
+
+**Invariants worth keeping:**
+
+- Refresh is **single-flight per vendor**. Refresh tokens rotate, so two
+  concurrent turns racing would persist a token the server already retired —
+  signing the user out of their CLI as well as GhostBot.
+- A failed refresh **clears** the credential, so the UI says "signed out"
+  instead of every turn failing with an auth error.
+- Never invent usage numbers. Anthropic reports no percentage and no reset
+  time on this path; the UI says so rather than showing a plausible figure.
+- Adopting a CLI sign-in **reads** its credential file; GhostBot's own
+  credentials live in its encrypted store, never written back to the CLI's.
+
+**Verified live:** the ChatGPT browser flow end to end (sign-in → token
+exchange → streaming → tool call → refresh with rotation), CLI adoption
+through the real IPC handlers, and DPAPI encryption at rest. **Not verified:**
+the Claude *browser* flow's code exchange — the test account was rate-limited,
+so only its authentication was confirmed (429 for a valid token vs 401 for an
+invalid one).
+
+## Not yet done / known gaps
+
 - macOS and Linux are **not verified on real hardware**. CI builds, tests and
   boots the app there, but cannot judge window chrome, native dialogs or
   keychain behaviour.
+- The Claude browser sign-in's code exchange is unverified (see above).
 - Installers are unsigned.
 - `docs/STATUS.md` carries the detailed status list.
 

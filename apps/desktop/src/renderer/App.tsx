@@ -91,10 +91,23 @@ export function App() {
 
   const configuredServers = useMemo(() => settings?.mcpServers ?? [], [settings?.mcpServers]);
 
-  const hasProvider = Boolean(settings?.hasApiKey);
+  /*
+   * A provider is usable with either an API key or a subscription sign-in.
+   * Checking only for a key would leave a signed-in user staring at "set up"
+   * with no way to dismiss it.
+   */
+  const hasSignIn = oauthStatuses.some((s) => s.signedIn);
+  const hasProvider = Boolean(settings?.hasApiKey) || hasSignIn;
 
-  /* First run: no provider configured yet. */
-  const needsOnboarding = ready && settings && !settings.hasApiKey && !settings.onboarded;
+  /* First run: nothing configured yet, by either route. */
+  const needsOnboarding = ready && settings && !hasProvider && !settings.onboarded;
+
+  /*
+   * If a CLI on this machine is already signed in, say so — it turns a
+   * "paste an API key" chore into one click. Offered, never assumed: the
+   * user still chooses it in Settings, where the risk is stated.
+   */
+  const availableCli = detectedSignIns.find((d) => d.available);
 
   if (!ready) {
     return (
@@ -152,6 +165,14 @@ export function App() {
               <strong>Welcome to GhostBot.</strong> Choose a model provider and paste an API key to
               begin — your key is stored encrypted on this machine and sent only to the provider you
               pick.
+              {availableCli && (
+                <>
+                  {' '}
+                  You are already signed in to <strong>{availableCli.source}</strong>
+                  {availableCli.plan ? ` (${availableCli.plan} plan)` : ''} on this machine — you can
+                  use that instead of a key.
+                </>
+              )}
             </div>
             <button type="button" className="btn btn-primary" onClick={() => setPanel('settings')}>
               Open settings
