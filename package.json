@@ -4,6 +4,7 @@
   "private": true,
   "description": "GhostBot — a free, open-source desktop AI agent. Bring your own LLM (DeepSeek, OpenAI, Anthropic, Ollama, any OpenAI-compatible endpoint).",
   "license": "MIT",
+  "author": "GhostBot contributors",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -11,13 +12,15 @@
     "examples/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "//build": "Packages are built in dependency order. `--workspaces` runs them in an arbitrary order, which breaks a fresh clone: everything imports @ghostbot/shared, and TypeScript resolves it to dist/ that does not exist yet.",
+    "build:packages": "npm run build --workspace @ghostbot/shared && npm run build --workspace @ghostbot/tools && npm run build --workspace @ghostbot/llm && npm run build --workspace @ghostbot/mcp && npm run build --workspace @ghostbot/core",
+    "build": "npm run build:packages && npm run build --workspace @ghostbot/desktop",
+    "//typecheck": "Typechecking also needs the declaration files, so build the packages first. On a fresh clone this is the difference between a clean run and a wall of TS2307.",
+    "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
+    "test": "npm run build:packages && npm run test --workspaces --if-present",
     "agent": "npm run agent --workspace @ghostbot/examples-cli",
     "desktop": "npm run dev --workspace @ghostbot/desktop",
-    "icons": "electron scripts/make-icons.mjs",
-    "rebrand": "node scripts/rebrand.mjs"
+    "icons": "electron scripts/make-icons.mjs"
   },
   "engines": {
     "node": ">=20"
