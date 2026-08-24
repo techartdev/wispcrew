@@ -28,6 +28,7 @@ apps/desktop/            Electron app (the deliverable)
     cron.ts              dependency-free cron parser/evaluator
     delegation.ts        agent-to-agent `ask_agent` tool + its safety limits
     attachments.ts       file/image classification for the model
+    branching.ts         rewind/fork + transcript -> model-history rebuild
     agent-sessions.ts    one persistent Agent per agentId (memory + Stop)
     mcp-manager.ts       MCP server lifecycle
     secrets-store.ts     safeStorage-encrypted API keys
@@ -47,7 +48,7 @@ packages/
   core/                  agent loop + personas
   tools/                 shell, files, edit, search, web + registry
   mcp/                   MCP stdio client
-examples/cli-agent/      headless CLI + eight offline test suites
+examples/cli-agent/      headless CLI + ten offline test suites
 scripts/make-icons.mjs   build/icon.svg -> app icons
 ```
 
@@ -69,7 +70,7 @@ scripts/make-icons.mjs   build/icon.svg -> app icons
 npm install                                     # npm workspaces (NOT pnpm)
 npm run typecheck                               # tsc --noEmit everywhere
 npm run build                                   # packages + desktop bundles
-npm run test --workspace @ghostbot/examples-cli # all eight offline suites
+npm run test --workspace @ghostbot/examples-cli # all ten offline suites
 npm run desktop                                 # build + launch
 npm run dist:win | dist:mac | dist:linux        # installers
 ```
@@ -127,8 +128,9 @@ Config lives in `<userData>/ghostbot-settings.json`
 with approval gating; multi-turn memory; Stop/interrupt; encrypted key storage
 with plaintext migration; MCP servers; agent roster with per-agent overrides;
 routines (cron); skills; settings UI; **file/image attachments** (vision);
-**agent-to-agent delegation**. Confirmed with screenshots and transcript
-inspection, not assumed.
+**agent-to-agent delegation**; **conversation rewind/branch**; **memory across
+app restarts**. Confirmed with screenshots and transcript inspection, not
+assumed.
 
 **Provider routing:** OpenAI reasoning models (`gpt-5.x`, o-series) go to the
 **Responses API**, because `/v1/chat/completions` refuses function tools for
@@ -138,13 +140,16 @@ OpenAI-compatible endpoint keeps chat-completions. `test:attachments` pins the
 routing, including that a local server borrowing an OpenAI model name is not
 rerouted.
 
-**Test coverage**: eight offline suites (`smoke`, `provider`, `mcp`, `memory`,
-`cron`, `markdown`, `attachments`, `delegation`) — no API key, no network.
-Several caught real bugs when written; keep them green.
+**Test coverage**: ten offline suites (`smoke`, `provider`, `mcp`, `memory`,
+`cron`, `markdown`, `attachments`, `delegation`, `sandbox`, `branching`) — no
+API key, no network. Several caught real bugs when written; keep them green.
+CI additionally boots the app headlessly on all three platforms and fails if
+the window does not paint.
 
 **Not yet done / known gaps**
-- macOS and Linux are **untested**. Only Windows has been verified.
-- No conversation branching.
+- macOS and Linux are **not verified on real hardware**. CI builds, tests and
+  boots the app there, but cannot judge window chrome, native dialogs or
+  keychain behaviour.
 - Installers are unsigned.
 - `docs/STATUS.md` carries the detailed status list.
 

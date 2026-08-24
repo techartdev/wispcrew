@@ -26,7 +26,9 @@ inspection, or a passing assertion — not by reading the code.
 | Current OpenAI models | Live tool calls + reasoning on `gpt-5.6-luna`/`-sol`, `gpt-5.5`, `gpt-5.4-mini` |
 | Agent delegation | Live: one agent asked another and relayed its answer; a deliberately cyclic pair terminated after exactly one hop |
 | Workspace confinement | 30 assertions: traversal, absolute paths, prefix siblings, case variants, NUL bytes, writes and listings |
-| Offline suites | All nine pass with no API key and no network |
+| Conversation rewind / branch | Branch leaves the original untouched; every transcript prefix rebuilds to a provider-valid history |
+| Memory across restarts | Live: a fact stated in one process was recalled by a **separate** process |
+| Offline suites | All ten pass with no API key and no network |
 | **Fresh-clone workflow** | `git clone` → `npm ci` → typecheck → build → tests → `pack` → packaged app boots and renders. Verified from a real clone, not the working tree |
 | Typecheck / build | Clean across all workspaces |
 
@@ -69,8 +71,7 @@ OpenAI model name is *not* rerouted.
    `cmd.exe`.
 2. **Installers are unsigned.** Windows SmartScreen and macOS Gatekeeper will
    warn. Signing needs certificates the project does not have.
-3. **No conversation branching or forking.**
-4. **No auto-update channel.**
+3. **No auto-update channel.**
 5. **`allow-always` approvals are per-session.** Deliberate — a standing grant
    does not survive a restart — but some users will want persistence.
 6. **Web search quality depends on the configured backend.** See
@@ -107,10 +108,9 @@ Roughly in order of value to a new user:
 1. **macOS/Linux verification** and any fixes that fall out.
 2. **Per-agent sandboxing** — stronger isolation than a workspace root; would
    be a genuine improvement over products whose agents share one environment.
-3. **Conversation branching.**
-4. **Signed installers + an update channel.**
-5. **i18n.**
-6. **Persistent tool grants**, with clear UI showing what is standing.
+3. **Signed installers + an update channel.**
+4. **i18n.**
+5. **Persistent tool grants**, with clear UI showing what is standing.
 
 ## Contributing
 

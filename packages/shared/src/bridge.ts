@@ -141,6 +141,22 @@ export interface GhostBridge {
   interrupt(agentId: string): Promise<void>;
   /** Clear history for a fresh start (keeps the agent itself). */
   clearConversation(agentId: string): Promise<void>;
+  /**
+   * Discard everything after `entryId` and continue from there.
+   * `mode: "before"` also drops the named entry — used for "edit and retry",
+   * where the user rephrases the message that is being removed.
+   */
+  rewindConversation(
+    agentId: string,
+    entryId: string,
+    mode?: 'through' | 'before',
+  ): Promise<TranscriptEntry[]>;
+  /**
+   * Copy the conversation up to `entryId` into a new agent and return it.
+   * The original is left untouched, so two lines of enquiry can proceed from
+   * a shared prefix.
+   */
+  branchConversation(agentId: string, entryId: string): Promise<AgentRecord>;
   resolveApproval(requestId: string, resolution: ApprovalResolution): Promise<void>;
 
   /* -- settings & providers -------------------------------------- */

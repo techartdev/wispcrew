@@ -40,6 +40,7 @@ monthly fee, or the requirement to run your work on someone else's computer.
 | **Real tools** | Shell, file read/write/edit, grep, directory listing, web fetch and search |
 | **Attachments** | Drop in images and files — images go to vision models, text is inlined |
 | **Agent delegation** | Agents can hand tasks to each other, with depth, cycle and permission guards |
+| **Rewind & branch** | Undo a bad turn, or fork a conversation into a new agent from any point |
 | **Permission gates** | Every write or command asks first — or set an agent to read-only, or let it run free |
 | **Routines** | Cron-scheduled prompts, so an agent can work while you are away |
 | **Skills** | Reusable instruction sets, invoked with `/name` |
@@ -132,8 +133,10 @@ end-to-end (including spawning from a path containing spaces), multi-turn
 memory and interrupt safety, the cron scheduler (including DST and timezone
 edge cases), the Markdown renderer (including XSS resistance), attachment
 handling plus provider routing, agent delegation (depth, cycles, fan-out and
-permission narrowing), and workspace confinement (traversal, prefix siblings,
-case variants, NUL bytes). They need no API key and should stay green.
+permission narrowing), workspace confinement (traversal, prefix siblings,
+case variants, NUL bytes), and conversation branching (every transcript
+prefix must rebuild to a provider-valid history). They need no API key and
+should stay green.
 
 CI additionally **boots the app headlessly on Linux, macOS and Windows** and
 fails if the window does not render.

@@ -24,7 +24,69 @@ interface ChatProps {
   onResolveApproval(requestId: string, resolution: 'allow-once' | 'allow-always' | 'deny'): void;
   onOpenSettings(): void;
   onPickFiles(): Promise<string[]>;
+  onRewind(entryId: string, mode: 'through' | 'before'): void;
+  onBranch(entryId: string): void;
+  /** Text from a retried message, to prefill the composer. */
+  retryDraft?: string | null;
+  onRetryDraftConsumed?(): void;
   hasProvider: boolean;
+}
+
+/**
+ * Per-message actions, revealed on hover.
+ *
+ * `Retry` on a user message rewinds to just before it and resends, which is
+ * the common "that came out wrong, ask again" case. `Branch` copies the
+ * conversation up to that point into a new agent so two lines of enquiry can
+ * continue from a shared prefix without either overwriting the other.
+ */
+function MessageActions({
+  entryId,
+  role,
+  disabled,
+  onRewind,
+  onBranch,
+}: {
+  entryId: string;
+  role: 'user' | 'assistant';
+  disabled: boolean;
+  onRewind(entryId: string, mode: 'through' | 'before'): void;
+  onBranch(entryId: string): void;
+}) {
+  return (
+    <div className="msg-actions">
+      {role === 'user' ? (
+        <button
+          type="button"
+          className="msg-action"
+          title="Remove this message and everything after it, then ask again"
+          disabled={disabled}
+          onClick={() => onRewind(entryId, 'before')}
+        >
+          Retry from here
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="msg-action"
+          title="Discard everything after this reply"
+          disabled={disabled}
+          onClick={() => onRewind(entryId, 'through')}
+        >
+          Rewind to here
+        </button>
+      )}
+      <button
+        type="button"
+        className="msg-action"
+        title="Copy the conversation up to here into a new agent"
+        disabled={disabled}
+        onClick={() => onBranch(entryId)}
+      >
+        Branch
+      </button>
+    </div>
+  );
 }
 
 /** Basename of a path, handling both separators. */
@@ -154,6 +216,10 @@ export function Chat({
   onResolveApproval,
   onOpenSettings,
   onPickFiles,
+  onRewind,
+  onBranch,
+  retryDraft,
+  onRetryDraftConsumed,
   hasProvider,
 }: ChatProps) {
   const [draft, setDraft] = useState('');
@@ -185,6 +251,21 @@ export function Chat({
   useEffect(() => {
     pinnedRef.current = true;
   }, [agent?.id]);
+
+  // "Retry from here" removes a message and hands its text back; drop it into
+  // the composer so the user can edit rather than retype.
+  useEffect(() => {
+    if (!retryDraft) return;
+    setDraft(retryDraft);
+    onRetryDraftConsumed?.();
+    const el = textareaRef.current;
+    if (el) {
+      el.focus();
+      el.style.height = 'auto';
+      el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+  }, [retryDraft, onRetryDraftConsumed]);
 
   /* Slash-command completion for skills. */
   const slashQuery = useMemo(() => {
@@ -301,7 +382,18 @@ export function Chat({
             case 'message':
               return (
                 <div key={entry.id} className={`msg msg-${entry.role}`}>
-                  <div className="msg-role">{entry.role === 'user' ? 'You' : agent.name}</div>
+                  <div className="msg-head">
+                    <span className="msg-role">{entry.role === 'user' ? 'You' : agent.name}</span>
+                    {!entry.isStreaming && (
+                      <MessageActions
+                        entryId={entry.id}
+                        role={entry.role}
+                        disabled={busy}
+                        onRewind={onRewind}
+                        onBranch={onBranch}
+                      />
+                    )}
+                  </div>
                   <div className="msg-body">
                     {entry.role === 'assistant' ? (
                       <>

@@ -64,6 +64,11 @@ export function useGhostbot() {
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedId;
 
+  // Actions need the current transcript without being rebuilt on every
+  // streamed token, which would re-render the whole tree each frame.
+  const transcriptRef = useRef<TranscriptEntry[]>([]);
+  transcriptRef.current = transcript;
+
   const api = window.ghostbot;
 
   /** Surface an error to the user instead of losing it in the console. */
@@ -260,6 +265,40 @@ export function useGhostbot() {
         try {
           await api.clearConversation(selectedRef.current);
           setTranscript([]);
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      /**
+       * Rewind, then optionally resend. `before` is "edit and retry": the
+       * named message is dropped and its text handed back so the composer can
+       * be prefilled, letting the user rephrase rather than retype.
+       */
+      async rewind(entryId: string, mode: 'through' | 'before') {
+        const agentId = selectedRef.current;
+        if (!agentId) return null;
+        try {
+          const removed =
+            mode === 'before'
+              ? transcriptRef.current.find((e) => e.id === entryId)
+              : undefined;
+          const kept = await api.rewindConversation(agentId, entryId, mode);
+          setTranscript(Array.isArray(kept) ? kept : []);
+          return removed && removed.kind === 'message' ? removed.content : null;
+        } catch (err) {
+          fail(err);
+          return null;
+        }
+      },
+
+      async branch(entryId: string) {
+        const agentId = selectedRef.current;
+        if (!agentId) return;
+        try {
+          const created = await api.branchConversation(agentId, entryId);
+          setSelectedId(created.id);
+          setToast({ level: 'info', text: `Branched into "${created.name}".` });
         } catch (err) {
           fail(err);
         }

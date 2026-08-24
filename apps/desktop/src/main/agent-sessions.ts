@@ -15,7 +15,7 @@
  * (`interruptAgentRun`) can abort a turn via `Agent.abort()`.
  */
 import { Agent } from '@ghostbot/core';
-import type { ChatProvider } from '@ghostbot/shared';
+import type { ChatMessage, ChatProvider } from '@ghostbot/shared';
 import { ToolRegistry } from '@ghostbot/tools';
 import type { ApprovalRequest } from '@ghostbot/shared';
 
@@ -27,6 +27,13 @@ export interface SessionSeed {
   /** Identity of the config that produced this session; change ⇒ rebuild. */
   fingerprint: string;
   onApprovalRequired: (request: ApprovalRequest) => Promise<boolean>;
+  /**
+   * History to install when this is a genuinely cold start (no prior live
+   * session). Lets a restarted app — or a freshly branched agent — pick the
+   * conversation back up instead of answering with no memory of what is
+   * plainly visible on screen.
+   */
+  initialHistory?: ChatMessage[];
 }
 
 interface Session {
@@ -61,6 +68,11 @@ export function getSession(agentId: string, seed: SessionSeed): Agent {
   // so switching models mid-chat does not wipe the user's context.
   if (existing) {
     agent.history.push(...existing.agent.history);
+  } else if (seed.initialHistory?.length) {
+    // No live session: this is a cold start (app restart, or a freshly
+    // branched agent). Seed from the stored transcript so the model
+    // remembers the conversation the user can see on screen.
+    agent.setHistory(seed.initialHistory);
   }
 
   sessions.set(agentId, { agent, fingerprint: seed.fingerprint, running: false });
@@ -96,6 +108,21 @@ export function clearSession(agentId: string): void {
     s.agent.abort();
     sessions.delete(agentId);
   }
+}
+
+/**
+ * Replace a live session's history (rewind / branch).
+ *
+ * If no session exists yet the call is a no-op by design: the next
+ * `getSession` builds a fresh Agent, and `runPrompt` seeds it from the
+ * (already truncated) transcript, so the outcome is identical either way.
+ */
+export function seedSessionHistory(agentId: string, messages: ChatMessage[]): void {
+  const s = sessions.get(agentId);
+  if (!s) return;
+  s.agent.abort();
+  s.agent.setHistory(messages);
+  s.running = false;
 }
 
 /** Number of live sessions (diagnostics). */

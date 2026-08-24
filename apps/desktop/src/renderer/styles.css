@@ -346,13 +346,55 @@ body {
   margin: 0 auto 18px;
 }
 
+.msg-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  min-height: 18px;
+}
+
 .msg-role {
   font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-dim);
-  margin-bottom: 4px;
+}
+
+/* Per-message actions stay hidden until hover so the transcript reads
+   cleanly; they appear in place rather than shifting the layout. */
+.msg-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.msg:hover .msg-actions,
+.msg-actions:focus-within {
+  opacity: 1;
+}
+
+.msg-action {
+  padding: 1px 7px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.msg-action:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.msg-action:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .msg-user .user-text {

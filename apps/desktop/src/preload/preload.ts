@@ -37,6 +37,10 @@ const bridge: GhostBridge = {
   pickFiles: () => ipcRenderer.invoke('gb:pickFiles'),
   interrupt: (agentId) => ipcRenderer.invoke('gb:interrupt', agentId),
   clearConversation: (agentId) => ipcRenderer.invoke('gb:clearConversation', agentId),
+  rewindConversation: (agentId, entryId, mode) =>
+    ipcRenderer.invoke('gb:rewindConversation', agentId, entryId, mode),
+  branchConversation: (agentId, entryId) =>
+    ipcRenderer.invoke('gb:branchConversation', agentId, entryId),
   resolveApproval: (requestId, resolution) =>
     ipcRenderer.invoke('gb:resolveApproval', requestId, resolution),
 

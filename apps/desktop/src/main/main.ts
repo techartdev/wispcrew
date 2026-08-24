@@ -27,6 +27,7 @@ import type {
   TranscriptEntry,
 } from '@ghostbot/shared';
 import { attachmentsToPromptText } from './attachments.js';
+import { rebuildHistory } from './branching.js';
 import {
   isTerminal,
   makeAskAgentTool,
@@ -153,6 +154,20 @@ function expandSkill(prompt: string): string {
 }
 
 /**
+ * Drop a trailing user message from a transcript.
+ *
+ * Callers append the user's message to the transcript before invoking
+ * `runPrompt`, and `Agent.run` appends it to the model history itself. Seeding
+ * a cold session from the raw transcript would therefore send it twice — which
+ * the model reads as the user repeating themselves.
+ */
+function dropTrailingUserEntry(entries: TranscriptEntry[]): TranscriptEntry[] {
+  const last = entries[entries.length - 1];
+  if (last && last.kind === 'message' && last.role === 'user') return entries.slice(0, -1);
+  return entries;
+}
+
+/**
  * Run one prompt for an agent, streaming results to the renderer.
  *
  * The assistant message keeps a single stable id and is rewritten as tokens
@@ -246,6 +261,15 @@ async function runPrompt(
     workspaceRoot: cfg.workspaceRoot,
     systemPrompt: systemPromptFor(agent, cfg.persona, preset.model),
     fingerprint,
+    // Cold start: rebuild what the model should remember from the transcript
+    // the user can see. Without this, restarting the app (or opening a
+    // freshly branched agent) left the model with no memory of a
+    // conversation plainly visible on screen.
+    //
+    // The caller has already appended this turn's user message to the
+    // transcript, and `Agent.run` appends it again — so the trailing user
+    // entry is dropped here to avoid sending it twice.
+    initialHistory: rebuildHistory(dropTrailingUserEntry(store.loadTranscript(agentId))),
     onApprovalRequired: async (req) => {
       // `readonly` denies anything needing approval; `auto` grants it.
       if (effectivePolicy === 'readonly') return false;

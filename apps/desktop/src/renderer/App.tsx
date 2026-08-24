@@ -16,6 +16,8 @@ type Panel = 'settings' | 'agent' | 'mcp' | 'routines' | 'skills' | null;
 export function App() {
   const { state, actions } = useGhostbot();
   const [panel, setPanel] = useState<Panel>(null);
+  /** Text lifted out of a message the user chose to retry, for the composer. */
+  const [retryDraft, setRetryDraft] = useState<string | null>(null);
 
   const {
     ready,
@@ -164,6 +166,16 @@ export function App() {
           onResolveApproval={(id, res) => void actions.resolveApproval(id, res)}
           onOpenSettings={() => setPanel('settings')}
           onPickFiles={actions.pickFiles}
+          onRewind={(id, mode) => {
+            void actions.rewind(id, mode).then((text) => {
+              // "Retry from here" hands the removed text back so the user can
+              // rephrase instead of retyping it.
+              if (text) setRetryDraft(text);
+            });
+          }}
+          onBranch={(id) => void actions.branch(id)}
+          retryDraft={retryDraft}
+          onRetryDraftConsumed={() => setRetryDraft(null)}
           hasProvider={hasProvider}
         />
       </main>

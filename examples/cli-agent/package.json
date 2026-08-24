@@ -16,7 +16,8 @@
     "test:attachments": "tsx src/attachment-test.ts",
     "test:delegation": "tsx src/delegation-test.ts",
     "test:sandbox": "tsx src/sandbox-test.ts",
-    "test": "npm run smoke && npm run test:provider && npm run test:mcp && npm run test:memory && npm run test:cron && npm run test:markdown && npm run test:attachments && npm run test:delegation && npm run test:sandbox"
+    "test:branching": "tsx src/branching-test.ts",
+    "test": "npm run smoke && npm run test:provider && npm run test:mcp && npm run test:memory && npm run test:cron && npm run test:markdown && npm run test:attachments && npm run test:delegation && npm run test:sandbox && npm run test:branching"
   },
   "dependencies": {
     "@ghostbot/shared": "0.1.0",

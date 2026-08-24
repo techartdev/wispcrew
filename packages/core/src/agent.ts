@@ -109,6 +109,21 @@ export class Agent {
   }
 
   /**
+   * Replace the conversation history wholesale.
+   *
+   * Used when a conversation is branched or rewound: the caller reconstructs
+   * the messages up to a chosen point and seeds a session with them, so the
+   * model sees exactly the prefix the user kept.
+   *
+   * The array is copied rather than aliased — a caller mutating its own list
+   * afterwards must not silently rewrite this agent's memory.
+   */
+  setHistory(messages: ChatMessage[]): void {
+    this.history.length = 0;
+    this.history.push(...messages.map((m) => ({ ...m })));
+  }
+
+  /**
    * Run a full agent turn for the user message. Returns the assistant's
    * final answer message (or the last message if the loop ended early).
    *

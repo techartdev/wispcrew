@@ -36,8 +36,26 @@ import { readSettings, writeSettings } from './settings-file.js';
 import { readSecrets, upsertSecrets, isEncryptionAvailable } from './secrets-store.js';
 import { statuses as mcpStatuses, syncMcpServers } from './mcp-manager.js';
 import { runRoutineNow, refreshNextRunTime, refreshNextRunTimes } from './scheduler.js';
-import { abortSession, clearSession } from './agent-sessions.js';
+import { abortSession, clearSession, seedSessionHistory } from './agent-sessions.js';
+import { prefixBefore, prefixThrough, rebuildHistory } from './branching.js';
 import { fileLog } from './filelog.js';
+
+/**
+ * Name a branch without accumulating "copy of copy of".
+ *
+ * "Research" -> "Research (2)" -> "Research (3)".
+ */
+function nextBranchName(name: string): string {
+  const m = /^(.*) \((\d+)\)$/.exec(name);
+  const base = m ? m[1]! : name;
+  const start = m ? Number(m[2]) + 1 : 2;
+  const taken = new Set(store.listAgents().map((a) => a.name));
+  for (let n = start; n < start + 500; n++) {
+    const candidate = `${base} (${n})`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${base} (${Date.now()})`;
+}
 
 /** Injected by main.ts so the bridge stays free of agent-loop details. */
 export interface BridgeContext {
@@ -285,6 +303,44 @@ export function registerBridge(context: BridgeContext): void {
     clearSession(agentId);
     store.clearTranscript(agentId);
     emitEvent({ type: 'run-state', agentId, state: 'idle' });
+  });
+
+  handle('rewindConversation', (agentId: string, entryId: string, mode?: 'through' | 'before') => {
+    const entries = store.loadTranscript(agentId);
+    const kept = mode === 'before' ? prefixBefore(entries, entryId) : prefixThrough(entries, entryId);
+    // A missing entry is not an error: the UI may have rendered the button
+    // before the transcript was cleared or trimmed underneath it.
+    if (kept === null) return entries;
+
+    store.saveTranscript(agentId, kept);
+    // Keep the live Agent's memory in step with what the user now sees;
+    // otherwise the model would still remember the discarded turns.
+    seedSessionHistory(agentId, rebuildHistory(kept));
+    emitEvent({ type: 'run-state', agentId, state: 'idle' });
+    for (const entry of kept.slice(-1)) {
+      emitEvent({ type: 'transcript', agentId, entry });
+    }
+    return kept;
+  });
+
+  handle('branchConversation', (agentId: string, entryId: string) => {
+    const source = store.getAgent(agentId);
+    if (!source) throw new Error(`No such agent: ${agentId}`);
+    const entries = store.loadTranscript(agentId);
+    const kept = prefixThrough(entries, entryId);
+    if (kept === null) throw new Error('That message is no longer in the conversation.');
+
+    // A branch is a new agent with the same configuration, seeded with the
+    // shared prefix. The original conversation is untouched.
+    const branch = store.createAgent({
+      ...source,
+      id: undefined,
+      name: nextBranchName(source.name),
+      pinned: false,
+    });
+    store.saveTranscript(branch.id, kept);
+    emitAgents();
+    return branch;
   });
 
   handle('resolveApproval', (requestId: string, resolution: ApprovalResolution) => {
