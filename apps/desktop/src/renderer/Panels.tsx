@@ -16,6 +16,8 @@ import type {
   PersonaView,
   PresetView,
   RoutineRecord,
+  DetectedSignIn,
+  OAuthStatusView,
   SettingsView,
   SkillRecord,
   ToolGrant,
@@ -111,6 +113,107 @@ export function Modal({
 }
 
 /* ------------------------------------------------------------------ */
+/* Subscription sign-in                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Sign in with a Claude or ChatGPT subscription instead of an API key.
+ *
+ * The warning is shown **before** the button, not tucked underneath it. This
+ * option can cost a user their subscription — Anthropic prohibits
+ * third-party tools from using Claude subscription tokens — so burying that
+ * where it reads as boilerplate would be dishonest. An API key is the
+ * supported path and the UI says so.
+ */
+function SubscriptionSignIn({
+  vendor,
+  statuses,
+  detected,
+  onSignIn,
+  onSignOut,
+  onImport,
+}: {
+  vendor: 'anthropic' | 'chatgpt';
+  statuses: OAuthStatusView[];
+  detected: DetectedSignIn[];
+  onSignIn(vendor: 'anthropic' | 'chatgpt'): Promise<string | null>;
+  onSignOut(vendor: 'anthropic' | 'chatgpt'): void;
+  onImport(vendor: 'anthropic' | 'chatgpt'): Promise<string | null>;
+}) {
+  const [busy, setBusy] = useState<'signin' | 'import' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const status = statuses.find((s) => s.vendor === vendor);
+  const cli = detected.find((d) => d.vendor === vendor);
+  const vendorName = vendor === 'chatgpt' ? 'ChatGPT' : 'Claude';
+
+  const run = async (kind: 'signin' | 'import') => {
+    setBusy(kind);
+    setError(null);
+    const message = await (kind === 'signin' ? onSignIn(vendor) : onImport(vendor));
+    if (message) setError(message);
+    setBusy(null);
+  };
+
+  return (
+    <section className="signin-block">
+      <p className="warn-inline signin-warning">
+        <strong>Uses your {vendorName} subscription instead of an API key.</strong>{' '}
+        {vendor === 'anthropic'
+          ? 'Anthropic prohibits third-party tools from using Claude subscription tokens and may suspend accounts without warning.'
+          : 'OpenAI does not document this for third-party apps, and the endpoint it uses is private and can change at any time.'}{' '}
+        An API key is the supported option.
+      </p>
+
+      {status?.signedIn ? (
+        <div className="signin-state">
+          <span className="state-dot state-connected" />
+          <span>
+            Signed in to {vendorName}
+            {status.plan ? ` (${status.plan} plan)` : ''}
+            {status.expiresAt ? (
+              <span className="muted"> · renews automatically</span>
+            ) : null}
+          </span>
+          <button type="button" className="btn" onClick={() => onSignOut(vendor)}>
+            Sign out
+          </button>
+        </div>
+      ) : (
+        <div className="row-actions">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => void run('signin')}
+            disabled={busy !== null}
+          >
+            {busy === 'signin' ? 'Waiting for your browser…' : `Sign in with ${vendorName}`}
+          </button>
+          {/* Adopting an existing CLI sign-in skips the browser entirely,
+              which is quicker when the user already has one. */}
+          {cli?.available && (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void run('import')}
+              disabled={busy !== null}
+              title={cli.detail}
+            >
+              {busy === 'import' ? 'Importing…' : `Use ${cli.source} sign-in`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {!status?.signedIn && cli && !cli.available && (
+        <p className="muted signin-hint">{cli.detail}</p>
+      )}
+      {error && <p className="warn-inline">{error}</p>}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Settings                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -124,6 +227,13 @@ interface SettingsPanelProps {
   agentName(agentId: string): string;
   onRevokeGrant(agentId: string, toolName: string): void;
   onRevokeAllGrants(): void;
+  /** Subscription sign-in state and actions. */
+  oauthStatuses: OAuthStatusView[];
+  detectedSignIns: DetectedSignIn[];
+  /** Return an error message, or null on success. */
+  onOAuthSignIn(vendor: 'anthropic' | 'chatgpt'): Promise<string | null>;
+  onOAuthImport(vendor: 'anthropic' | 'chatgpt'): Promise<string | null>;
+  onOAuthSignOut(vendor: 'anthropic' | 'chatgpt'): void;
   onSave(patch: Partial<GlobalSettings> & { apiKey?: string }): Promise<unknown>;
   onTest(cfg: {
     presetId: string;
@@ -143,6 +253,11 @@ export function SettingsPanel({
   agentName,
   onRevokeGrant,
   onRevokeAllGrants,
+  oauthStatuses,
+  detectedSignIns,
+  onOAuthSignIn,
+  onOAuthImport,
+  onOAuthSignOut,
   onSave,
   onTest,
   onPickDirectory,
@@ -218,25 +333,38 @@ export function SettingsPanel({
           ))}
         </div>
 
-        <label className="field">
-          <span>
-            API key{' '}
-            {settings.hasApiKey && (
-              <em className="muted">
-                — a key is stored{settings.isEncrypted ? ' (encrypted)' : ' (unencrypted)'}; leave
-                blank to keep it
-              </em>
-            )}
-          </span>
-          <input
-            type="password"
-            value={apiKey}
-            placeholder={preset?.local ? 'Not required for local endpoints' : (preset?.keyHint ?? '')}
-            onChange={(e) => setApiKey(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
+        {preset?.subscription ? (
+          <SubscriptionSignIn
+            vendor={preset.id === 'chatgpt-subscription' ? 'chatgpt' : 'anthropic'}
+            statuses={oauthStatuses}
+            detected={detectedSignIns}
+            onSignIn={onOAuthSignIn}
+            onSignOut={onOAuthSignOut}
+            onImport={onOAuthImport}
           />
-        </label>
+        ) : (
+          <label className="field">
+            <span>
+              API key{' '}
+              {settings.hasApiKey && (
+                <em className="muted">
+                  — a key is stored{settings.isEncrypted ? ' (encrypted)' : ' (unencrypted)'}; leave
+                  blank to keep it
+                </em>
+              )}
+            </span>
+            <input
+              type="password"
+              value={apiKey}
+              placeholder={
+                preset?.local ? 'Not required for local endpoints' : (preset?.keyHint ?? '')
+              }
+              onChange={(e) => setApiKey(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+        )}
         {!settings.isEncrypted && (
           <p className="warn-inline">
             This system reports no OS keychain, so keys are stored in a permission-restricted
@@ -260,15 +388,19 @@ export function SettingsPanel({
               ))}
             </datalist>
           </label>
-          <label className="field">
-            <span>Base URL</span>
-            <input
-              value={baseUrl}
-              placeholder={preset?.baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              spellCheck={false}
-            />
-          </label>
+          {/* A subscription endpoint is fixed by the sign-in; offering to
+              edit it would only let the user break their own setup. */}
+          {!preset?.subscription && (
+            <label className="field">
+              <span>Base URL</span>
+              <input
+                value={baseUrl}
+                placeholder={preset?.baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                spellCheck={false}
+              />
+            </label>
+          )}
         </div>
 
         <div className="row-actions">

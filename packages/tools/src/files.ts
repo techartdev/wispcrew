@@ -1,5 +1,5 @@
-﻿/**
- * File tools â€” read/write/list within the agent workspace.
+/**
+ * File tools — read/write/list within the agent workspace.
  */
 import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
@@ -28,7 +28,7 @@ class PathOutsideWorkspaceError extends Error {
  *
  * A raw `ENOENT: no such file or directory, scandir '/very/long/path'` tells
  * the model almost nothing and leads it to retry the identical call. Saying
- * *which* thing is missing â€” the workspace itself, or just this file â€” lets
+ * *which* thing is missing — the workspace itself, or just this file — lets
  * it either fix the path or report the real problem.
  */
 function describeFsError(err: unknown, ctx: ToolContext, p: string, tool: string): ToolResult {

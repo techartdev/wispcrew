@@ -29,6 +29,7 @@ import type {
 import { attachmentsToPromptText } from './attachments.js';
 import { rebuildHistory } from './branching.js';
 import { initGrants } from './grants.js';
+import { resolveToken, type OAuthVendor } from './oauth-store.js';
 import {
   isTerminal,
   makeAskAgentTool,
@@ -92,6 +93,40 @@ function defaultSettings(): GlobalSettings {
   };
 }
 
+/**
+ * The credential a preset needs, and how to obtain it.
+ *
+ * Subscription presets resolve an OAuth access token (refreshing it when
+ * stale) instead of an API key; everything else reads a key. Doing this in
+ * one place means `runPrompt` and the connection test cannot diverge.
+ */
+async function resolveCredential(
+  presetId: string,
+): Promise<{ apiKey?: string; accountId?: string; error?: string }> {
+  const vendor: OAuthVendor | null =
+    presetId === 'chatgpt-subscription'
+      ? 'chatgpt'
+      : presetId === 'claude-subscription'
+        ? 'anthropic'
+        : null;
+
+  if (!vendor) return { apiKey: resolveApiKey(presetId) };
+
+  const credential = await resolveToken(userDataDir, vendor);
+  if (!credential) {
+    return {
+      error:
+        vendor === 'chatgpt'
+          ? 'Not signed in to ChatGPT. Open Settings to sign in.'
+          : 'Not signed in to Claude. Open Settings to sign in.',
+    };
+  }
+  return {
+    apiKey: credential.access,
+    accountId: (credential as { accountId?: string }).accountId,
+  };
+}
+
 /** Read the provider API key from the encrypted store, then env. */
 function resolveApiKey(presetId: string): string | undefined {
   const secrets = readSecrets(userDataDir);
@@ -113,8 +148,9 @@ function resolveApiKey(presetId: string): string | undefined {
  * over the global defaults, so one agent can run a cheap model in a scratch
  * directory while another uses a stronger model against a real project.
  */
-function effectiveConfig(agent: AgentRecord | undefined, settings: GlobalSettings) {
+async function effectiveConfig(agent: AgentRecord | undefined, settings: GlobalSettings) {
   const presetId = agent?.presetId ?? settings.presetId ?? 'deepseek';
+  const credential = await resolveCredential(presetId);
   return {
     presetId,
     model: agent?.model ?? settings.model,
@@ -122,7 +158,10 @@ function effectiveConfig(agent: AgentRecord | undefined, settings: GlobalSetting
     workspaceRoot: agent?.workspaceRoot ?? settings.workspaceRoot ?? app.getPath('documents'),
     approvalPolicy: agent?.approvalPolicy ?? settings.approvalPolicy ?? 'ask',
     persona: agent?.persona ?? settings.persona,
-    apiKey: resolveApiKey(presetId),
+    apiKey: credential.apiKey,
+    accountId: credential.accountId,
+    /** Set when a subscription sign-in is required but absent. */
+    credentialError: credential.error,
   };
 }
 
@@ -195,13 +234,31 @@ async function runPrompt(
   const images = attachments.filter((a) => a.kind === 'image');
   const settings = readSettings(userDataDir, defaultSettings()) as GlobalSettings;
   const agent = store.getAgent(agentId);
-  const cfg = effectiveConfig(agent, settings);
+  const cfg = await effectiveConfig(agent, settings);
 
-  const preset = configFromPreset(cfg.presetId, {
-    apiKey: cfg.apiKey,
-    model: cfg.model,
-    baseUrl: cfg.baseUrl,
-  });
+  // A subscription preset with no sign-in fails here with a message that
+  // names the fix, rather than reaching the provider and returning a 401.
+  if (cfg.credentialError) {
+    pushTranscript(agentId, {
+      kind: 'notice',
+      id: store.newId('err'),
+      level: 'error',
+      text: cfg.credentialError,
+      createdAt: Date.now(),
+    });
+    emitEvent({ type: 'run-state', agentId, state: 'error' });
+    return cfg.credentialError;
+  }
+
+  const preset = {
+    ...configFromPreset(cfg.presetId, {
+      apiKey: cfg.apiKey,
+      model: cfg.model,
+      baseUrl: cfg.baseUrl,
+    }),
+    // The Codex backend requires the account id alongside the token.
+    ...(cfg.accountId ? { accountId: cfg.accountId } : {}),
+  };
   const provider = createProvider(preset);
   const check = provider.validate();
   if (!check.ok) {

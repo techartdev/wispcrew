@@ -44,6 +44,13 @@ const bridge: GhostBridge = {
   resolveApproval: (requestId, resolution) =>
     ipcRenderer.invoke('gb:resolveApproval', requestId, resolution),
 
+  /* subscription sign-in */
+  listOAuthStatus: () => ipcRenderer.invoke('gb:listOAuthStatus'),
+  oauthSignIn: (vendor) => ipcRenderer.invoke('gb:oauthSignIn', vendor),
+  oauthSignOut: (vendor) => ipcRenderer.invoke('gb:oauthSignOut', vendor),
+  oauthImportFromCli: (vendor) => ipcRenderer.invoke('gb:oauthImportFromCli', vendor),
+  listDetectedCliSignIns: () => ipcRenderer.invoke('gb:listDetectedCliSignIns'),
+
   /* standing tool permissions */
   listToolGrants: () => ipcRenderer.invoke('gb:listToolGrants'),
   revokeToolGrant: (agentId, toolName) =>

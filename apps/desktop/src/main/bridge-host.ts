@@ -17,9 +17,15 @@
  */
 import { BrowserWindow, dialog, ipcMain, shell, app } from 'electron';
 import {
+  chatgptOAuth,
+  claudeOAuth,
   createProvider,
   configFromPreset,
+  describeLookup,
   describeProviderError,
+  findAllSubscriptions,
+  findAnthropicSubscription,
+  findOpenAiSubscription,
   PROVIDER_PRESETS,
 } from '@ghostbot/llm';
 import { PERSONAS } from '@ghostbot/core';
@@ -44,7 +50,91 @@ import { runRoutineNow, refreshNextRunTime, refreshNextRunTimes } from './schedu
 import { abortSession, clearSession, seedSessionHistory } from './agent-sessions.js';
 import { prefixBefore, prefixThrough, rebuildHistory } from './branching.js';
 import { grant, isGranted, listGrants, revoke, revokeAll, revokeForAgent } from './grants.js';
+import {
+  allStatuses,
+  saveCredential,
+  signOut,
+  status,
+  type OAuthVendor,
+} from './oauth-store.js';
 import { fileLog } from './filelog.js';
+
+/**
+ * Ask the user to paste the authorization code Anthropic's callback page
+ * shows.
+ *
+ * A modal input box rather than an in-app panel: the sign-in is a short,
+ * blocking step, and the code expires within about a minute, so anything
+ * that lets the window be lost behind the browser makes it fail.
+ */
+async function promptForAuthCode(): Promise<string | null> {
+  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  if (!win) return null;
+
+  // Electron has no text-input dialog, so a tiny always-on-top window with
+  // one field is the honest way to do this without pulling in a dependency.
+  const prompt = new BrowserWindow({
+    width: 520,
+    height: 260,
+    parent: win,
+    modal: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    title: 'Finish signing in to Claude',
+    webPreferences: { nodeIntegration: false, contextIsolation: true },
+  });
+
+  const html = `<!doctype html><meta charset="utf-8">
+<style>
+ body{font-family:system-ui;background:#161a21;color:#e6e9ef;margin:0;padding:20px}
+ h3{margin:0 0 6px;font-size:15px}
+ p{margin:0 0 14px;color:#98a1b0;font-size:13px;line-height:1.5}
+ input{width:100%;padding:9px 11px;background:#1c212a;border:1px solid #333b49;
+   border-radius:8px;color:#e6e9ef;font:inherit;font-size:13px;box-sizing:border-box}
+ input:focus{outline:none;border-color:#39c2f0}
+ .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+ button{padding:7px 14px;border-radius:8px;font:inherit;font-size:13px;cursor:pointer;
+   background:#1c212a;border:1px solid #333b49;color:#e6e9ef}
+ .primary{background:#1b8fd4;border-color:#1b8fd4;color:#fff;font-weight:550}
+</style>
+<h3>Paste the code from your browser</h3>
+<p>Claude's page shows a code after you approve the sign-in. Paste it here —
+codes expire after about a minute.</p>
+<input id="c" autofocus placeholder="code#state" spellcheck="false">
+<div class="row">
+  <button onclick="done('')">Cancel</button>
+  <button class="primary" onclick="done(document.getElementById('c').value)">Sign in</button>
+</div>
+<script>
+ function done(v){ location.href = 'ghostbot-code://' + encodeURIComponent(v); }
+ document.getElementById('c').addEventListener('keydown', e => {
+   if (e.key === 'Enter') done(e.target.value);
+   if (e.key === 'Escape') done('');
+ });
+</script>`;
+
+  return new Promise<string | null>((resolve) => {
+    let settled = false;
+    const finish = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      if (!prompt.isDestroyed()) prompt.destroy();
+      resolve(value);
+    };
+
+    // The page signals its result by navigating to a custom scheme, which we
+    // intercept — no preload or IPC channel needed for a one-shot dialog.
+    prompt.webContents.on('will-navigate', (event, url) => {
+      if (!url.startsWith('ghostbot-code://')) return;
+      event.preventDefault();
+      const value = decodeURIComponent(url.slice('ghostbot-code://'.length)).trim();
+      finish(value || null);
+    });
+    prompt.on('closed', () => finish(null));
+    void prompt.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  });
+}
 
 /**
  * Name a branch without accumulating "copy of copy of".
@@ -380,6 +470,76 @@ export function registerBridge(context: BridgeContext): void {
     }
     resolve(resolution !== 'deny');
   });
+
+  /* -- subscription sign-in ------------------------------------ */
+
+  handle('listOAuthStatus', () => allStatuses(ctx.userDataDir));
+
+  handle('oauthSignIn', async (vendor: OAuthVendor) => {
+    if (vendor === 'chatgpt') {
+      // Loopback flow: the browser redirects straight back to us, so there
+      // is nothing for the user to copy.
+      const pending = await chatgptOAuth.startLogin();
+      await shell.openExternal(pending.authorizeUrl);
+      const credential = await pending.completed;
+      saveCredential(ctx.userDataDir, 'chatgpt', credential);
+    } else {
+      // Anthropic registers one non-loopback redirect for this client, so
+      // the callback page shows a code the user pastes back. That is a
+      // constraint of the registration, not a shortcut.
+      const pkce = claudeOAuth.generatePkce();
+      await shell.openExternal(claudeOAuth.buildAuthorizeUrl(pkce));
+      const answer = await promptForAuthCode();
+      if (!answer) throw new Error('Sign-in cancelled.');
+      const parsed = claudeOAuth.parseAuthorizationInput(answer);
+      if (!parsed.code) throw new Error('That did not look like an authorization code.');
+      const credential = await claudeOAuth.exchangeAuthorizationCode(
+        parsed.code,
+        parsed.state ?? pkce.verifier,
+        pkce.verifier,
+      );
+      saveCredential(ctx.userDataDir, 'anthropic', credential);
+    }
+    emitEvent({ type: 'oauth-changed', statuses: allStatuses(ctx.userDataDir) });
+    return status(ctx.userDataDir, vendor);
+  });
+
+  handle('oauthSignOut', (vendor: OAuthVendor) => {
+    signOut(ctx.userDataDir, vendor);
+    emitEvent({ type: 'oauth-changed', statuses: allStatuses(ctx.userDataDir) });
+    return allStatuses(ctx.userDataDir);
+  });
+
+  handle('oauthImportFromCli', (vendor: OAuthVendor) => {
+    const lookup = vendor === 'chatgpt' ? findOpenAiSubscription() : findAnthropicSubscription();
+    if (lookup.status !== 'found') {
+      throw new Error(describeLookup(lookup));
+    }
+    const auth = lookup.auth;
+    saveCredential(ctx.userDataDir, vendor, {
+      type: 'oauth',
+      access: auth.accessToken,
+      // A CLI-held credential may carry no refresh token we can see; the
+      // store treats an absent one as "cannot refresh", and the user is told
+      // to sign in properly when it lapses.
+      refresh: '',
+      expires: auth.expiresAt ?? Date.now() + 60 * 60 * 1000,
+      ...(auth.accountId ? { accountId: auth.accountId } : {}),
+      ...(auth.plan ? { plan: auth.plan } : {}),
+    });
+    emitEvent({ type: 'oauth-changed', statuses: allStatuses(ctx.userDataDir) });
+    return status(ctx.userDataDir, vendor);
+  });
+
+  handle('listDetectedCliSignIns', () =>
+    findAllSubscriptions().map((l) => ({
+      vendor: (l.status === 'found' ? l.auth.vendor : l.vendor) === 'openai' ? 'chatgpt' : 'anthropic',
+      source: l.status === 'found' ? l.auth.source : l.source,
+      available: l.status === 'found',
+      detail: describeLookup(l),
+      ...(l.status === 'found' && l.auth.plan ? { plan: l.auth.plan } : {}),
+    })),
+  );
 
   handle('listToolGrants', () => listGrants());
 

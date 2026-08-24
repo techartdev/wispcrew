@@ -1055,6 +1055,39 @@ body {
   font-size: 12.5px;
 }
 
+/* Subscription sign-in */
+
+.signin-block {
+  margin-bottom: 14px;
+}
+
+/* The warning sits above the button, never below it: this option can cost a
+   user their subscription, so it must be read before it is clicked. */
+.signin-warning {
+  margin: 0 0 12px;
+  line-height: 1.55;
+}
+
+.signin-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.signin-state > span:nth-child(2) {
+  flex: 1;
+}
+
+.signin-hint {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+}
+
 .test-ok {
   color: var(--ok);
   font-size: 13px;

@@ -34,6 +34,8 @@ export function App() {
     routines,
     skills,
     grants,
+    oauthStatuses,
+    detectedSignIns,
     toast,
   } = state;
 
@@ -203,6 +205,11 @@ export function App() {
           agentName={(id) => agents.find((a) => a.id === id)?.name ?? 'a deleted agent'}
           onRevokeGrant={(id, tool) => void actions.revokeGrant(id, tool)}
           onRevokeAllGrants={() => void actions.revokeAllGrants()}
+          oauthStatuses={oauthStatuses}
+          detectedSignIns={detectedSignIns}
+          onOAuthSignIn={actions.oauthSignIn}
+          onOAuthImport={actions.oauthImport}
+          onOAuthSignOut={(v) => void actions.oauthSignOut(v)}
           onSave={actions.saveSettings}
           onTest={actions.testConnection}
           onPickDirectory={actions.pickDirectory}

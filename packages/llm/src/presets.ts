@@ -6,7 +6,13 @@ import type { ProviderConfig } from '@ghostbot/shared';
 export interface ProviderPreset {
   id: string;
   label: string;
-  kind: 'openai-compatible' | 'anthropic';
+  kind: 'openai-compatible' | 'anthropic' | 'chatgpt-subscription';
+  /**
+   * True when this preset signs in with a subscription instead of taking an
+   * API key. The UI shows a sign-in button and the risk warning rather than
+   * a key field.
+   */
+  subscription?: boolean;
   baseUrl: string;
   /** Default model when none chosen. */
   defaultModel: string;
@@ -53,9 +59,47 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     label: 'Anthropic (Claude)',
     kind: 'anthropic',
     baseUrl: 'https://api.anthropic.com',
-    defaultModel: 'claude-sonnet-4-5',
-    models: ['claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-opus-4-1'],
+    // Verified against /v1/models. The Model field is a free-text combo box,
+    // so anything newer can be typed in without a code change.
+    defaultModel: 'claude-opus-5',
+    models: [
+      'claude-opus-5',
+      'claude-sonnet-5',
+      'claude-fable-5',
+      'claude-opus-4-8',
+      'claude-sonnet-4-6',
+      'claude-haiku-4-5',
+    ],
     keyHint: 'Anthropic API key (console.anthropic.com)',
+  },
+  // Subscription sign-ins. Listed after the API-key providers because those
+  // are the supported path; these carry a risk the UI spells out.
+  {
+    id: 'chatgpt-subscription',
+    label: 'ChatGPT subscription',
+    kind: 'chatgpt-subscription',
+    subscription: true,
+    baseUrl: '',
+    defaultModel: 'gpt-5.6-luna',
+    models: ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.5', 'gpt-5.4-mini'],
+    keyHint: 'Sign in with your ChatGPT account — no API key needed',
+  },
+  {
+    id: 'claude-subscription',
+    label: 'Claude subscription',
+    kind: 'anthropic',
+    subscription: true,
+    baseUrl: 'https://api.anthropic.com',
+    defaultModel: 'claude-opus-5',
+    models: [
+      'claude-opus-5',
+      'claude-sonnet-5',
+      'claude-fable-5',
+      'claude-opus-4-8',
+      'claude-sonnet-4-6',
+      'claude-haiku-4-5',
+    ],
+    keyHint: 'Sign in with your Claude Pro/Max account — no API key needed',
   },
   {
     id: 'ollama',

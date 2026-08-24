@@ -100,8 +100,15 @@ export interface TokenUsage {
 /* Provider layer                                                      */
 /* ------------------------------------------------------------------ */
 
-/** Kind of chat API a provider speaks. */
-export type ProviderKind = 'openai-compatible' | 'anthropic';
+/**
+ * Kind of chat API a provider speaks.
+ *
+ * `chatgpt-subscription` is its own kind rather than a flag on
+ * `openai-compatible`: it targets a different host with a different request
+ * shape and a different credential type, and sending one to the other's
+ * endpoint fails with an unhelpful error.
+ */
+export type ProviderKind = 'openai-compatible' | 'anthropic' | 'chatgpt-subscription';
 
 /**
  * A model chat request in provider-neutral form.

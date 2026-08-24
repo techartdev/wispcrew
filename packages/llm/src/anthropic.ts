@@ -7,6 +7,7 @@ import type {
   ProviderChunk,
   ProviderConfig,
 } from '@ghostbot/shared';
+import { usageFromAnthropicHeaders, type UsageSnapshot } from './usage-limits.js';
 
 interface AnthropicContentBlock {
   type: string;
@@ -29,11 +30,25 @@ interface AnthropicEvent {
   error?: { message?: string };
 }
 
+/** Relative wording for a reset time, e.g. "in 3 hours". */
+function describeReset(at: number): string {
+  const minutes = Math.max(1, Math.round((at - Date.now()) / 60_000));
+  if (minutes < 60) return `in ${minutes} minute${minutes === 1 ? '' : 's'}`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `in ${hours} hour${hours === 1 ? '' : 's'}`;
+  return `in ${Math.round(hours / 24)} days`;
+}
+
+export interface AnthropicConfig extends ProviderConfig {
+  /** Called with any quota information the response reports. */
+  onUsage?: (usage: UsageSnapshot) => void;
+}
+
 export class AnthropicProvider implements ChatProvider {
   readonly kind = 'anthropic' as const;
   readonly label: string;
 
-  constructor(private readonly config: ProviderConfig) {
+  constructor(private readonly config: AnthropicConfig) {
     this.label = config.label || config.id;
   }
 
@@ -162,8 +177,24 @@ export class AnthropicProvider implements ChatProvider {
       signal: request.signal,
     });
 
+    // Quota information rides on both success and failure responses, so read
+    // it before any early return — a 429 is precisely when it matters.
+    const usage = usageFromAnthropicHeaders(res.headers, res.status);
+    if (usage) this.config.onUsage?.(usage);
+
     if (!res.ok) {
       const text = await res.text().catch(() => '');
+      // A 429 here means the plan's quota is spent, not that anything is
+      // misconfigured — so say that plainly rather than showing a status
+      // code. Anthropic sends no reset time on the subscription path
+      // (verified: the only hint is `x-should-retry`), so do not imply we
+      // know when it lifts.
+      if (res.status === 429) {
+        const when = usage?.resetsAt
+          ? ` It resets ${describeReset(usage.resetsAt)}.`
+          : ' Anthropic does not say when it resets — try again later, or switch to an API key or another provider in Settings.';
+        throw new Error(`Your Claude plan's usage limit is currently reached.${when}`);
+      }
       throw new Error(`Anthropic returned HTTP ${res.status}: ${text.slice(0, 500)}`);
     }
 

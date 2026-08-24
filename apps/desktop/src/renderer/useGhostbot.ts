@@ -16,7 +16,9 @@ import type {
   AgentRecord,
   AgentRunState,
   BridgeEvent,
+  DetectedSignIn,
   McpServerStatus,
+  OAuthStatusView,
   PersonaView,
   PresetView,
   RoutineRecord,
@@ -58,6 +60,8 @@ export function useGhostbot() {
   const [routines, setRoutines] = useState<RoutineRecord[]>([]);
   const [skills, setSkills] = useState<SkillRecord[]>([]);
   const [grants, setGrants] = useState<ToolGrant[]>([]);
+  const [oauthStatuses, setOauthStatuses] = useState<OAuthStatusView[]>([]);
+  const [detectedSignIns, setDetectedSignIns] = useState<DetectedSignIn[]>([]);
   const [ready, setReady] = useState(false);
   const [toast, setToast] = useState<GhostbotState['toast']>(null);
 
@@ -85,7 +89,7 @@ export function useGhostbot() {
     let cancelled = false;
     void (async () => {
       try {
-        const [a, s, p, pe, m, r, sk, gr] = await Promise.all([
+        const [a, s, p, pe, m, r, sk, gr, oa, det] = await Promise.all([
           api.listAgents(),
           api.getSettings(),
           api.getPresets(),
@@ -94,6 +98,8 @@ export function useGhostbot() {
           api.listRoutines(),
           api.listSkills(),
           api.listToolGrants(),
+          api.listOAuthStatus(),
+          api.listDetectedCliSignIns(),
         ]);
         if (cancelled) return;
         // Defence in depth: main already repairs malformed stores, but a
@@ -110,6 +116,8 @@ export function useGhostbot() {
         setRoutines(arr<RoutineRecord>(r));
         setSkills(arr<SkillRecord>(sk));
         setGrants(arr<ToolGrant>(gr));
+        setOauthStatuses(arr<OAuthStatusView>(oa));
+        setDetectedSignIns(arr<DetectedSignIn>(det));
         setSelectedId((prev) => prev ?? agentList[0]?.id ?? null);
         setReady(true);
       } catch (err) {
@@ -161,6 +169,9 @@ export function useGhostbot() {
           return;
         case 'grants-changed':
           setGrants(event.grants);
+          return;
+        case 'oauth-changed':
+          setOauthStatuses(event.statuses);
           return;
         case 'notice':
           setToast({ level: event.level, text: event.text });
@@ -419,6 +430,42 @@ export function useGhostbot() {
         }
       },
 
+      /**
+       * Sign-in actions return an error *message* rather than throwing, so
+       * the settings panel can show it inline beside the button the user
+       * just pressed instead of as a detached toast.
+       */
+      async oauthSignIn(vendor: 'anthropic' | 'chatgpt'): Promise<string | null> {
+        try {
+          await api.oauthSignIn(vendor);
+          setOauthStatuses(await api.listOAuthStatus());
+          setSettings(await api.getSettings());
+          return null;
+        } catch (err) {
+          return err instanceof Error ? err.message : String(err);
+        }
+      },
+
+      async oauthImport(vendor: 'anthropic' | 'chatgpt'): Promise<string | null> {
+        try {
+          await api.oauthImportFromCli(vendor);
+          setOauthStatuses(await api.listOAuthStatus());
+          setSettings(await api.getSettings());
+          return null;
+        } catch (err) {
+          return err instanceof Error ? err.message : String(err);
+        }
+      },
+
+      async oauthSignOut(vendor: 'anthropic' | 'chatgpt') {
+        try {
+          setOauthStatuses(await api.oauthSignOut(vendor));
+          setSettings(await api.getSettings());
+        } catch (err) {
+          fail(err);
+        }
+      },
+
       async revokeGrant(agentId: string, toolName: string) {
         try {
           setGrants(await api.revokeToolGrant(agentId, toolName));
@@ -457,6 +504,8 @@ export function useGhostbot() {
       routines,
       skills,
       grants,
+      oauthStatuses,
+      detectedSignIns,
       toast,
     },
     actions,

@@ -41,6 +41,7 @@ import type {
   ProviderConfig,
   ToolCall,
 } from '@ghostbot/shared';
+import { usageFromCodexHeaders, type UsageSnapshot } from './usage-limits.js';
 
 /** The subscription-billed endpoint Codex CLI uses. */
 const CODEX_RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses';
@@ -62,6 +63,13 @@ const DEFAULT_INSTRUCTIONS = 'You are a helpful assistant.';
 export interface CodexConfig extends ProviderConfig {
   /** The ChatGPT account id that accompanies the token. */
   accountId?: string;
+  /**
+   * Called with the quota reported by each response.
+   *
+   * There is no usage endpoint — the headers of a real request are the only
+   * source — so usage is observed as a side effect of using the provider.
+   */
+  onUsage?: (usage: UsageSnapshot) => void;
 }
 
 interface ResponsesEvent {
@@ -115,6 +123,11 @@ export class CodexSubscriptionProvider implements ChatProvider {
       body: JSON.stringify(this.toWire(request)),
       signal: request.signal,
     });
+
+    // Quota headers ride on both success and failure, so read them before
+    // any early return — a 429 is exactly when the user needs to know.
+    const usage = usageFromCodexHeaders(res.headers);
+    if (usage) this.config.onUsage?.(usage);
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');

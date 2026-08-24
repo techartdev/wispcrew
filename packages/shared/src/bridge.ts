@@ -60,6 +60,8 @@ export type BridgeEvent =
   | { type: 'routines-changed'; routines: RoutineRecord[] }
   /** Standing tool permissions changed (granted, revoked, agent deleted). */
   | { type: 'grants-changed'; grants: ToolGrant[] }
+  /** A subscription sign-in was added, refreshed or removed. */
+  | { type: 'oauth-changed'; statuses: OAuthStatusView[] }
   /** Non-fatal problem worth surfacing in the UI. */
   | { type: 'notice'; level: 'info' | 'error'; text: string };
 
@@ -85,6 +87,8 @@ export interface PresetView {
   models: string[];
   local?: boolean;
   keyHint: string;
+  /** True when this preset signs in rather than taking an API key. */
+  subscription?: boolean;
 }
 
 export interface PersonaView {
@@ -102,6 +106,44 @@ export interface ConnectionTest {
 
 /** How the user answered an approval prompt. */
 export type ApprovalResolution = 'allow-once' | 'allow-always' | 'deny';
+
+/** Subscription sign-in state, safe to show in the UI (no tokens). */
+export interface OAuthStatusView {
+  vendor: 'anthropic' | 'chatgpt';
+  signedIn: boolean;
+  /** e.g. "max", "plus". */
+  plan?: string;
+  expiresAt?: number;
+  /**
+   * Quota as of the last request. Absent until the provider has been used
+   * at least once — there is no usage endpoint to query up front.
+   */
+  usage?: UsageView;
+}
+
+/** Subscription quota, as far as the provider reports it. */
+export interface UsageView {
+  tier?: string;
+  percentUsed?: number;
+  resetsAt?: number;
+  limited?: boolean;
+  creditsBalance?: number;
+  creditsUnlimited?: boolean;
+  observedAt: number;
+  /** Pre-formatted sentence, so the renderer needs no date logic. */
+  summary: string;
+}
+
+/** A sign-in an installed CLI already holds, which we could adopt. */
+export interface DetectedSignIn {
+  vendor: 'anthropic' | 'chatgpt';
+  /** Which CLI it came from, e.g. "Claude Code". */
+  source: string;
+  available: boolean;
+  /** Human explanation when `available` is false. */
+  detail: string;
+  plan?: string;
+}
 
 /* ------------------------------------------------------------------ */
 /* The bridge                                                          */
@@ -161,6 +203,21 @@ export interface GhostBridge {
    */
   branchConversation(agentId: string, entryId: string): Promise<AgentRecord>;
   resolveApproval(requestId: string, resolution: ApprovalResolution): Promise<void>;
+
+  /* -- subscription sign-in -------------------------------------- */
+
+  /** Sign-in state per vendor; never includes tokens. */
+  listOAuthStatus(): Promise<OAuthStatusView[]>;
+  /**
+   * Run the browser sign-in for a vendor. Resolves when the user completes
+   * it, or rejects with a message explaining what went wrong.
+   */
+  oauthSignIn(vendor: 'anthropic' | 'chatgpt'): Promise<OAuthStatusView>;
+  oauthSignOut(vendor: 'anthropic' | 'chatgpt'): Promise<OAuthStatusView[]>;
+  /** Adopt a sign-in an installed CLI already has, without a browser round-trip. */
+  oauthImportFromCli(vendor: 'anthropic' | 'chatgpt'): Promise<OAuthStatusView>;
+  /** What the CLIs on this machine currently offer, for the UI to suggest. */
+  listDetectedCliSignIns(): Promise<DetectedSignIn[]>;
 
   /* -- standing tool permissions --------------------------------- */
 
