@@ -30,6 +30,7 @@ import {
   connectNode,
   engineBuildStamp,
   fileLog,
+  isSameProcess,
   readEndpoint,
   type NodeClient,
   type NodeEndpoint,
@@ -164,13 +165,26 @@ export async function linkToDaemon(
         '[daemon-link] daemon is running older code; restarting it',
         `(daemon ${new Date(endpoint.buildStamp).toISOString()} < app ${new Date(ours).toISOString()})`,
       );
-      try {
-        process.kill(endpoint.pid);
-      } catch {
-        /* already gone */
+      /*
+       * Confirm the pid is still OUR daemon before signalling it.
+       *
+       * A pid is not an identity. If the daemon died and the OS recycled its
+       * number, this file names a stranger's process, and killing that in
+       * exchange for a small convenience would be a serious bug. The start
+       * time is checked; an unconfirmed pid is left alone and the stale
+       * endpoint simply discarded, which reaches the same outcome safely.
+       */
+      if (isSameProcess(endpoint.pid, endpoint.startedAt)) {
+        try {
+          process.kill(endpoint.pid);
+        } catch {
+          /* already gone */
+        }
+        // Give it a moment to release the socket before a new one binds.
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      } else {
+        fileLog('[daemon-link] stale endpoint does not name a live daemon; not signalling');
       }
-      // Give it a moment to release the socket before a new one binds.
-      await new Promise((resolve) => setTimeout(resolve, 600));
       endpoint = null;
     }
   }

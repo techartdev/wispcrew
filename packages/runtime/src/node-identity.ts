@@ -12,6 +12,7 @@
  * shell commands. The token file is readable only by the owning user, which
  * is the actual boundary being relied on — the socket merely carries it.
  */
+import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -150,6 +151,78 @@ export function isProcessAlive(pid: number): boolean {
   } catch (err) {
     return (err as NodeJS.ErrnoException).code === 'EPERM';
   }
+}
+
+/**
+ * When the process at this pid started, in epoch milliseconds.
+ *
+ * Returns null when it cannot be determined — no such process, no
+ * permission, or an unsupported platform. Callers must treat null as "cannot
+ * confirm", never as a match.
+ */
+export function processStartTime(pid: number): number | null {
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  try {
+    if (process.platform === 'win32') {
+      const out = execFileSync(
+        'powershell',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).StartTime.ToFileTimeUtc()`,
+        ],
+        { encoding: 'utf8', timeout: 5000, windowsHide: true },
+      ).trim();
+      if (!out) return null;
+      const fileTime = Number(out);
+      if (!Number.isFinite(fileTime)) return null;
+      // Windows FILETIME counts 100ns ticks from 1601-01-01.
+      return Math.round(fileTime / 10_000 - 11_644_473_600_000);
+    }
+
+    // POSIX: elapsed seconds since the process started.
+    const out = execFileSync('ps', ['-o', 'etimes=', '-p', String(pid)], {
+      encoding: 'utf8',
+      timeout: 5000,
+    }).trim();
+    if (!out) return null;
+    const elapsedSeconds = Number(out);
+    if (!Number.isFinite(elapsedSeconds)) return null;
+    return Date.now() - elapsedSeconds * 1000;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Is the process at this pid still the daemon we recorded?
+ *
+ * A pid is not an identity. Operating systems reuse them, so an endpoint file
+ * left by a daemon that died can name a pid now belonging to something else —
+ * and acting on that means signalling an innocent process. Small odds per
+ * launch, but the consequence is killing a stranger's work, and this codebase
+ * now kills a pid read from a file when it decides a daemon is out of date.
+ *
+ * Comparing start times makes the pair effectively unique: a recycled pid
+ * belongs to a process that started later than the one we recorded. When the
+ * start time cannot be read the answer is "not ours", because declining to
+ * kill is always the safer failure.
+ */
+export function isSameProcess(pid: number, startedAt: number | undefined): boolean {
+  if (!isProcessAlive(pid)) return false;
+  if (typeof startedAt !== 'number') return false;
+
+  const actual = processStartTime(pid);
+  if (actual === null) return false;
+
+  /*
+   * A minute of tolerance. `startedAt` is recorded inside the daemon once it
+   * is up, so it always trails the OS value by the process's own start-up
+   * time. Anything within a minute is the same launch; a reused pid is
+   * separated by however long the original ran.
+   */
+  return Math.abs(actual - startedAt) < 60_000;
 }
 
 /** A fresh token. 32 bytes of randomness, hex-encoded. */
