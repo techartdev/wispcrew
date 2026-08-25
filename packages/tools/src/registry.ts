@@ -6,6 +6,7 @@ import { shellTool } from './shell.js';
 import { readFileTool, writeFileTool, listDirTool } from './files.js';
 import { webFetchTool, webSearchTool } from './web.js';
 import { notifyTool } from './notify.js';
+import { proposeRoutineTool, scheduleFollowUpTool } from './schedule.js';
 import { grepTool } from './search.js';
 import { editFileTool } from './edit.js';
 
@@ -17,6 +18,8 @@ export * from './edit.js';
 
 export const defaultTools: Tool<any>[] = [
   notifyTool,
+  scheduleFollowUpTool,
+  proposeRoutineTool,
   shellTool,
   readFileTool,
   writeFileTool,

@@ -319,6 +319,17 @@ export function createRoutine(patch: Partial<RoutineRecord> & { agentId: string 
     timezone: patch.timezone,
     prompt: patch.prompt ?? '',
     enabled: patch.enabled ?? false,
+    /*
+     * One-shot fields, carried through explicitly.
+     *
+     * This builds the record field by field rather than spreading `patch`,
+     * which means anything not listed here is silently dropped — a
+     * follow-up's `runAt` vanished on the way to disk and it became a
+     * recurring routine with a default schedule. Any new field must be added
+     * here too.
+     */
+    runAt: patch.runAt,
+    selfScheduled: patch.selfScheduled,
     runs: [],
     createdAt: ts,
     updatedAt: ts,

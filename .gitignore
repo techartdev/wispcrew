@@ -55,3 +55,6 @@ client-persistence.json
 /*.png
 .panels-test.mjs
 .history-test.mjs
+
+# Bot tokens and similar credentials used for live verification.
+*token*.txt

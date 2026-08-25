@@ -33,6 +33,7 @@ import {
   createNodeCrypto,
   initGrants,
   installNotifySender,
+  installScheduler,
   runPrompt,
   runRoutine,
   setApprovalAsker,
@@ -362,6 +363,7 @@ app.whenReady().then(async () => {
    * answers for both — and with nobody to ask, denies.
    */
   installNotifySender();
+  installScheduler();
   /*
    * Deliver anything the daemon queued for us.
    *

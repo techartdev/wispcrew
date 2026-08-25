@@ -94,6 +94,24 @@ async function tick(): Promise<void> {
   for (const routine of listRoutines()) {
     if (!routine.enabled) continue;
 
+    /*
+     * A one-shot follow-up fires at a moment, not on a recurrence.
+     *
+     * An agent that says "I'll check the build in ten minutes" means once.
+     * Encoding that as a cron expression would keep matching every year, so
+     * `runAt` is explicit and the routine is retired below after it fires.
+     *
+     * `<=` rather than `===` so a wake-up is not lost when the machine was
+     * asleep, or the daemon was restarted, at the exact minute it was due.
+     */
+    if (typeof routine.runAt === 'number') {
+      if (now.getTime() < routine.runAt) continue;
+      if (lastFiredMinute.get(routine.id) === key) continue;
+      lastFiredMinute.set(routine.id, key);
+      if (!inFlight.has(routine.id)) void fireRoutine(routine);
+      continue;
+    }
+
     let fields;
     try {
       fields = parseCron(routine.cron);
@@ -154,7 +172,19 @@ async function fireRoutine(routine: RoutineRecord): Promise<void> {
     fileLog('[scheduler] routine failed', routine.id, (err as Error).message);
   } finally {
     inFlight.delete(routine.id);
-    refreshNextRunTime(routine.id);
+
+    /*
+     * A one-shot is done once it has run.
+     *
+     * Disabling rather than deleting: the user can still see that it
+     * happened and what it did, which matters when the agent scheduled it
+     * itself and they are deciding whether that was reasonable.
+     */
+    if (typeof routine.runAt === 'number') {
+      updateRoutine(routine.id, { enabled: false, nextRunAt: undefined });
+    } else {
+      refreshNextRunTime(routine.id);
+    }
     onChange?.();
   }
 }
@@ -176,6 +206,12 @@ export function isRoutineRunning(routineId: string): boolean {
 export function refreshNextRunTime(routineId: string): void {
   const routine = listRoutines().find((r) => r.id === routineId);
   if (!routine) return;
+  // A one-shot already knows when it runs; there is no expression to evaluate.
+  if (typeof routine.runAt === 'number') {
+    updateRoutine(routineId, { nextRunAt: routine.enabled ? routine.runAt : undefined });
+    return;
+  }
+
   try {
     const next = routine.enabled
       ? nextRun(routine.cron, new Date(), routine.timezone || systemTimeZone())

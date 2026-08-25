@@ -17,6 +17,7 @@ import {
   fileLog,
   initGrants,
   installNotifySender,
+  installScheduler,
   initStore,
   listAgents,
   createAgent,
@@ -121,6 +122,7 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
    * has something to say.
    */
   installNotifySender();
+  installScheduler();
   initGrants(env.dataDir);
 
   /*

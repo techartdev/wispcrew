@@ -29,6 +29,7 @@
     "test:shell-quoting": "node src/shell-quoting-test.mjs",
     "test:stale-daemon": "node src/stale-daemon-test.mjs",
     "test:environment-prompt": "node src/environment-prompt-test.mjs",
+    "test:self-schedule": "node src/self-schedule-test.mjs",
     "test:channels": "node src/channels-test.mjs",
     "test:checkpoint": "node src/checkpoint-test.mjs",
     "test:retention": "node src/retention-test.mjs",
@@ -44,7 +45,7 @@
     "test:desktop-client": "node src/desktop-client-test.mjs",
     "test:daemon": "node src/daemon-test.mjs",
     "test:detached": "node src/detached-test.mjs",
-    "test": "npm run smoke && npm run test:provider && npm run test:mcp && npm run test:memory && npm run test:cron && npm run test:markdown && npm run test:attachments && npm run test:delegation && npm run test:sandbox && npm run test:branching && npm run test:grants && npm run test:errors && npm run test:oauth && npm run test:retry && npm run test:protocol && npm run test:single-writer && npm run test:forwarding && npm run test:steering && npm run test:shell-timeout && npm run test:shell-quoting && npm run test:stale-daemon && npm run test:pid-identity && npm run test:environment-prompt && npm run test:channels && npm run test:checkpoint && npm run test:retention && npm run test:tool-deadline && npm run test:observation && npm run test:pairing && npm run test:node-registry && npm run test:nodes-ui && npm run test:history-ui && npm run test:remote-node"
+    "test": "npm run smoke && npm run test:provider && npm run test:mcp && npm run test:memory && npm run test:cron && npm run test:markdown && npm run test:attachments && npm run test:delegation && npm run test:sandbox && npm run test:branching && npm run test:grants && npm run test:errors && npm run test:oauth && npm run test:retry && npm run test:protocol && npm run test:single-writer && npm run test:forwarding && npm run test:steering && npm run test:shell-timeout && npm run test:shell-quoting && npm run test:stale-daemon && npm run test:pid-identity && npm run test:environment-prompt && npm run test:channels && npm run test:self-schedule && npm run test:checkpoint && npm run test:retention && npm run test:tool-deadline && npm run test:observation && npm run test:pairing && npm run test:node-registry && npm run test:nodes-ui && npm run test:history-ui && npm run test:remote-node"
   },
   "dependencies": {
     "@ghostbot/shared": "0.1.0",

@@ -182,6 +182,18 @@ export interface RoutineRecord {
   cron: string;
   /** IANA timezone, e.g. "Europe/Sofia". Defaults to the system zone. */
   timezone?: string;
+  /**
+   * A single wake-up at this moment, instead of a recurring schedule.
+   *
+   * Set for a follow-up an agent scheduled for itself ("check the build
+   * in ten minutes"). Encoding that as a cron expression matching one
+   * minute would be a lie the scheduler could not detect — it would match
+   * again next year — so it is explicit, and the scheduler disables the
+   * routine once it has run.
+   */
+  runAt?: number;
+  /** True when the agent asked for this itself, for the UI to distinguish. */
+  selfScheduled?: boolean;
   /** The message handed to the agent when the routine fires. */
   prompt: string;
   enabled: boolean;
