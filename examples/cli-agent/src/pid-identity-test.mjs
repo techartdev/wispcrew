@@ -52,7 +52,23 @@ console.log('\n[agreement] our start time matches what the OS reports');
    * tolerance in isSameProcess.
    */
   const mine = processStartTime(process.pid);
-  check('a start time is available at all', mine !== null, 'every method failed');
+
+  /*
+   * A start time is not guaranteed. A locked-down Windows CI runner refused
+   * BOTH `Get-Process().StartTime` and WMIC, and demanding one here failed
+   * the build for a host behaving within its rights.
+   *
+   * The contract is what matters, and it is safe either way: null means
+   * "cannot confirm", `isSameProcess` returns false, and the caller declines
+   * to signal a pid it cannot identify. The cost is a stale endpoint left
+   * alone rather than a stranger killed — the right way round.
+   */
+  if (mine === null) {
+    console.log('  --   this host reports no start time; identity checks decline to match');
+    check('and an unconfirmable pid never matches', !isSameProcess(process.pid, Date.now()));
+  } else {
+    check('a start time was read', true);
+  }
 
   if (mine !== null && process.platform === 'win32') {
     const { execFileSync } = await import('node:child_process');
@@ -80,12 +96,13 @@ console.log('\n[agreement] our start time matches what the OS reports');
   }
 }
 
-console.log('\n[start time] readable for a live process');
+console.log('\n[start time] sane when the host reports one');
 {
   const mine = processStartTime(process.pid);
-  check('our own start time is readable', mine !== null, String(mine));
-  if (mine !== null) {
-    check('and is in the past', mine <= Date.now() + 5000, new Date(mine).toISOString());
+  if (mine === null) {
+    console.log('  --   not available on this host');
+  } else {
+    check('it is in the past', mine <= Date.now() + 5000, new Date(mine).toISOString());
     check('but not absurdly so', mine > Date.now() - 24 * 60 * 60 * 1000);
   }
 }
@@ -98,16 +115,24 @@ console.log('\n[identity] matches only the process we recorded');
   await new Promise((r) => setTimeout(r, 700));
 
   const startedAt = processStartTime(child.pid);
-  check('a child start time is readable', startedAt !== null, String(startedAt));
 
-  check('the same pid and time matches', isSameProcess(child.pid, startedAt ?? 0));
+  if (startedAt === null) {
+    /*
+     * Without a start time nothing can be confirmed, and the safe answer is
+     * "not ours" — which is exactly what must be asserted here, because the
+     * alternative would be signalling a pid we cannot identify.
+     */
+    check('an unconfirmable pid never matches', !isSameProcess(child.pid, Date.now()));
+  } else {
+    check('the same pid and time matches', isSameProcess(child.pid, startedAt));
 
-  // A pid whose recorded start is far in the past is what recycling looks
-  // like: same number, different process.
-  check(
-    'a recycled pid is rejected',
-    !isSameProcess(child.pid, (startedAt ?? Date.now()) - 6 * 60 * 60 * 1000),
-  );
+    // A pid whose recorded start is far in the past is what recycling looks
+    // like: same number, different process.
+    check(
+      'a recycled pid is rejected',
+      !isSameProcess(child.pid, startedAt - 6 * 60 * 60 * 1000),
+    );
+  }
 
   // Unknown start time must never be treated as a match: declining to kill
   // is the safe failure.
@@ -117,7 +142,7 @@ console.log('\n[identity] matches only the process we recorded');
   await new Promise((r) => setTimeout(r, 500));
 
   check('a dead pid is not alive', !isProcessAlive(child.pid));
-  check('and never matches', !isSameProcess(child.pid, startedAt ?? 0));
+  check('and never matches', !isSameProcess(child.pid, startedAt ?? Date.now()));
 }
 
 console.log('\n[nonsense] invalid input is refused, not guessed');
