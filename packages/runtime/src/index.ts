@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @ghostbot/runtime â€” the headless GhostBot engine.
  *
  * Everything durable and everything that acts: the store, the cron
@@ -31,5 +31,9 @@ export * from './mcp-manager.js';
 
 export * from './engine.js';
 export * from './engine-events.js';
+export * from './protocol.js';
+export * from './node-server.js';
+export * from './node-client.js';
+export * from './node-identity.js';
 export * from './filelog.js';
 export * from './types.js';

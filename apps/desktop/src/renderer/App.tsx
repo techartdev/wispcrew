@@ -1,5 +1,5 @@
 /**
- * App.tsx Ã¢â‚¬â€ the application shell.
+ * App.tsx — the application shell.
  *
  * Composes the sidebar, the chat view, and the modal panels, and owns the
  * small amount of purely-visual state (which panel is open, theme class).
@@ -89,7 +89,7 @@ export function App() {
 
   /*
    * Slash-command skills are expanded in the main process (see `expandSkill`
-   * in main.ts), which is the single source of truth Ã¢â‚¬â€ routines and any other
+   * in main.ts), which is the single source of truth — routines and any other
    * non-UI caller need the same behaviour. The renderer sends the raw text.
    */
   const send = useCallback(
@@ -111,7 +111,7 @@ export function App() {
   const needsOnboarding = ready && settings && !hasProvider && !settings.onboarded;
 
   /*
-   * If a CLI on this machine is already signed in, say so Ã¢â‚¬â€ it turns a
+   * If a CLI on this machine is already signed in, say so — it turns a
    * "paste an API key" chore into one click. Offered, never assumed: the
    * user still chooses it in Settings, where the risk is stated.
    */
@@ -121,7 +121,7 @@ export function App() {
     return (
       <div className="boot">
         <GhostMark size={44} />
-        <p className="muted">Starting GhostBotÃ¢â‚¬Â¦</p>
+        <p className="muted">Starting GhostBot…</p>
       </div>
     );
   }
@@ -171,13 +171,13 @@ export function App() {
           <div className="onboard-banner">
             <div>
               <strong>Welcome to GhostBot.</strong> Choose a model provider and paste an API key to
-              begin Ã¢â‚¬â€ your key is stored encrypted on this machine and sent only to the provider you
+              begin — your key is stored encrypted on this machine and sent only to the provider you
               pick.
               {availableCli && (
                 <>
                   {' '}
                   You are already signed in to <strong>{availableCli.source}</strong>
-                  {availableCli.plan ? ` (${availableCli.plan} plan)` : ''} on this machine Ã¢â‚¬â€ you can
+                  {availableCli.plan ? ` (${availableCli.plan} plan)` : ''} on this machine — you can
                   use that instead of a key.
                 </>
               )}

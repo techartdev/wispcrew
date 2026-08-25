@@ -1,12 +1,12 @@
 /**
- * bridge-host.ts ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â main-process implementation of the `GhostBridge` contract.
+ * bridge-host.ts — main-process implementation of the `GhostBridge` contract.
  *
  * This is the entire renderer-facing surface of the app. It replaces the
  * reverse-engineered protocol shim with ~30 explicit, typed handlers we own.
  *
  * Conventions:
  *  - One `ipcMain.handle` per bridge method, named `gb:<method>`. Electron
- *    has no wildcard channels, so the list is explicit by necessity ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â which
+ *    has no wildcard channels, so the list is explicit by necessity — which
  *    is also what makes the attack surface reviewable.
  *  - Handlers return plain values and throw on failure. The preload converts
  *    a rejection into a rejected promise in the renderer; there are no
@@ -108,7 +108,7 @@ async function promptForAuthCode(): Promise<string | null> {
  .primary{background:#1b8fd4;border-color:#1b8fd4;color:#fff;font-weight:550}
 </style>
 <h3>Paste the code from your browser</h3>
-<p>Claude's page shows a code after you approve the sign-in. Paste it here ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â
+<p>Claude's page shows a code after you approve the sign-in. Paste it here —
 codes expire after about a minute.</p>
 <input id="c" autofocus placeholder="code#state" spellcheck="false">
 <div class="row">
@@ -133,7 +133,7 @@ codes expire after about a minute.</p>
     };
 
     // The page signals its result by navigating to a custom scheme, which we
-    // intercept ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â no preload or IPC channel needed for a one-shot dialog.
+    // intercept — no preload or IPC channel needed for a one-shot dialog.
     prompt.webContents.on('will-navigate', (event, url) => {
       if (!url.startsWith('ghostbot-code://')) return;
       event.preventDefault();
@@ -173,11 +173,19 @@ export interface BridgeContext {
   runPrompt(agentId: string, prompt: string, attachments?: Attachment[]): Promise<unknown>;
   /** Default settings when the file is absent (env fallbacks). */
   defaults(): GlobalSettings;
+  /**
+   * Register `ipcMain` handlers for the renderer.
+   *
+   * Defaults to true for the desktop app. A daemon sets it false: it has no
+   * renderer, and only needs the method table that socket calls dispatch
+   * through.
+   */
+  exposeIpc?: boolean;
 }
 
 let ctx: BridgeContext;
 
-/** Pending approvals: requestId ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ resolver awaiting the user's decision. */
+/** Pending approvals: requestId —žÂ¢ resolver awaiting the user's decision. */
 const pendingApprovals = new Map<string, (approved: boolean) => void>();
 /** Tools the user chose "always allow" for, per agent, for this app run. */
 /**
@@ -238,7 +246,7 @@ export function emitMcp(): void {
  *
  * Returns a promise that settles when the renderer calls `resolveApproval`.
  * "Always allow" is remembered per agent+tool for the lifetime of the
- * process ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â deliberately not persisted, so a standing grant cannot outlive
+ * process — deliberately not persisted, so a standing grant cannot outlive
  * the session that granted it without the user knowing.
  */
 export function requestApproval(
@@ -246,7 +254,7 @@ export function requestApproval(
   req: { toolName: string; summary: string; detail?: string },
 ): Promise<boolean> {
   // A standing grant the user made earlier, in this session or a previous
-  // one. Persisted grants are listed and revocable in Settings ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â a permission
+  // one. Persisted grants are listed and revocable in Settings — a permission
   // the user cannot see or withdraw would be worse than asking every time.
   if (isGranted(agentId, req.toolName)) return Promise.resolve(true);
 
@@ -287,7 +295,7 @@ export function requestApproval(
  * Does *this* provider have a usable credential?
  *
  * Asked per preset rather than globally: with several providers configured,
- * "a key exists somewhere" is not the question the UI needs answered Ã¢â‚¬â€ it
+ * "a key exists somewhere" is not the question the UI needs answered — it
  * would show every provider as ready the moment one of them was.
  */
 function hasStoredKey(presetId: string): boolean {
@@ -312,20 +320,48 @@ function settingsView(): SettingsView {
 /* ------------------------------------------------------------------ */
 
 /** Register every bridge channel. Call once, after `app.whenReady()`. */
+/**
+ * The bridge method table, by name.
+ *
+ * Populated by `registerBridge`. A daemon dispatches incoming socket calls
+ * through this, so there is exactly one implementation of each method
+ * regardless of whether the caller is a window or a paired client.
+ */
+const methods = new Map<string, (...args: unknown[]) => Promise<unknown>>();
+
+/** Dispatch one bridge call by name. Used by the node server. */
+export async function callBridgeMethod(method: string, args: unknown[]): Promise<unknown> {
+  const fn = methods.get(method);
+  if (!fn) throw new Error(`Unknown method "${method}".`);
+  return fn(...args);
+}
+
 export function registerBridge(context: BridgeContext): void {
   ctx = context;
 
+  /*
+   * Every bridge method is registered here once and exposed two ways.
+   *
+   * `ipcMain.handle` serves the renderer in this process. `methods` is the
+   * same table keyed by name, which a daemon dispatches socket calls
+   * through — so a remote client and a local window run identical code
+   * rather than two implementations that drift apart.
+   */
   const handle = <T>(name: string, fn: (...args: never[]) => T | Promise<T>): void => {
-    ipcMain.handle(`gb:${name}`, async (_e, ...args) => {
+    const invoke = async (...args: unknown[]): Promise<T> => {
       try {
         return await (fn as (...a: unknown[]) => T | Promise<T>)(...args);
       } catch (err) {
-        // Log then rethrow: the renderer sees a rejected promise with the
+        // Log then rethrow: the caller sees a rejected promise with the
         // message, and we keep a durable trace for debugging.
         fileLog('[bridge] error', name, (err as Error).message);
         throw err;
       }
-    });
+    };
+    methods.set(name, invoke as (...args: unknown[]) => Promise<unknown>);
+    if (context.exposeIpc !== false) {
+      ipcMain.handle(`gb:${name}`, async (_e, ...args) => invoke(...args));
+    }
   };
 
   /* -- agents -------------------------------------------------- */
@@ -481,7 +517,7 @@ export function registerBridge(context: BridgeContext): void {
     pendingApprovals.delete(requestId);
 
     // "Always allow" records a standing grant for this agent + tool. Only an
-    // explicit allow-always does so ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â a denial never creates a grant.
+    // explicit allow-always does so — a denial never creates a grant.
     if (resolution === 'allow-always') {
       const meta = pendingMeta.get(requestId);
       if (meta) {
@@ -548,12 +584,12 @@ export function registerBridge(context: BridgeContext): void {
        * rotate: exchanging one retires it server-side. If GhostBot refreshed
        * a token it borrowed from Claude Code or Codex, the CLI's stored copy
        * would instantly become invalid and the user would be signed out of a
-       * tool they never asked us to touch ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â with a 401 that gives no hint
+       * tool they never asked us to touch — with a 401 that gives no hint
        * why. (Observed exactly once, during development, on a real account.)
        *
        * So a borrowed sign-in is read-only and expires naturally. When it
        * lapses, `resolveToken` finds no refresh token, clears it, and the UI
-       * says "signed in" is no longer true ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â at which point the user can
+       * says "signed in" is no longer true — at which point the user can
        * re-import, or sign in through GhostBot's own flow, which owns its
        * credential and may rotate it freely.
        */
@@ -618,7 +654,7 @@ export function registerBridge(context: BridgeContext): void {
        * Local endpoints need no credential, so they qualify as soon as their
        * server is running. `custom` is judged by its *effective* URL rather
        * than a flag: pointed at localhost it needs no key, pointed at a
-       * remote host it does Ã¢â‚¬â€ claiming otherwise showed a tick for a provider
+       * remote host it does — claiming otherwise showed a tick for a provider
        * that would fail on first use.
        */
       configured: preset.subscription
@@ -646,7 +682,7 @@ export function registerBridge(context: BridgeContext): void {
          * Resolve the credential exactly as a real turn does.
          *
          * A subscription preset authenticates with an OAuth token and, for
-         * ChatGPT, an account id ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â neither of which is an API key. Reading
+         * ChatGPT, an account id — neither of which is an API key. Reading
          * only the key made "Test connection" report "the ChatGPT sign-in is
          * missing its account id" for a sign-in that worked perfectly in
          * conversation: a false failure, and a confusing one, because the

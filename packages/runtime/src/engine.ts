@@ -139,7 +139,7 @@ async function resolveCredential(
  * Keys are stored **per provider** (`GHOSTBOT_KEY_<preset>`), so several can
  * be configured at once and each agent uses the right one. This matters more
  * than it sounds: a single shared key meant an agent switched to OpenAI sent
- * an OpenAI key to whatever host the global settings pointed at Ã¢â‚¬â€ and the
+ * an OpenAI key to whatever host the global settings pointed at — and the
  * provider that answered was not the one the error named.
  *
  * The legacy shared `GHOSTBOT_API_KEY` is still honoured as a last resort so
@@ -170,7 +170,7 @@ async function effectiveConfig(agent: AgentRecord | undefined, settings: GlobalS
      * A custom Base URL belongs to the preset it was entered for.
      *
      * `presetId` and `model` honour a per-agent override, but `baseUrl` used
-     * to be taken from global settings unconditionally Ã¢â‚¬â€ so an agent set to
+     * to be taken from global settings unconditionally — so an agent set to
      * OpenAI while the global provider was NVIDIA sent OpenAI's model name to
      * NVIDIA's host. The reply ("does not recognise gpt-5.6-terra") was
      * correct but came from the wrong provider, and the error named OpenAI,
@@ -213,7 +213,7 @@ function systemPromptFor(agent: AgentRecord | undefined, personaId: string | und
  * caller reach `runPrompt` directly and would otherwise send a literal
  * "/changelog" to the model.
  *
- * Expanding twice is harmless Ã¢â‚¬â€ after the first pass the text no longer
+ * Expanding twice is harmless — after the first pass the text no longer
  * starts with a slash command.
  */
 export function expandSkill(prompt: string): string {
@@ -232,7 +232,7 @@ export function expandSkill(prompt: string): string {
  *
  * Callers append the user's message to the transcript before invoking
  * `runPrompt`, and `Agent.run` appends it to the model history itself. Seeding
- * a cold session from the raw transcript would therefore send it twice Ã¢â‚¬â€ which
+ * a cold session from the raw transcript would therefore send it twice — which
  * the model reads as the user repeating themselves.
  */
 function dropTrailingUserEntry(entries: TranscriptEntry[]): TranscriptEntry[] {
@@ -326,7 +326,7 @@ export async function runPrompt(
    * A turn interleaves prose and tool calls: the model says what it is about
    * to do, calls tools, then writes its answer. Transcript entries render in
    * insertion order, so reusing a single id for the whole turn pinned all the
-   * prose at the position of the first token Ã¢â‚¬â€ and every tool card, created
+   * prose at the position of the first token — and every tool card, created
    * later, appeared *below* the final answer even though it ran before it.
    * The transcript then read backwards: conclusions first, evidence after.
    *
@@ -407,7 +407,7 @@ export async function runPrompt(
     // conversation plainly visible on screen.
     //
     // The caller has already appended this turn's user message to the
-    // transcript, and `Agent.run` appends it again Ã¢â‚¬â€ so the trailing user
+    // transcript, and `Agent.run` appends it again — so the trailing user
     // entry is dropped here to avoid sending it twice.
     initialHistory: rebuildHistory(dropTrailingUserEntry(store.loadTranscript(agentId))),
     onApprovalRequired: async (req) => {
@@ -451,7 +451,7 @@ export async function runPrompt(
     } else if (e.type === 'error') {
       // A fatal error is rethrown by `Agent.run` and reported below with a
       // message the user can act on. Emitting the raw text here too would
-      // show the same failure twice Ã¢â‚¬â€ once as "fetch failed", once as the
+      // show the same failure twice — once as "fetch failed", once as the
       // explanation. Non-fatal notices (e.g. "Turn aborted by user") have no
       // second chance, so they are still shown.
       if (e.fatal) return;
@@ -472,7 +472,7 @@ export async function runPrompt(
    *
    * Emitting an empty assistant message up front reserved a transcript slot
    * *above* anything the turn did next, so a turn that began with a tool call
-   * showed the card below the answer Ã¢â‚¬â€ the very ordering this segmenting is
+   * showed the card below the answer — the very ordering this segmenting is
    * meant to fix. The "thinking" run-state above already tells the UI work
    * has started; the first delta creates the entry, in the right place.
    */
@@ -484,12 +484,12 @@ export async function runPrompt(
      * placed each segment in the transcript. Overwriting the current segment
      * with it would repeat everything written before the last tool call.
      *
-     * So only adopt it when nothing was streamed at all Ã¢â‚¬â€ a non-streaming
+     * So only adopt it when nothing was streamed at all — a non-streaming
      * provider, or a turn whose text never arrived as deltas.
      */
     if (!text && !priorText) text = final.content;
   } catch (err) {
-    // Raw provider failures are hostile Ã¢â‚¬â€ an HTTP 401 arrives as a wall of
+    // Raw provider failures are hostile — an HTTP 401 arrives as a wall of
     // JSON, a wrong base URL as the single word "fetch failed". Translate to
     // something that says what to change. A user-initiated Stop returns null
     // and is not reported as an error at all.
@@ -520,7 +520,7 @@ export async function runPrompt(
 /**
  * Run a prompt on a delegate and return its answer to the calling agent.
  *
- * The delegate's work is written to its own transcript Ã¢â‚¬â€ the user can open
+ * The delegate's work is written to its own transcript — the user can open
  * that agent and read exactly what it was asked and what it did, rather than
  * the delegation being an invisible side effect. A notice marks where the
  * request came from.

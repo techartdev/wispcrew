@@ -27,20 +27,39 @@ import {
   stopScheduler,
   syncMcpServers,
   addEventSink,
+  clearEndpoint,
+  generateToken,
   host,
+  localAddress,
+  serveNode,
+  writeEndpoint,
   type HostEnvironment,
 } from '@ghostbot/runtime';
 import type { BridgeEvent } from '@ghostbot/shared';
+import { createServer } from 'node:net';
+import { unlinkSync } from 'node:fs';
 
 export interface ServeOptions {
   host: HostEnvironment;
   /** Print each engine event as it happens. Useful when run in a terminal. */
   verbose?: boolean;
+  /**
+   * Accept local client connections.
+   *
+   * Off by default so a daemon used purely for routines opens nothing at
+   * all: this process runs shell commands, and a listener that nobody asked
+   * for is attack surface for no benefit.
+   */
+  listen?: boolean;
+  /** Dispatches an authenticated bridge call. Required when `listen`. */
+  onCall?: (method: string, args: unknown[]) => Promise<unknown>;
 }
 
 export interface RunningDaemon {
-  /** Stop the scheduler and disconnect MCP servers. */
+  /** Stop the scheduler, close the listener and disconnect MCP servers. */
   stop(): Promise<void>;
+  /** Where clients connect, when listening. */
+  address?: string;
 }
 
 /**
@@ -108,11 +127,59 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
     /* routine list changed; nothing to refresh without a UI attached */
   });
 
-  fileLog('[daemon] started', env.nodeName, env.dataDir);
+  let listener: { close(): Promise<void> } | null = null;
+  let address: string | undefined;
+
+  if (options.listen) {
+    if (!options.onCall) {
+      throw new Error('serve({ listen: true }) needs an onCall handler to dispatch bridge methods.');
+    }
+
+    address = localAddress(env.dataDir);
+
+    /*
+     * A stale socket file blocks binding after an unclean shutdown. Removing
+     * it is safe because `readEndpoint` already established that no live
+     * daemon owns this profile — otherwise we would be stealing a running
+     * daemon's address.
+     */
+    if (process.platform !== 'win32') {
+      try {
+        unlinkSync(address);
+      } catch {
+        /* nothing there, which is the normal case */
+      }
+    }
+
+    const token = generateToken();
+    const server = createServer();
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(address, () => resolve());
+    });
+
+    listener = serveNode({ server, token, nodeName: env.nodeName, onCall: options.onCall });
+
+    // Publish where and how to connect. Written 0600 — the token is a
+    // credential, and on a loopback socket it is the only thing standing
+    // between another local process and shell access.
+    writeEndpoint(env.dataDir, {
+      address,
+      token,
+      pid: process.pid,
+      nodeName: env.nodeName,
+      startedAt: Date.now(),
+    });
+  }
+
+  fileLog('[daemon] started', env.nodeName, env.dataDir, address ?? '(no listener)');
 
   return {
+    address,
     async stop() {
       stopScheduler();
+      await listener?.close().catch(() => {});
+      if (options.listen) clearEndpoint(env.dataDir);
       await closeAllMcp().catch(() => {});
       fileLog('[daemon] stopped');
     },

@@ -21,7 +21,8 @@
     "test:errors": "tsx src/errors-test.ts",
     "test:oauth": "tsx src/oauth-test.ts",
     "test:retry": "tsx src/retry-test.ts",
-    "test": "npm run smoke && npm run test:provider && npm run test:mcp && npm run test:memory && npm run test:cron && npm run test:markdown && npm run test:attachments && npm run test:delegation && npm run test:sandbox && npm run test:branching && npm run test:grants && npm run test:errors && npm run test:oauth && npm run test:retry"
+    "test:protocol": "node src/protocol-test.mjs",
+    "test": "npm run smoke && npm run test:provider && npm run test:mcp && npm run test:memory && npm run test:cron && npm run test:markdown && npm run test:attachments && npm run test:delegation && npm run test:sandbox && npm run test:branching && npm run test:grants && npm run test:errors && npm run test:oauth && npm run test:retry && npm run test:protocol"
   },
   "dependencies": {
     "@ghostbot/shared": "0.1.0",

@@ -1,5 +1,5 @@
 /**
- * GhostBot Ã¢â‚¬â€ Electron main process.
+ * GhostBot — Electron main process.
  *
  * Startup:
  *   1. Set the app name (must precede any `getPath('userData')` call).
@@ -68,7 +68,7 @@ import { startScheduler, stopScheduler } from '@ghostbot/runtime';
 
 // Must run at module scope, BEFORE anything reads app.getPath('userData').
 // Electron caches the userData path on first access and otherwise derives it
-// from the package name (@ghostbot/desktop Ã¢â€ â€™ %APPDATA%\@ghostbot\desktop).
+// from the package name (@ghostbot/desktop → %APPDATA%\@ghostbot\desktop).
 app.setName('GhostBot');
 
 /**
@@ -104,7 +104,7 @@ function buildMenu(): void {
           { role: 'about', label: 'About GhostBot' },
           { type: 'separator' },
           {
-            label: 'SettingsÃ¢â‚¬Â¦',
+            label: 'Settings…',
             accelerator: isMac ? 'Cmd+,' : 'Ctrl+,',
             click: () => mainWindow?.webContents.send('gb:event', { type: 'open-settings' }),
           },
@@ -180,7 +180,7 @@ async function createWindow(): Promise<void> {
   });
 
   // Debug helper: GHOSTBOT_AUTOSEND='prompt' drives one turn through the
-  // real pipeline (bridge Ã¢â€ â€™ agent Ã¢â€ â€™ provider) without a human clicking.
+  // real pipeline (bridge → agent → provider) without a human clicking.
   if (process.env.GHOSTBOT_AUTOSEND) {
     setTimeout(() => {
       const agentId = store.listAgents()[0]?.id;
@@ -200,7 +200,7 @@ async function createWindow(): Promise<void> {
   //
   // CI uses this as its "does the app actually render" gate, so a failure
   // must exit non-zero. Quitting 0 after failing to capture would let a
-  // broken build pass silently Ã¢â‚¬â€ which is worse than no check at all.
+  // broken build pass silently — which is worse than no check at all.
   if (process.env.GHOSTBOT_CAPTURE) {
     setTimeout(() => {
       void (async () => {
@@ -251,7 +251,7 @@ app.whenReady().then(async () => {
     if (existing.apiKey && existing.presetId) {
       setProviderKey(userDataDir, existing.presetId, existing.apiKey);
       writeSettings(userDataDir, { apiKey: undefined } as never);
-      fileLog('[secrets] moved plaintext settings apiKey Ã¢â€ â€™ encrypted per-provider store');
+      fileLog('[secrets] moved plaintext settings apiKey → encrypted per-provider store');
     }
   } catch (err) {
     fileLog('[secrets] settings migration failed', (err as Error).message);
