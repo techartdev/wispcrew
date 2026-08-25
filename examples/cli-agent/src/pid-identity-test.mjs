@@ -40,6 +40,46 @@ console.log('\n[elapsed parsing] every ps format, on every platform');
   check('empty is rejected', parseElapsed('') === null);
 }
 
+console.log('\n[agreement] our start time matches what the OS reports');
+{
+  /*
+   * `Get-Process().StartTime` returned an EMPTY string on a Windows CI
+   * runner, so every identity check failed there. WMIC reads the same value
+   * without the permission that property needs, and is tried first.
+   *
+   * This pins that whichever path is taken, the answer agrees with the OS:
+   * a start time from a different clock would silently break the one-minute
+   * tolerance in isSameProcess.
+   */
+  const mine = processStartTime(process.pid);
+  check('a start time is available at all', mine !== null, 'every method failed');
+
+  if (mine !== null && process.platform === 'win32') {
+    const { execFileSync } = await import('node:child_process');
+    let reference = null;
+    try {
+      const out = execFileSync(
+        'powershell',
+        ['-NoProfile', '-Command', `(Get-Process -Id ${process.pid}).StartTime.ToFileTimeUtc()`],
+        { encoding: 'utf8', windowsHide: true, timeout: 10_000 },
+      ).trim();
+      if (out) reference = Math.round(Number(out) / 10_000 - 11_644_473_600_000);
+    } catch {
+      // The exact failure the fallback exists for.
+    }
+
+    if (reference === null) {
+      console.log('  --   PowerShell cannot report it here; the fallback is what is in use');
+    } else {
+      check(
+        'it agrees with the OS to within a second',
+        Math.abs(mine - reference) < 1000,
+        `${Math.abs(mine - reference)}ms apart`,
+      );
+    }
+  }
+}
+
 console.log('\n[start time] readable for a live process');
 {
   const mine = processStartTime(process.pid);

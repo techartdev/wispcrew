@@ -189,22 +189,78 @@ export function parseElapsed(text: string): number | null {
   return days * 86_400 + hours * 3_600 + minutes * 60 + seconds;
 }
 
+/** Run a command, returning null instead of throwing when it is unavailable. */
+function tryExec(file: string, args: string[]): string | null {
+  try {
+    return execFileSync(file, args, {
+      encoding: 'utf8',
+      timeout: 5000,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    return null;
+  }
+}
+
 export function processStartTime(pid: number): number | null {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   try {
     if (process.platform === 'win32') {
-      const out = execFileSync(
-        'powershell',
-        [
-          '-NoProfile',
-          '-NonInteractive',
-          '-Command',
-          `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).StartTime.ToFileTimeUtc()`,
-        ],
-        { encoding: 'utf8', timeout: 5000, windowsHide: true },
-      ).trim();
+      /*
+       * Two ways to ask, because one is not reliable enough.
+       *
+       * `Get-Process().StartTime` returns nothing on some Windows hosts —
+       * measured on a CI runner, where it produced an empty string for the
+       * process asking about itself. The property needs permissions a
+       * constrained environment may not grant, and it fails silently.
+       *
+       * WMIC reads the same value from the process table without that
+       * requirement. It is deprecated but still present, so it is tried
+       * first and PowerShell remains the fallback for hosts where it has
+       * been removed.
+       */
+      const wmic = tryExec('wmic', [
+        'process',
+        'where',
+        `ProcessId=${pid}`,
+        'get',
+        'CreationDate',
+        '/value',
+      ]);
+
+      /*
+       * `CreationDate=20260825195922.231723+180`
+       *
+       * Local time, then the minutes east of UTC. The trailing offset is
+       * used rather than the machine's current one: they differ across a
+       * daylight-saving boundary, which would shift a start time by an hour
+       * and make a daemon look like a stranger — a rare bug that would
+       * appear twice a year and be very hard to place.
+       */
+      const stamp = /CreationDate=(\d{14})\.\d+([+-]\d+)/.exec(wmic ?? '');
+      if (stamp) {
+        const s = stamp[1]!;
+        const offsetMinutes = Number(stamp[2]);
+        const asUtc = Date.UTC(
+          Number(s.slice(0, 4)),
+          Number(s.slice(4, 6)) - 1,
+          Number(s.slice(6, 8)),
+          Number(s.slice(8, 10)),
+          Number(s.slice(10, 12)),
+          Number(s.slice(12, 14)),
+        );
+        return Number.isFinite(offsetMinutes) ? asUtc - offsetMinutes * 60_000 : null;
+      }
+
+      const out = tryExec('powershell', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).StartTime.ToFileTimeUtc()`,
+      ]);
       if (!out) return null;
-      const fileTime = Number(out);
+      const fileTime = Number(out.trim());
       if (!Number.isFinite(fileTime)) return null;
       // Windows FILETIME counts 100ns ticks from 1601-01-01.
       return Math.round(fileTime / 10_000 - 11_644_473_600_000);
