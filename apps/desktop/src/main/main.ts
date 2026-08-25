@@ -1,5 +1,5 @@
-/**
- * GhostBot — Electron main process.
+﻿/**
+ * GhostBot â€” Electron main process.
  *
  * Startup:
  *   1. Set the app name (must precede any `getPath('userData')` call).
@@ -30,7 +30,7 @@ import { attachmentsToPromptText } from './attachments.js';
 import { rebuildHistory } from './branching.js';
 import { initGrants } from './grants.js';
 import { allStatuses, recordUsage, resolveToken, type OAuthVendor } from './oauth-store.js';
-import { migrateLegacyKey, providerSecretKey } from './provider-keys.js';
+import { migrateLegacyKey, providerSecretKey, setProviderKey } from './provider-keys.js';
 import type { UsageSnapshot } from '@ghostbot/llm';
 import {
   isTerminal,
@@ -59,7 +59,7 @@ import { startScheduler, stopScheduler } from './scheduler.js';
 
 // Must run at module scope, BEFORE anything reads app.getPath('userData').
 // Electron caches the userData path on first access and otherwise derives it
-// from the package name (@ghostbot/desktop → %APPDATA%\@ghostbot\desktop).
+// from the package name (@ghostbot/desktop â†’ %APPDATA%\@ghostbot\desktop).
 app.setName('GhostBot');
 
 /**
@@ -135,7 +135,7 @@ async function resolveCredential(
  * Keys are stored **per provider** (`GHOSTBOT_KEY_<preset>`), so several can
  * be configured at once and each agent uses the right one. This matters more
  * than it sounds: a single shared key meant an agent switched to OpenAI sent
- * an OpenAI key to whatever host the global settings pointed at — and the
+ * an OpenAI key to whatever host the global settings pointed at â€” and the
  * provider that answered was not the one the error named.
  *
  * The legacy shared `GHOSTBOT_API_KEY` is still honoured as a last resort so
@@ -166,7 +166,7 @@ async function effectiveConfig(agent: AgentRecord | undefined, settings: GlobalS
      * A custom Base URL belongs to the preset it was entered for.
      *
      * `presetId` and `model` honour a per-agent override, but `baseUrl` used
-     * to be taken from global settings unconditionally — so an agent set to
+     * to be taken from global settings unconditionally â€” so an agent set to
      * OpenAI while the global provider was NVIDIA sent OpenAI's model name to
      * NVIDIA's host. The reply ("does not recognise gpt-5.6-terra") was
      * correct but came from the wrong provider, and the error named OpenAI,
@@ -209,7 +209,7 @@ function systemPromptFor(agent: AgentRecord | undefined, personaId: string | und
  * caller reach `runPrompt` directly and would otherwise send a literal
  * "/changelog" to the model.
  *
- * Expanding twice is harmless — after the first pass the text no longer
+ * Expanding twice is harmless â€” after the first pass the text no longer
  * starts with a slash command.
  */
 function expandSkill(prompt: string): string {
@@ -228,7 +228,7 @@ function expandSkill(prompt: string): string {
  *
  * Callers append the user's message to the transcript before invoking
  * `runPrompt`, and `Agent.run` appends it to the model history itself. Seeding
- * a cold session from the raw transcript would therefore send it twice — which
+ * a cold session from the raw transcript would therefore send it twice â€” which
  * the model reads as the user repeating themselves.
  */
 function dropTrailingUserEntry(entries: TranscriptEntry[]): TranscriptEntry[] {
@@ -322,7 +322,7 @@ async function runPrompt(
    * A turn interleaves prose and tool calls: the model says what it is about
    * to do, calls tools, then writes its answer. Transcript entries render in
    * insertion order, so reusing a single id for the whole turn pinned all the
-   * prose at the position of the first token — and every tool card, created
+   * prose at the position of the first token â€” and every tool card, created
    * later, appeared *below* the final answer even though it ran before it.
    * The transcript then read backwards: conclusions first, evidence after.
    *
@@ -403,7 +403,7 @@ async function runPrompt(
     // conversation plainly visible on screen.
     //
     // The caller has already appended this turn's user message to the
-    // transcript, and `Agent.run` appends it again — so the trailing user
+    // transcript, and `Agent.run` appends it again â€” so the trailing user
     // entry is dropped here to avoid sending it twice.
     initialHistory: rebuildHistory(dropTrailingUserEntry(store.loadTranscript(agentId))),
     onApprovalRequired: async (req) => {
@@ -447,7 +447,7 @@ async function runPrompt(
     } else if (e.type === 'error') {
       // A fatal error is rethrown by `Agent.run` and reported below with a
       // message the user can act on. Emitting the raw text here too would
-      // show the same failure twice — once as "fetch failed", once as the
+      // show the same failure twice â€” once as "fetch failed", once as the
       // explanation. Non-fatal notices (e.g. "Turn aborted by user") have no
       // second chance, so they are still shown.
       if (e.fatal) return;
@@ -468,7 +468,7 @@ async function runPrompt(
    *
    * Emitting an empty assistant message up front reserved a transcript slot
    * *above* anything the turn did next, so a turn that began with a tool call
-   * showed the card below the answer — the very ordering this segmenting is
+   * showed the card below the answer â€” the very ordering this segmenting is
    * meant to fix. The "thinking" run-state above already tells the UI work
    * has started; the first delta creates the entry, in the right place.
    */
@@ -480,12 +480,12 @@ async function runPrompt(
      * placed each segment in the transcript. Overwriting the current segment
      * with it would repeat everything written before the last tool call.
      *
-     * So only adopt it when nothing was streamed at all — a non-streaming
+     * So only adopt it when nothing was streamed at all â€” a non-streaming
      * provider, or a turn whose text never arrived as deltas.
      */
     if (!text && !priorText) text = final.content;
   } catch (err) {
-    // Raw provider failures are hostile — an HTTP 401 arrives as a wall of
+    // Raw provider failures are hostile â€” an HTTP 401 arrives as a wall of
     // JSON, a wrong base URL as the single word "fetch failed". Translate to
     // something that says what to change. A user-initiated Stop returns null
     // and is not reported as an error at all.
@@ -516,7 +516,7 @@ async function runPrompt(
 /**
  * Run a prompt on a delegate and return its answer to the calling agent.
  *
- * The delegate's work is written to its own transcript — the user can open
+ * The delegate's work is written to its own transcript â€” the user can open
  * that agent and read exactly what it was asked and what it did, rather than
  * the delegation being an invisible side effect. A notice marks where the
  * request came from.
@@ -579,7 +579,7 @@ function buildMenu(): void {
           { role: 'about', label: 'About GhostBot' },
           { type: 'separator' },
           {
-            label: 'Settings…',
+            label: 'Settingsâ€¦',
             accelerator: isMac ? 'Cmd+,' : 'Ctrl+,',
             click: () => mainWindow?.webContents.send('gb:event', { type: 'open-settings' }),
           },
@@ -655,7 +655,7 @@ async function createWindow(): Promise<void> {
   });
 
   // Debug helper: GHOSTBOT_AUTOSEND='prompt' drives one turn through the
-  // real pipeline (bridge → agent → provider) without a human clicking.
+  // real pipeline (bridge â†’ agent â†’ provider) without a human clicking.
   if (process.env.GHOSTBOT_AUTOSEND) {
     setTimeout(() => {
       const agentId = store.listAgents()[0]?.id;
@@ -675,7 +675,7 @@ async function createWindow(): Promise<void> {
   //
   // CI uses this as its "does the app actually render" gate, so a failure
   // must exit non-zero. Quitting 0 after failing to capture would let a
-  // broken build pass silently — which is worse than no check at all.
+  // broken build pass silently â€” which is worse than no check at all.
   if (process.env.GHOSTBOT_CAPTURE) {
     setTimeout(() => {
       void (async () => {
@@ -704,22 +704,29 @@ app.whenReady().then(async () => {
   userDataDir = migrateUserData();
   store.initStore(userDataDir);
   initGrants(userDataDir);
-  // Attribute a pre-existing shared key to the provider it was set up for,
-  // so adding a second provider does not hand the first one's key to it.
-  migrateLegacyKey(userDataDir, (readSettings(userDataDir, {}) as GlobalSettings).presetId);
 
-  // One-time hardening: if an earlier build left the provider key in the
-  // plaintext settings file, move it into the encrypted secrets store.
+  /*
+   * Key migrations, in this order deliberately.
+   *
+   * First rescue any key an old build left in the *plaintext* settings file,
+   * storing it against the provider it was configured for. Then attribute a
+   * legacy shared key to that same provider. Running these the other way
+   * round would re-create the shared key immediately after removing it.
+   */
   try {
     const existing = readSettings(userDataDir, {}) as GlobalSettings & { apiKey?: string };
-    if (existing.apiKey) {
-      upsertSecrets(userDataDir, [{ key: 'GHOSTBOT_API_KEY', value: existing.apiKey }]);
+    if (existing.apiKey && existing.presetId) {
+      setProviderKey(userDataDir, existing.presetId, existing.apiKey);
       writeSettings(userDataDir, { apiKey: undefined } as never);
-      fileLog('[secrets] moved plaintext settings apiKey → encrypted store');
+      fileLog('[secrets] moved plaintext settings apiKey â†’ encrypted per-provider store');
     }
   } catch (err) {
     fileLog('[secrets] settings migration failed', (err as Error).message);
   }
+
+  // Attribute a pre-existing shared key to the provider it was set up for,
+  // so adding a second provider does not hand the first one's key to it.
+  migrateLegacyKey(userDataDir, (readSettings(userDataDir, {}) as GlobalSettings).presetId);
 
   // Every install has at least one agent so the UI is never empty.
   if (store.listAgents().length === 0) {

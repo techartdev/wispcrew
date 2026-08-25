@@ -239,24 +239,94 @@ export function Chat({
   const [dragging, setDragging] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // Only auto-scroll when the user is already at the bottom, so reading
-  // scrollback isn't yanked away by streaming tokens.
+
+  /*
+   * Follow the conversation, but never fight the user.
+   *
+   * Auto-scrolling only happens while `pinnedRef` is true, which means "the
+   * user is at the bottom". The subtlety is telling *our* scrolling apart
+   * from *theirs*: writing `scrollTop` fires the same `scroll` event a wheel
+   * gesture does, so naively recomputing the pin on every event let a
+   * programmatic scroll re-pin a user who had deliberately scrolled up — and
+   * the next token yanked them back down.
+   *
+   * `selfScrollingRef` marks the scrolls we cause so they are ignored. Intent
+   * is also taken directly from the input devices: a wheel, touch drag or
+   * navigation key unpins immediately, without waiting to see where the
+   * scroll lands.
+   */
   const pinnedRef = useRef(true);
+  const selfScrollingRef = useRef(false);
 
   const busy = runState === 'thinking' || runState === 'awaiting-approval';
+
+  /** Is the viewport close enough to the end to count as "following"? */
+  const atBottom = (el: HTMLElement) => el.scrollHeight - el.scrollTop - el.clientHeight < 80;
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    // Our own scroll: consume the flag and leave the pin as it was.
+    if (selfScrollingRef.current) {
+      selfScrollingRef.current = false;
+      return;
+    }
+    pinnedRef.current = atBottom(el);
+  }, []);
+
+  /**
+   * A deliberate gesture away from the bottom unpins at once.
+   *
+   * Waiting for the resulting scroll position is too slow during streaming:
+   * new content can arrive between the gesture and the event, so the user
+   * appears to still be at the bottom and gets pulled back.
+   */
+  const handleUserScrollIntent = useCallback((deltaY: number) => {
+    if (deltaY < 0) {
+      pinnedRef.current = false;
+      return;
+    }
+    const el = scrollRef.current;
+    if (el && atBottom(el)) pinnedRef.current = true;
   }, []);
 
   useLayoutEffect(() => {
-    if (pinnedRef.current) {
-      const el = scrollRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
-    }
+    if (!pinnedRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    // Mark this as ours so `handleScroll` does not treat it as the user
+    // choosing to be at the bottom (which would be circular, but more
+    // importantly would mask a genuine scroll that arrives in the same tick).
+    selfScrollingRef.current = true;
+    el.scrollTop = el.scrollHeight;
   }, [transcript]);
+
+  /*
+   * Whether to offer "jump to latest".
+   *
+   * Held in state (not a ref) because it is rendered. Once a user scrolls
+   * away during a live turn there is otherwise no signal that the reply is
+   * still growing, and no quick way back — they have to drag to the end of
+   * content that keeps moving.
+   */
+  const [showJump, setShowJump] = useState(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => setShowJump(!atBottom(el));
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    return () => el.removeEventListener('scroll', update);
+  }, [agent?.id]);
+
+  const jumpToLatest = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    pinnedRef.current = true;
+    selfScrollingRef.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, []);
 
   // Reset the pin when switching agents so a new conversation starts at the end.
   useEffect(() => {
@@ -411,6 +481,18 @@ export function Chat({
         className="chat-scroll"
         ref={scrollRef}
         onScroll={handleScroll}
+        // Intent comes straight from the input device, so scrolling up
+        // during a fast stream unpins immediately rather than racing the
+        // tokens arriving underneath.
+        onWheel={(e) => handleUserScrollIntent(-e.deltaY)}
+        onTouchMove={() => {
+          const el = scrollRef.current;
+          if (el && !atBottom(el)) pinnedRef.current = false;
+        }}
+        onKeyDown={(e) => {
+          if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) pinnedRef.current = false;
+          if (e.key === 'End') pinnedRef.current = true;
+        }}
         role="log"
         aria-label="Conversation"
       >
@@ -500,6 +582,15 @@ export function Chat({
           }
         })}
       </div>
+
+      {/* Unpinning must not be a trap: while the reply is still growing there
+          is otherwise no signal it is happening, and no quick way back. */}
+      {showJump && (
+        <button type="button" className="jump-latest" onClick={jumpToLatest}>
+          {busy ? 'Jump to latest — still replying' : 'Jump to latest'}
+          <span aria-hidden="true"> ↓</span>
+        </button>
+      )}
 
       <div className="composer">
         {skillMatches.length > 0 && (

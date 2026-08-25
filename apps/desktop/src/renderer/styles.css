@@ -355,6 +355,8 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* Anchors the floating "jump to latest" button. */
+  position: relative;
 }
 
 .chat.empty-state {
@@ -1064,6 +1066,29 @@ body {
   border-radius: 6px;
   color: var(--warn);
   font-size: 12.5px;
+}
+
+/* Offered when the user has scrolled away from a live conversation, so
+   leaving the bottom is reversible rather than a trap. */
+.jump-latest {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 92px;
+  z-index: 5;
+  padding: 6px 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 35%);
+}
+
+.jump-latest:hover {
+  border-color: var(--accent);
 }
 
 /* A configured provider is marked so you can see, at a glance, which ones

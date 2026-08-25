@@ -30,6 +30,9 @@ export function providerSecretKey(presetId: string): string {
 export function setProviderKey(userDataDir: string, presetId: string, key: string): void {
   upsertSecrets(userDataDir, [{ key: providerSecretKey(presetId), value: key }]);
   fileLog('[keys] stored key for', presetId);
+  // The user has now stated a key explicitly, so the ambiguous shared
+  // fallback is no longer needed and can go without guessing.
+  retireLegacyKeyIfRedundant(userDataDir);
 }
 
 export function clearProviderKey(userDataDir: string, presetId: string): void {
@@ -72,7 +75,39 @@ export function migrateLegacyKey(userDataDir: string, activePresetId: string | u
   const target = providerSecretKey(activePresetId);
   if (!secrets[target]) {
     upsertSecrets(userDataDir, [{ key: target, value: legacy }]);
-    fileLog('[keys] migrated legacy key to', activePresetId);
+    fileLog('[keys] copied legacy key to', activePresetId);
   }
+
+  /*
+   * The legacy key is deliberately **kept**, not deleted.
+   *
+   * Attribution is a guess: the key is filed under whichever provider was
+   * selected when the app happened to start. That is usually right, but if
+   * the two ever disagree — a DeepSeek key while the UI showed OpenAI —
+   * deleting the original would destroy a working credential with nothing to
+   * recover it from, and the only symptom would be "needs an API key" for a
+   * provider the user knows they configured.
+   *
+   * Leaving it costs nothing: `resolveApiKey` consults the per-provider entry
+   * first and falls back to this one, so a mis-attributed key still works
+   * everywhere it did before. It is cleared when the user saves a real key
+   * for that provider, which is an explicit act rather than an inference.
+   */
+}
+
+/**
+ * Drop the legacy shared key once a provider has its own.
+ *
+ * Called when the user saves a key from Settings — an explicit action, so
+ * removing the ambiguous fallback at that point is safe rather than a guess.
+ */
+export function retireLegacyKeyIfRedundant(userDataDir: string): void {
+  const secrets = readSecrets(userDataDir);
+  if (!secrets[LEGACY_KEY]) return;
+  const hasOwn = Object.keys(secrets).some(
+    (name) => name.startsWith('GHOSTBOT_KEY_') && secrets[name],
+  );
+  if (!hasOwn) return;
   removeSecrets(userDataDir, [LEGACY_KEY]);
+  fileLog('[keys] retired legacy shared key');
 }
