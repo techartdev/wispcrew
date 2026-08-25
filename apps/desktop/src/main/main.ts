@@ -56,6 +56,7 @@ import { migrateUserData } from './userdata-migration.js';
 import { electronHost } from './electron-host.js';
 import { handoffIsCurrent, writeDaemonSecrets } from './secrets-handoff.js';
 import { linkToDaemon, type DaemonLink } from './daemon-link.js';
+import { closeNodeLinks, connectKnownNodes, routeForCall } from './node-links.js';
 import * as store from '@ghostbot/runtime';
 import {
   attachWindowEventSink,
@@ -339,6 +340,15 @@ app.whenReady().then(async () => {
     // Read per call rather than captured, so losing the daemon mid-session
     // falls back to the local engine instead of failing every method.
     remote: () => daemonLink?.client ?? null,
+    /*
+     * Route an agent's calls to the machine that owns it.
+     *
+     * The agent record is read from the local roster, which is the client's
+     * view of every node's agents. `nodeId` unset means the local engine,
+     * which is every agent until a user pairs something.
+     */
+    remoteForAgent: (method, args) =>
+      routeForCall((agentId) => store.getAgent(agentId)?.nodeId, method, args),
   });
 
   /*
@@ -400,6 +410,19 @@ app.whenReady().then(async () => {
 
     startScheduler(runRoutine, emitRoutines);
   }
+
+  /*
+   * Reconnect to paired machines in the background.
+   *
+   * Deliberately not awaited: a node that is asleep or on another network
+   * must not delay the window. The routing layer only uses links that are
+   * already open, so an agent on an unreachable node reports as unavailable
+   * rather than hanging the UI on a connection attempt.
+   */
+  void connectKnownNodes(userDataDir, (event) => emitEvent(event as never)).catch((err) =>
+    fileLog('[nodes] initial connect failed', (err as Error).message),
+  );
+
   emitAgents();
 
   app.on('activate', () => {
@@ -419,6 +442,7 @@ app.on('before-quit', () => {
    * whole point. Only the in-process fallback has a scheduler and MCP
    * servers of its own to shut down.
    */
+  closeNodeLinks();
   if (daemonLink) {
     daemonLink.client.close();
     daemonLink = null;

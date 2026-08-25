@@ -60,7 +60,14 @@ function transcriptDir(): string {
 }
 
 /** Parse JSON tolerating a UTF-8 BOM; returns `fallback` on any failure. */
-function readJson<T>(file: string, fallback: T): T {
+/**
+ * Read a JSON file, tolerating a BOM and returning a fallback on any failure.
+ *
+ * Exported so other modules storing small JSON documents reuse the same
+ * BOM tolerance and the same atomic write below, rather than each
+ * reimplementing them and each getting one of the two wrong.
+ */
+export function readJson<T>(file: string, fallback: T): T {
   try {
     let raw = fs.readFileSync(file, 'utf8');
     if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
@@ -100,7 +107,8 @@ function readArray<T>(file: string): T[] {
  * (or a crash) never observes a half-written file: rename is atomic on both
  * NTFS and POSIX filesystems.
  */
-function writeJson(file: string, value: unknown): void {
+/** Write JSON atomically (temp file + rename). See the note above. */
+export function writeJson(file: string, value: unknown): void {
   const tmp = `${file}.tmp`;
   try {
     fs.writeFileSync(tmp, JSON.stringify(value, null, 2), 'utf8');

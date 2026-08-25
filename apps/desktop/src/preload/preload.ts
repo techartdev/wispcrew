@@ -88,6 +88,13 @@ const bridge: GhostBridge = {
   pickDirectory: () => ipcRenderer.invoke('gb:pickDirectory'),
   openPath: (target) => ipcRenderer.invoke('gb:openPath', target),
   getAppInfo: () => ipcRenderer.invoke('gb:getAppInfo'),
+
+  // Paired machines. Each is named explicitly, like every other method here —
+  // a generic passthrough would hand the whole IPC surface to the page.
+  listNodes: () => ipcRenderer.invoke('gb:listNodes'),
+  pairNode: (address: string, code: string, expectFingerprint?: string) =>
+    ipcRenderer.invoke('gb:pairNode', address, code, expectFingerprint),
+  forgetNode: (nodeId: string) => ipcRenderer.invoke('gb:forgetNode', nodeId),
 };
 
 contextBridge.exposeInMainWorld('ghostbot', bridge);

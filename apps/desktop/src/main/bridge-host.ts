@@ -51,9 +51,14 @@ import { runRoutineNow, refreshNextRunTime, refreshNextRunTimes } from '@ghostbo
 import { abortSession, clearSession, seedSessionHistory } from '@ghostbot/runtime';
 import { prefixBefore, prefixThrough, rebuildHistory } from '@ghostbot/runtime';
 import { isClientOnlyMethod } from '@ghostbot/shared';
+import { existingLink, linkToNode } from './node-links.js';
 import {
   addEventSink,
+  addNode,
   emitEngineEvent,
+  listNodes,
+  pairWithNode,
+  removeNode,
   hasProviderKey,
   providerSecretKey,
   setProviderKey,
@@ -190,6 +195,17 @@ export interface BridgeContext {
    * re-registering the whole bridge. Returning null means "run locally".
    */
   remote?: () => { call(method: string, args: unknown[]): Promise<unknown> } | null;
+  /**
+   * The node that owns the agent this call is about, when it is not local.
+   *
+   * Given the method name and its arguments so the caller can decide which
+   * methods are agent-scoped — the bridge does not need to know, and keeping
+   * that list in one place beats scattering it through the handlers.
+   */
+  remoteForAgent?: (
+    method: string,
+    args: unknown[],
+  ) => { call(method: string, args: unknown[]): Promise<unknown> } | null;
 }
 
 let ctx: BridgeContext;
@@ -357,6 +373,20 @@ export function registerBridge(context: BridgeContext): void {
    * rather than two implementations that drift apart.
    */
   const handle = <T>(name: string, fn: (...args: never[]) => T | Promise<T>): void => {
+    /*
+     * Catch a duplicate registration here, where the name is obvious.
+     *
+     * Electron throws "Attempted to register a second handler" from inside
+     * `ipcMain.handle`, and because registration happens in an async startup
+     * path it surfaced as an unhandled rejection that left the window blank
+     * with no visible cause. A duplicate is always a mistake — two handlers
+     * for one method means one of them is dead code — so it should fail
+     * immediately and say which method.
+     */
+    if (methods.has(name)) {
+      throw new Error(`Bridge method "${name}" is registered twice.`);
+    }
+
     const invoke = async (...args: unknown[]): Promise<T> => {
       /*
        * When an engine runs elsewhere, engine methods go to it.
@@ -369,9 +399,24 @@ export function registerBridge(context: BridgeContext): void {
        * a node has no screen, and forwarding them would open a dialog
        * nobody can see, or report a stranger's app version.
        */
-      const remote = context.remote?.();
-      if (remote && !isClientOnlyMethod(name)) {
-        return (await remote.call(name, args)) as T;
+      if (!isClientOnlyMethod(name)) {
+        /*
+         * An agent's work happens on the node it belongs to.
+         *
+         * Methods whose first argument is an agent id are routed by that
+         * agent's `nodeId`, so a conversation with an agent that lives on a
+         * VPS runs there — its tools touch that machine's files, and its
+         * transcript stays in that machine's store.
+         *
+         * Everything else goes to the local engine. A roster is a
+         * client-side view assembled from every node, not something one node
+         * can answer for all of them.
+         */
+        const agentNode = context.remoteForAgent?.(name, args);
+        if (agentNode) return (await agentNode.call(name, args)) as T;
+
+        const remote = context.remote?.();
+        if (remote) return (await remote.call(name, args)) as T;
       }
 
       try {
@@ -900,6 +945,56 @@ export function registerBridge(context: BridgeContext): void {
     platform: process.platform,
     electron: process.versions.electron ?? 'unknown',
   }));
+
+  /* -- nodes ---------------------------------------------------- */
+
+  /*
+   * Managing paired machines.
+   *
+   * These are client-only in spirit — a node does not manage other nodes —
+   * but they are not in CLIENT_ONLY_METHODS because they never reach a
+   * remote engine: they read and write this client's own registry.
+   */
+
+  handle('listNodes', () => {
+    const nodes = listNodes(ctx.userDataDir);
+    return nodes.map((node) => ({
+      ...node,
+      // Reachability is what a user actually wants to see, and it is only
+      // knowable from a live link.
+      connected: existingLink(node.id) !== null,
+    }));
+  });
+
+  handle('pairNode', async (address: string, code: string, expectFingerprint?: string) => {
+    const result = await pairWithNode(address, code, {
+      clientName: `ghostbot-desktop/${app.getVersion()}`,
+      expectFingerprint: expectFingerprint || undefined,
+    });
+    const record = addNode(ctx.userDataDir, {
+      name: result.nodeName,
+      address,
+      token: result.token,
+      fingerprint: result.fingerprint,
+    });
+    // Connect straight away so the node is usable without a restart.
+    void linkToNode(ctx.userDataDir, record.id, (event) => emitEvent(event as never));
+    return record;
+  });
+
+  handle('forgetNode', (nodeId: string) => {
+    /*
+     * Agents that lived on this node are left pointing at it deliberately.
+     *
+     * Silently moving them to the local engine would be worse: their
+     * transcripts and files are on that machine, and a "local" agent with an
+     * empty history looks like data loss. They show as unavailable until the
+     * node is paired again or the agent is deleted.
+     */
+    removeNode(ctx.userDataDir, nodeId);
+    emitAgents();
+    return listNodes(ctx.userDataDir);
+  });
 
   refreshNextRunTimes();
   fileLog('[bridge] registered');

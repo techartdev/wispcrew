@@ -54,6 +54,19 @@ export interface AgentRecord {
    * URL, which belongs to whichever preset it was entered for.
    */
   baseUrl?: string;
+  /**
+   * Which machine runs this agent.
+   *
+   * Unset means the local engine, which is what every existing agent gets
+   * and what a user who never pairs anything keeps. A node id points at a
+   * paired machine, so the agent's turns, tools and files all happen there.
+   *
+   * This is the agent's *home*, not a routing hint: its transcript lives on
+   * that node, and moving an agent between nodes is an explicit export, not
+   * a live handoff. Two engines writing one profile lose data, so an agent
+   * belongs to exactly one.
+   */
+  nodeId?: string;
   /** Directory this agent's file/shell tools are confined to. */
   workspaceRoot?: string;
   /** Per-agent tool policy; falls back to the global default. */

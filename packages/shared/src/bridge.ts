@@ -279,6 +279,43 @@ export interface GhostBridge {
   /** Open a path in the OS file manager / default handler. */
   openPath(target: string): Promise<void>;
   getAppInfo(): Promise<{ version: string; platform: string; electron: string }>;
+
+  /* -- nodes ---------------------------------------------------- */
+
+  /**
+   * Machines this client has paired with.
+   *
+   * `connected` reflects a live link, which is the only useful answer: a
+   * node that is asleep or on another network is a normal state, and the UI
+   * should say so rather than implying it is broken.
+   *
+   * Tokens are never included — they grant shell access on that machine and
+   * stay in the encrypted store, like an API key.
+   */
+  listNodes(): Promise<NodeSummary[]>;
+
+  /**
+   * Pair with a node that is showing a code.
+   *
+   * `expectFingerprint` is optional but recommended: comparing it against
+   * what the node printed is what stops someone intercepting the first
+   * connection from pairing you with their machine instead.
+   */
+  pairNode(address: string, code: string, expectFingerprint?: string): Promise<NodeSummary>;
+
+  /** Forget a node and delete its token. */
+  forgetNode(nodeId: string): Promise<NodeSummary[]>;
+}
+
+/** A paired machine, as the UI sees it. */
+export interface NodeSummary {
+  id: string;
+  name: string;
+  address: string;
+  fingerprint: string;
+  pairedAt: number;
+  lastSeenAt?: number;
+  connected?: boolean;
 }
 
 declare global {
