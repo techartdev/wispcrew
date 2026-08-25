@@ -185,3 +185,48 @@ export function agentsIn(conversation: ConversationRecord): AgentParticipant[] {
 export function humansIn(conversation: ConversationRecord): HumanParticipant[] {
   return conversation.participants.filter((p): p is HumanParticipant => p.kind === 'human');
 }
+
+/**
+ * What a turn is doing.
+ *
+ * `claimed` is deliberately distinct from `running`: a claim is written
+ * before any model call starts, so a second attempt arriving while the first
+ * is still setting up loses rather than races.
+ */
+export type TurnState =
+  | 'claimed'
+  | 'running'
+  | 'awaiting_approval'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+/**
+ * One agent's attempt at one message.
+ *
+ * Durable, because the question "is this already being worked on?" outlives
+ * any single process. Stable entry ids stop a transcript being duplicated;
+ * they do not stop a deploy being run twice after a reconnect, which is what
+ * this record is for.
+ */
+export interface TurnRecord {
+  id: string;
+  conversationId: string;
+  /** The transcript entry that caused this turn — usually a user message. */
+  triggerEntryId: string;
+  agentId: string;
+  /** Which machine is doing the work, so a shutdown can release its claims. */
+  nodeId: string;
+  state: TurnState;
+  startedAt: number;
+  /**
+   * Last sign of life.
+   *
+   * A process killed mid-turn leaves its claim behind; without this, that
+   * message could never be attempted again.
+   */
+  heartbeatAt?: number;
+  finishedAt?: number;
+  /** Why it ended, when that is not obvious. */
+  detail?: string;
+}

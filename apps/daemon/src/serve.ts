@@ -29,6 +29,7 @@ import {
   setApprovalAsker,
   setHost,
   startScheduler,
+  releaseTurnsForNode,
   stopTelegram,
   stopWatches,
   syncWatches,
@@ -300,6 +301,9 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
       stopScheduler();
       stopWatches();
       stopTelegram();
+      // Release claims, or the next start refuses those messages for the
+      // whole staleness window.
+      releaseTurnsForNode(host().nodeName);
       await listener?.close().catch(() => {});
       if (options.listen) clearEndpoint(env.dataDir);
       await closeAllMcp().catch(() => {});

@@ -22,6 +22,7 @@ import { runPrompt } from './engine.js';
 import { fileLog } from './filelog.js';
 import { rememberAddressee, routeHumanMessage } from './floor.js';
 import * as store from './store.js';
+import { claimTurn, updateTurn } from './turns.js';
 
 export interface RoomTurnInput {
   conversationId: string;
@@ -31,6 +32,14 @@ export interface RoomTurnInput {
   /** The door it arrived through; undefined means the local app. */
   channel?: ChannelId;
   attachments?: Parameters<typeof runPrompt>[2];
+  /**
+   * A pre-decided id for the message entry.
+   *
+   * Set when a message arrives with an identity of its own -- a replicated
+   * entry, or a retry of one already recorded -- so a turn claims against
+   * the same id rather than a fresh one.
+   */
+  entryId?: string;
   /** Injected by tests. */
   run?: typeof runPrompt;
 }
@@ -76,9 +85,18 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
   const text = input.text.trim();
   if (!text) return { ran: [] };
 
+  /*
+   * The entry id is what a turn claims against.
+   *
+   * Generated here rather than inside the store call so it can be handed to
+   * `claimTurn` — that pairing is what makes a replayed message identifiable
+   * as the same message.
+   */
+  const triggerEntryId = input.entryId ?? store.newId('usr');
+
   store.upsertTranscriptEntry(conversation.id, {
     kind: 'message',
-    id: store.newId('usr'),
+    id: triggerEntryId,
     role: 'user',
     content: text,
     authorId: input.speakerId,
@@ -132,32 +150,75 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
    * the first would be arbitrary, and they are usually on different machines
    * doing unrelated work.
    */
+  const started: string[] = [];
+
   await Promise.all(
-    routing.speakers.map((agent) =>
+    routing.speakers.map(async (agent) => {
       /*
-       * The room, not the agent, owns the transcript.
+       * Claim before running.
        *
-       * Without the last argument each agent writes into its own file, so a
-       * second agent's replies never appear in the room — measured: `@all`
-       * ran two agents and showed nothing.
+       * A `null` means this exact (message, agent) pair is already being
+       * worked on by a turn that is alive — a reconnect replaying the same
+       * message, or two clients sending at once. Stable entry ids stop the
+       * transcript being duplicated; only this stops the *deploy* being run
+       * twice.
        */
-      run(agent.id, text, input.attachments ?? [], undefined, input.channel, conversation.id).catch(
-        (err: Error) => {
-          // One agent failing must not take down the others.
-          fileLog('[room] turn failed for', agent.handle, err.message);
-          store.upsertTranscriptEntry(conversation.id, {
-            kind: 'notice',
-            id: store.newId('note'),
-            level: 'error',
-            text: `@${agent.handle} could not finish: ${err.message}`,
-            createdAt: Date.now(),
-          });
-        },
-      ),
-    ),
+      const turn = claimTurn({
+        conversationId: conversation.id,
+        triggerEntryId,
+        agentId: agent.id,
+        /*
+         * A caller-supplied entry id means this message already had an
+         * identity elsewhere — replicated from another node, or redelivered
+         * after a reconnect. A freshly generated id is a new message, and a
+         * person resending the same words deserves a real second attempt.
+         */
+        replayed: input.entryId !== undefined,
+      });
+
+      if (!turn) {
+        fileLog('[room] already running', agent.handle, triggerEntryId);
+        return;
+      }
+
+      started.push(agent.id);
+      updateTurn(turn.id, { state: 'running' });
+
+      try {
+        /*
+         * The room, not the agent, owns the transcript.
+         *
+         * Without the last argument each agent writes into its own file, so
+         * a second agent's replies never appear in the room — measured:
+         * `@all` ran two agents and showed nothing.
+         */
+        await run(
+          agent.id,
+          text,
+          input.attachments ?? [],
+          undefined,
+          input.channel,
+          conversation.id,
+        );
+        updateTurn(turn.id, { state: 'completed' });
+      } catch (err) {
+        // One agent failing must not take down the others.
+        const message = (err as Error).message;
+        updateTurn(turn.id, { state: 'failed', detail: message });
+        fileLog('[room] turn failed for', agent.handle, message);
+
+        store.upsertTranscriptEntry(conversation.id, {
+          kind: 'notice',
+          id: store.newId('note'),
+          level: 'error',
+          text: `@${agent.handle} could not finish: ${message}`,
+          createdAt: Date.now(),
+        });
+      }
+    }),
   );
 
-  return { ran: routing.speakers.map((a) => a.id) };
+  return { ran: started };
 }
 
 /**

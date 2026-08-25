@@ -56,6 +56,16 @@ function filePath(name: string): string {
   return path.join(baseDir, name);
 }
 
+/**
+ * A path inside the profile, for modules that own their own file.
+ *
+ * Exported so `turns.ts` and friends do not each re-derive the data
+ * directory — one place decides where a profile lives.
+ */
+export function filePathFor(name: string): string {
+  return filePath(name);
+}
+
 function transcriptDir(): string {
   return path.join(baseDir, 'transcripts');
 }

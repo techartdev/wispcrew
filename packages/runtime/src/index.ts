@@ -21,6 +21,7 @@ export * from './conversations.js';
 export * from './approval-policy.js';
 export * from './floor.js';
 export * from './room-turn.js';
+export * from './turns.js';
 export * from './channel-telegram.js';
 export * from './telegram-inbox.js';
 export * from './telegram-progress.js';
