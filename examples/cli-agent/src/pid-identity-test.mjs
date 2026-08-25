@@ -63,11 +63,23 @@ console.log('\n[agreement] our start time matches what the OS reports');
    * to signal a pid it cannot identify. The cost is a stale endpoint left
    * alone rather than a stranger killed — the right way round.
    */
+  /*
+   * Whatever this host can do, the answer must be CONSISTENT.
+   *
+   * Reading a start time shells out, and a command can succeed once then
+   * fail under load or policy. CI caught exactly that: one call returned
+   * null and a later one returned a time, so `isSameProcess` disagreed with
+   * itself about the same pid. Values are cached now, which is both correct
+   * — a start time cannot change — and what makes this assertion meaningful.
+   */
+  const again = processStartTime(process.pid);
+  check('the same pid gives the same answer', mine === again, `${mine} then ${again}`);
+
   if (mine === null) {
     console.log('  --   this host reports no start time; identity checks decline to match');
-    check('and an unconfirmable pid never matches', !isSameProcess(process.pid, Date.now()));
+    check('so an unconfirmable pid never matches', !isSameProcess(process.pid, Date.now()));
   } else {
-    check('a start time was read', true);
+    check('a start time was read', typeof mine === 'number');
   }
 
   if (mine !== null && process.platform === 'win32') {

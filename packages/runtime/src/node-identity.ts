@@ -203,7 +203,27 @@ function tryExec(file: string, args: string[]): string | null {
   }
 }
 
+/**
+ * Cache of answers, because the question has a fixed answer.
+ *
+ * A process's start time never changes, but reading it shells out — and a
+ * command can succeed once and fail the next time under load or a constrained
+ * policy. That made `isSameProcess` non-deterministic for the same pid, which
+ * CI caught: one call reported null and a later one returned a time.
+ *
+ * Caching makes the answer stable for a pid within a run, and removes several
+ * subprocess spawns from a path that may be hit repeatedly.
+ */
+const startTimeCache = new Map<number, number | null>();
+
 export function processStartTime(pid: number): number | null {
+  if (startTimeCache.has(pid)) return startTimeCache.get(pid)!;
+  const value = readProcessStartTime(pid);
+  startTimeCache.set(pid, value);
+  return value;
+}
+
+function readProcessStartTime(pid: number): number | null {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   try {
     if (process.platform === 'win32') {
