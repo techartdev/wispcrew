@@ -16,6 +16,7 @@ import {
   emitEngineEvent,
   fileLog,
   initGrants,
+  installNotifySender,
   initStore,
   listAgents,
   createAgent,
@@ -111,6 +112,15 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
 
   const env = host();
   initStore(env.dataDir);
+
+  /*
+   * Let agents reach the user.
+   *
+   * The daemon is the only process that can deliver a direct message
+   * while the app is closed, which is exactly when an unattended agent
+   * has something to say.
+   */
+  installNotifySender();
   initGrants(env.dataDir);
 
   /*

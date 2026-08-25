@@ -32,6 +32,7 @@ import {
   defaultSettings,
   createNodeCrypto,
   initGrants,
+  installNotifySender,
   runPrompt,
   runRoutine,
   setApprovalAsker,
@@ -56,6 +57,7 @@ import { migrateUserData } from './userdata-migration.js';
 import { electronHost } from './electron-host.js';
 import { handoffIsCurrent, writeDaemonSecrets } from './secrets-handoff.js';
 import { linkToDaemon, type DaemonLink } from './daemon-link.js';
+import { startDesktopNotifications } from './desktop-notify.js';
 import { closeNodeLinks, connectKnownNodes, routeForCall } from './node-links.js';
 import * as store from '@ghostbot/runtime';
 import {
@@ -359,6 +361,14 @@ app.whenReady().then(async () => {
    * windows, and raise an approval card. A daemon supplies different
    * answers for both — and with nobody to ask, denies.
    */
+  installNotifySender();
+  /*
+   * Deliver anything the daemon queued for us.
+   *
+   * Only a GUI process can raise a native notification, so work done
+   * while the app was closed surfaces shortly after it opens.
+   */
+  startDesktopNotifications(userDataDir);
   attachWindowEventSink();
   setApprovalAsker((agentId, req) => requestApproval(agentId, req));
 

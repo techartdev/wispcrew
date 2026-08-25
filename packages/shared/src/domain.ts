@@ -67,6 +67,14 @@ export interface AgentRecord {
    * belongs to exactly one.
    */
   nodeId?: string;
+  /**
+   * Channels this agent may use, overriding the global default.
+   *
+   * Undefined means "whatever the user enabled globally". An empty array
+   * means this agent stays silent — a legitimate choice for one that only
+   * ever runs while being watched.
+   */
+  channels?: ChannelId[];
   /** Directory this agent's file/shell tools are confined to. */
   workspaceRoot?: string;
   /** Per-agent tool policy; falls back to the global default. */
@@ -266,10 +274,34 @@ export interface ToolGrant {
 /* ------------------------------------------------------------------ */
 
 /** Global application settings (per-agent overrides win where present). */
+/**
+ * Where agents may reach the user, and how.
+ *
+ * An agent that works unattended is only useful if it can say so. `app` is
+ * always available and needs no configuration; the others are opt-in,
+ * because one raises OS notifications and the other sends a message off the
+ * machine entirely.
+ */
+export interface ChannelSettings {
+  /** Channels enabled by default for every agent. */
+  enabled?: ChannelId[];
+  telegram?: {
+    /** True once a bot token is stored. The token itself lives encrypted. */
+    configured?: boolean;
+    /** The user's own chat with their bot. */
+    chatId?: string;
+  };
+}
+
+/** Somewhere a message can be delivered. */
+export type ChannelId = 'app' | 'desktop' | 'telegram';
+
 export interface GlobalSettings {
   presetId?: string;
   model?: string;
   baseUrl?: string;
+  /** Delivery channels available to agents. */
+  channels?: ChannelSettings;
   /** Default persona for newly created agents. */
   persona?: string;
   workspaceRoot?: string;

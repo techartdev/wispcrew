@@ -5,6 +5,7 @@ import type { Tool, ToolDefinition, ToolContext, ToolResult } from '@ghostbot/sh
 import { shellTool } from './shell.js';
 import { readFileTool, writeFileTool, listDirTool } from './files.js';
 import { webFetchTool, webSearchTool } from './web.js';
+import { notifyTool } from './notify.js';
 import { grepTool } from './search.js';
 import { editFileTool } from './edit.js';
 
@@ -15,6 +16,7 @@ export * from './search.js';
 export * from './edit.js';
 
 export const defaultTools: Tool<any>[] = [
+  notifyTool,
   shellTool,
   readFileTool,
   writeFileTool,
