@@ -215,3 +215,4 @@ export interface Tool<Args extends object = Record<string, unknown>> {
 
 export * from './domain.js';
 export * from './bridge.js';
+export * from './method-scope.js';

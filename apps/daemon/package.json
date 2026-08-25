@@ -15,6 +15,10 @@
     "./host": {
       "types": "./dist/daemon-host.d.ts",
       "default": "./dist/daemon-host.js"
+    },
+    "./methods": {
+      "types": "./dist/methods.d.ts",
+      "default": "./dist/methods.js"
     }
   },
   "bin": {

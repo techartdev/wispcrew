@@ -50,6 +50,7 @@ import { statuses as mcpStatuses, syncMcpServers } from '@ghostbot/runtime';
 import { runRoutineNow, refreshNextRunTime, refreshNextRunTimes } from '@ghostbot/runtime';
 import { abortSession, clearSession, seedSessionHistory } from '@ghostbot/runtime';
 import { prefixBefore, prefixThrough, rebuildHistory } from '@ghostbot/runtime';
+import { isClientOnlyMethod } from '@ghostbot/shared';
 import {
   addEventSink,
   emitEngineEvent,
@@ -181,6 +182,14 @@ export interface BridgeContext {
    * through.
    */
   exposeIpc?: boolean;
+  /**
+   * The engine to forward to, when it lives in another process.
+   *
+   * Read on every call rather than captured once, so a daemon that is
+   * connected after startup — or lost mid-session — takes effect without
+   * re-registering the whole bridge. Returning null means "run locally".
+   */
+  remote?: () => { call(method: string, args: unknown[]): Promise<unknown> } | null;
 }
 
 let ctx: BridgeContext;
@@ -349,6 +358,22 @@ export function registerBridge(context: BridgeContext): void {
    */
   const handle = <T>(name: string, fn: (...args: never[]) => T | Promise<T>): void => {
     const invoke = async (...args: unknown[]): Promise<T> => {
+      /*
+       * When an engine runs elsewhere, engine methods go to it.
+       *
+       * This is what keeps a profile to exactly one writer. Running these
+       * locally *as well* would put two processes on one JSON store, and the
+       * second silently erases the first — measured, see store.ts.
+       *
+       * Client-only methods (file dialogs, this app's version) stay here:
+       * a node has no screen, and forwarding them would open a dialog
+       * nobody can see, or report a stranger's app version.
+       */
+      const remote = context.remote?.();
+      if (remote && !isClientOnlyMethod(name)) {
+        return (await remote.call(name, args)) as T;
+      }
+
       try {
         return await (fn as (...a: unknown[]) => T | Promise<T>)(...args);
       } catch (err) {

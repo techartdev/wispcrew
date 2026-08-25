@@ -23,9 +23,10 @@
     "test:retry": "tsx src/retry-test.ts",
     "test:protocol": "node src/protocol-test.mjs",
     "test:single-writer": "node src/single-writer-test.mjs",
+    "test:forwarding": "node src/forwarding-test.mjs",
     "test:daemon": "node src/daemon-test.mjs",
     "test:detached": "node src/detached-test.mjs",
-    "test": "npm run smoke && npm run test:provider && npm run test:mcp && npm run test:memory && npm run test:cron && npm run test:markdown && npm run test:attachments && npm run test:delegation && npm run test:sandbox && npm run test:branching && npm run test:grants && npm run test:errors && npm run test:oauth && npm run test:retry && npm run test:protocol && npm run test:single-writer"
+    "test": "npm run smoke && npm run test:provider && npm run test:mcp && npm run test:memory && npm run test:cron && npm run test:markdown && npm run test:attachments && npm run test:delegation && npm run test:sandbox && npm run test:branching && npm run test:grants && npm run test:errors && npm run test:oauth && npm run test:retry && npm run test:protocol && npm run test:single-writer && npm run test:forwarding"
   },
   "dependencies": {
     "@ghostbot/shared": "0.1.0",

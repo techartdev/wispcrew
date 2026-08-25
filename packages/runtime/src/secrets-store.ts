@@ -164,14 +164,33 @@ export function readSecrets(userDataDir: string): SecretMap {
 export function writeSecrets(userDataDir: string, store: SecretMap): boolean {
   const json = JSON.stringify(store, null, 2);
 
-  if (isEncryptionAvailable()) {
+  /*
+   * Always attempt encryption, regardless of `isEncryptionAvailable()`.
+   *
+   * That function answers "is an OS keychain backing us", which is a
+   * *different question* from "can this backend encrypt". The headless
+   * backend deliberately answers false — it is honest that a key file is
+   * weaker than a keychain — while being perfectly able to encrypt.
+   *
+   * Gating on it meant a daemon wrote every API key to disk in PLAINTEXT.
+   * The same mistake was already fixed in `readSecrets`; this is its twin,
+   * and the more dangerous of the two.
+   *
+   * Plaintext remains only as a last resort, when encryption genuinely
+   * throws, and `isPersistent`/`isEncrypted` report that honestly.
+   */
+  try {
+    const buf = host().crypto.encrypt(json);
+    fs.writeFileSync(encPath(userDataDir), buf, { mode: 0o600 });
+    // A previous plaintext fallback must not linger with stale keys in it.
     try {
-      const buf = host().crypto.encrypt(json);
-      fs.writeFileSync(encPath(userDataDir), buf);
-      return true;
-    } catch (err) {
-      fileLog('[secrets] encrypt failed, falling back to plaintext', (err as Error).message);
+      fs.rmSync(plainPath(userDataDir), { force: true });
+    } catch {
+      /* nothing to clean up */
     }
+    return true;
+  } catch (err) {
+    fileLog('[secrets] encrypt failed, falling back to plaintext', (err as Error).message);
   }
 
   // Fallback: plaintext, restricted to the owner where the OS supports it.
