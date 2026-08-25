@@ -1,0 +1,28 @@
+{
+  "name": "@ghostbot/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ghostbot serve — the headless GhostBot engine as a long-running process.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "ghostbot": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "serve": "node dist/cli.js serve"
+  },
+  "dependencies": {
+    "@ghostbot/shared": "0.1.0",
+    "@ghostbot/runtime": "0.1.0",
+    "@ghostbot/llm": "0.1.0",
+    "@ghostbot/core": "0.1.0",
+    "@ghostbot/tools": "0.1.0",
+    "@ghostbot/mcp": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.7.0"
+  }
+}

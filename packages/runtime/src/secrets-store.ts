@@ -67,17 +67,40 @@ export function readSecrets(userDataDir: string): SecretMap {
   const encrypted = encPath(userDataDir);
   const plain = plainPath(userDataDir);
 
-  // 1. Preferred: encrypted store.
-  if (fs.existsSync(encrypted) && isEncryptionAvailable()) {
+  /*
+   * 1. Preferred: encrypted store.
+   *
+   * Attempted whenever the file exists, NOT only when `available()` is true.
+   * `available()` reports whether an OS keychain is backing us, which is a
+   * different question from whether this blob can be decrypted — the
+   * headless backend deliberately answers false while still being perfectly
+   * able to read its own ciphertext. Gating on it made a daemon silently see
+   * zero providers.
+   */
+  if (fs.existsSync(encrypted)) {
     try {
       const buf = fs.readFileSync(encrypted);
       const json = host().crypto.decrypt(buf);
       const parsed = JSON.parse(json) as SecretMap;
       return parsed && typeof parsed === 'object' ? parsed : {};
     } catch (err) {
-      // A keychain change (or copying userData between machines) makes the
-      // blob undecryptable. Don't wedge the app — report and start clean.
+      /*
+       * Undecryptable, which has one common and important cause: this store
+       * was written by a *different backend* on the same machine — the
+       * desktop app using the OS keychain, now being read by a daemon that
+       * has none (or the reverse).
+       *
+       * Starting clean is right — wedging the app helps nobody — but it must
+       * be loud. Silently reporting "no API key" for providers the user
+       * definitely configured is a maddening thing to debug.
+       */
       fileLog('[secrets] decrypt failed', (err as Error).message);
+      fileLog(
+        '[secrets] the store at',
+        encrypted,
+        'cannot be read with this backend:',
+        host().crypto.describe(),
+      );
       return {};
     }
   }
