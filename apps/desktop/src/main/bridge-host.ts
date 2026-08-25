@@ -50,7 +50,13 @@ import { statuses as mcpStatuses, syncMcpServers } from '@ghostbot/runtime';
 import { runRoutineNow, refreshNextRunTime, refreshNextRunTimes } from '@ghostbot/runtime';
 import { abortSession, clearSession, seedSessionHistory } from '@ghostbot/runtime';
 import { prefixBefore, prefixThrough, rebuildHistory } from '@ghostbot/runtime';
-import { hasProviderKey, providerSecretKey, setProviderKey } from '@ghostbot/runtime';
+import {
+  addEventSink,
+  emitEngineEvent,
+  hasProviderKey,
+  providerSecretKey,
+  setProviderKey,
+} from '@ghostbot/runtime';
 import { grant, isGranted, listGrants, revoke, revokeAll, revokeForAgent } from '@ghostbot/runtime';
 import {
   allStatuses,
@@ -187,9 +193,22 @@ const pendingMeta = new Map<string, { agentId: string; toolName: string }>();
 
 /** Push an event to every open window. */
 export function emitEvent(event: BridgeEvent): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('gb:event', event);
-  }
+  emitEngineEvent(event);
+}
+
+/**
+ * Deliver engine events to every open window.
+ *
+ * Registered once at startup. The engine broadcasts without knowing who is
+ * listening, so closing the last window simply means this sink has nothing
+ * to deliver to — the turn producing the events carries on regardless.
+ */
+export function attachWindowEventSink(): () => void {
+  return addEventSink((event) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('gb:event', event);
+    }
+  });
 }
 
 /** Convenience: push a transcript entry and persist it in one step. */
