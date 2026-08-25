@@ -160,6 +160,35 @@ export function isProcessAlive(pid: number): boolean {
  * permission, or an unsupported platform. Callers must treat null as "cannot
  * confirm", never as a match.
  */
+/**
+ * Parse `ps -o etime=` output into seconds.
+ *
+ * The format is `[[dd-]hh:]mm:ss`, so the pieces are read from the right:
+ * seconds and minutes always present, hours and days only for long-running
+ * processes. Returns null for anything unrecognised rather than guessing —
+ * a wrong number here would let a recycled pid pass as the original.
+ */
+export function parseElapsed(text: string): number | null {
+  const trimmed = text.trim();
+  const [dayPart, clockPart] = trimmed.includes('-')
+    ? [trimmed.slice(0, trimmed.indexOf('-')), trimmed.slice(trimmed.indexOf('-') + 1)]
+    : ['0', trimmed];
+
+  const days = Number(dayPart);
+  if (!Number.isFinite(days)) return null;
+
+  const parts = clockPart.split(':').map((p) => Number(p));
+  if (parts.length < 2 || parts.length > 3 || parts.some((p) => !Number.isFinite(p))) {
+    return null;
+  }
+
+  const seconds = parts.pop()!;
+  const minutes = parts.pop()!;
+  const hours = parts.pop() ?? 0;
+
+  return days * 86_400 + hours * 3_600 + minutes * 60 + seconds;
+}
+
 export function processStartTime(pid: number): number | null {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   try {
@@ -181,14 +210,25 @@ export function processStartTime(pid: number): number | null {
       return Math.round(fileTime / 10_000 - 11_644_473_600_000);
     }
 
-    // POSIX: elapsed seconds since the process started.
-    const out = execFileSync('ps', ['-o', 'etimes=', '-p', String(pid)], {
+    /*
+     * POSIX: elapsed time since the process started.
+     *
+     * `etimes` — plain seconds, trivial to parse — is a Linux extension.
+     * macOS `ps` rejects it and prints nothing, so every identity check
+     * silently failed there and the daemon would never be recognised as its
+     * own. Caught by CI on macOS, not by reading man pages.
+     *
+     * `etime` is POSIX-standard and present everywhere, at the cost of
+     * parsing a formatted duration.
+     */
+    const out = execFileSync('ps', ['-o', 'etime=', '-p', String(pid)], {
       encoding: 'utf8',
       timeout: 5000,
     }).trim();
     if (!out) return null;
-    const elapsedSeconds = Number(out);
-    if (!Number.isFinite(elapsedSeconds)) return null;
+
+    const elapsedSeconds = parseElapsed(out);
+    if (elapsedSeconds === null) return null;
     return Date.now() - elapsedSeconds * 1000;
   } catch {
     return null;

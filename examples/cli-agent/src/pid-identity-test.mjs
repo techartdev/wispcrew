@@ -13,7 +13,7 @@
  * Offline: local processes only.
  */
 import { spawn } from 'node:child_process';
-import { isProcessAlive, isSameProcess, processStartTime } from '@ghostbot/runtime';
+import { isProcessAlive, isSameProcess, parseElapsed, processStartTime } from '@ghostbot/runtime';
 
 let failures = 0;
 const check = (label, cond, detail) => {
@@ -23,6 +23,22 @@ const check = (label, cond, detail) => {
     console.error(`  FAIL ${label}${detail ? ` — ${detail}` : ''}`);
   }
 };
+
+console.log('\n[elapsed parsing] every ps format, on every platform');
+{
+  /*
+   * `ps -o etimes=` gives plain seconds but is a Linux extension: macOS
+   * prints nothing for it, so identity checks failed there entirely. CI
+   * caught that; these cases cover the portable `etime` format so the
+   * parsing cannot regress silently on a platform nobody is sitting at.
+   */
+  check('mm:ss', parseElapsed('05:30') === 330, String(parseElapsed('05:30')));
+  check('hh:mm:ss', parseElapsed('01:05:30') === 3930, String(parseElapsed('01:05:30')));
+  check('dd-hh:mm:ss', parseElapsed('2-01:05:30') === 176_730, String(parseElapsed('2-01:05:30')));
+  check('leading spaces tolerated', parseElapsed('   00:07 ') === 7);
+  check('nonsense is rejected', parseElapsed('not-a-duration') === null);
+  check('empty is rejected', parseElapsed('') === null);
+}
 
 console.log('\n[start time] readable for a live process');
 {
