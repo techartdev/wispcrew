@@ -14,6 +14,7 @@ import {
   McpPanel,
   NewAgentPanel,
   HistoryPanel,
+  RoomPanel,
   NodesPanel,
   RoutinesPanel,
   SettingsPanel,
@@ -29,6 +30,7 @@ type Panel =
   | 'history'
   | 'routines'
   | 'skills'
+  | 'room'
   | 'new-agent'
   | null;
 
@@ -115,6 +117,26 @@ export function App() {
     [actions],
   );
 
+  /*
+   * The room for the current selection.
+   *
+   * A migrated room reuses its agent's id, so the same selection identifies
+   * both and no second selector is needed.
+   */
+  const room = useMemo(
+    () => state.conversations.find((c) => c.id === selectedId),
+    [state.conversations, selectedId],
+  );
+
+  /*
+   * A mention the composer should insert.
+   *
+   * Clicking a participant types their handle rather than sending anything:
+   * the user is usually part-way through a sentence, and sending on click
+   * would lose it.
+   */
+  const [draftMention, setDraftMention] = useState<string | null>(null);
+
   const configuredServers = useMemo(() => settings?.mcpServers ?? [], [settings?.mcpServers]);
 
   /*
@@ -194,6 +216,47 @@ export function App() {
           </div>
         </header>
 
+        {/*
+          Who is in this room.
+
+          Shown inline rather than behind a modal: membership is context you
+          want WHILE typing, because knowing @linux is present is what tells
+          you the handle exists. Hidden entirely for a room with one agent,
+          which is still the common case and needs no explanation.
+        */}
+        {room && room.participants.filter((p) => p.kind === 'agent').length > 1 && (
+          <div className="room-strip">
+            <span className="muted small">In this room:</span>
+            {room.participants
+              .filter((p) => p.kind === 'agent')
+              .map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="room-chip"
+                  title="Insert a mention"
+                  onClick={() => setDraftMention(`@${(p as { handle: string }).handle}`)}
+                >
+                  @{(p as { handle: string }).handle}
+                </button>
+              ))}
+            <span className="room-strip-spacer" />
+            <select
+              className="room-mode"
+              value={room.mode}
+              title="How much the room constrains who speaks"
+              onChange={(e) => void actions.setRoomMode(e.target.value)}
+            >
+              <option value="directed">Directed</option>
+              <option value="open">Open</option>
+              <option value="free">Free</option>
+            </select>
+            <button type="button" className="btn" onClick={() => setPanel('room')}>
+              Members
+            </button>
+          </div>
+        )}
+
         {needsOnboarding && (
           <div className="onboard-banner">
             <div>
@@ -221,6 +284,8 @@ export function App() {
           runState={runState}
           skills={skills}
           onSend={send}
+          insertText={draftMention}
+          onInsertConsumed={() => setDraftMention(null)}
           onInterrupt={() => void actions.interrupt()}
           onResolveApproval={(id, res) => void actions.resolveApproval(id, res)}
           onOpenSettings={() => setPanel('settings')}
@@ -301,6 +366,17 @@ export function App() {
             setPanel(null);
           }}
           onPickDirectory={actions.pickDirectory}
+          onClose={() => setPanel(null)}
+        />
+      )}
+
+      {panel === 'room' && room && (
+        <RoomPanel
+          room={room}
+          agents={state.agents}
+          onAdd={(id) => void actions.addRoomAgent(id)}
+          onRemove={(id) => void actions.removeRoomParticipant(id)}
+          onSetMode={(mode) => void actions.setRoomMode(mode)}
           onClose={() => setPanel(null)}
         />
       )}

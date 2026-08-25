@@ -1068,6 +1068,48 @@ body {
   font-size: 12.5px;
 }
 
+/* Who is in the room.
+
+   Inline under the header rather than in a modal: membership is context you
+   want while typing, because knowing @linux is present is what tells you the
+   handle exists. Hidden entirely for a one-agent room. */
+.room-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-inset);
+  flex-wrap: wrap;
+}
+
+.room-strip-spacer {
+  flex: 1 1 auto;
+}
+
+/* A handle, clickable to insert a mention. Reads as a token rather than a
+   button, because it is a name. */
+.room-chip {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: pointer;
+}
+
+.room-chip:hover {
+  border-color: var(--accent);
+}
+
+.room-mode {
+  font-size: 12.5px;
+  padding: 3px 8px;
+  width: auto;
+}
+
 /* Settings groups. The panel had outgrown a single scroll, so its existing
    sections became tabs. */
 .tabs {

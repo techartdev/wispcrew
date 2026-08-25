@@ -16,6 +16,7 @@ import type {
   ApprovalPolicy,
   GlobalSettings,
   McpServerRecord,
+  ConversationRecord,
   HistoryPoint,
   McpServerStatus,
   NodeSummary,
@@ -1265,6 +1266,111 @@ export function AgentPanel({
           </button>
         </div>
       </footer>
+    </Modal>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Room — who is in this conversation                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Members of a room.
+ *
+ * Phrased around what the user is deciding rather than the data model:
+ * "who can answer here", not "participant collection". Removing an agent
+ * says what is and is not lost, because that is the question someone
+ * actually has at that moment.
+ */
+export function RoomPanel({
+  room,
+  agents,
+  onAdd,
+  onRemove,
+  onSetMode,
+  onClose,
+}: {
+  room: ConversationRecord;
+  agents: AgentRecord[];
+  onAdd: (agentId: string) => void;
+  onRemove: (participantId: string) => void;
+  onSetMode: (mode: string) => void;
+  onClose: () => void;
+}) {
+  const inRoom = room.participants.filter((p) => p.kind === 'agent');
+  const available = agents.filter((a) => !inRoom.some((p) => p.id === a.id));
+
+  return (
+    <Modal title={`Who is in "${room.title}"`} onClose={onClose} wide>
+      <p className="muted">
+        Everyone here sees every message. Who <em>answers</em> depends on how you address
+        them: tag an agent with its handle, use <code>@all</code> for the room, or just
+        keep typing to continue with whoever you last addressed.
+      </p>
+
+      <h3>Agents</h3>
+      <div className="node-list">
+        {inRoom.map((p) => {
+          const handle = (p as { handle: string }).handle;
+          const record = agents.find((a) => a.id === p.id);
+          const invited = (p as { invitedBy?: string }).invitedBy;
+
+          return (
+            <div key={p.id} className="node-row">
+              <div className="node-main">
+                <strong>@{handle}</strong>
+                <span className="muted"> — {record?.name ?? 'deleted agent'}</span>
+              </div>
+              <div className="muted small">
+                {invited ? 'Invited for this conversation' : 'Added by you'}
+              </div>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => onRemove(p.id)}
+                disabled={inRoom.length <= 1}
+                title={
+                  inRoom.length <= 1
+                    ? 'A conversation needs at least one agent'
+                    : 'Remove from this conversation'
+                }
+              >
+                Remove
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {available.length > 0 && (
+        <>
+          <h3>Add an agent</h3>
+          <p className="muted small">
+            Its conversation elsewhere is unaffected — an agent can be in several rooms.
+          </p>
+          <div className="row-actions">
+            {available.map((a) => (
+              <button key={a.id} type="button" className="btn" onClick={() => onAdd(a.id)}>
+                + {a.name}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      <h3>Who may speak</h3>
+      <label className="field">
+        <span>Mode</span>
+        <select value={room.mode} onChange={(e) => onSetMode(e.target.value)}>
+          <option value="directed">Directed — only agents you tag</option>
+          <option value="open">Open — untagged agents may offer to answer</option>
+          <option value="free">Free — any agent may answer</option>
+        </select>
+      </label>
+      <p className="muted small">
+        Agents never reply to each other unless addressed, in any mode, and a run of agent
+        turns stops to check with you before it can get away from itself.
+      </p>
     </Modal>
   );
 }

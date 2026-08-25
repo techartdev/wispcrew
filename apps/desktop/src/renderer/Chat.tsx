@@ -20,6 +20,14 @@ interface ChatProps {
   runState: AgentRunState;
   skills: SkillRecord[];
   onSend(prompt: string, attachmentPaths?: string[]): void;
+  /**
+   * Text to append to the draft, e.g. a handle the user clicked.
+   *
+   * Appended rather than replacing, and cleared once consumed, so a
+   * half-written sentence survives.
+   */
+  insertText?: string | null;
+  onInsertConsumed?: () => void;
   onInterrupt(): void;
   onResolveApproval(requestId: string, resolution: 'allow-once' | 'allow-always' | 'deny'): void;
   onOpenSettings(): void;
@@ -111,6 +119,7 @@ function ToolCard({ entry }: { entry: Extract<TranscriptEntry, { kind: 'tool-cal
   // Long tool output is collapsed by default: a 4000-character file dump
   // would otherwise bury the assistant's actual answer.
   const [open, setOpen] = useState(false);
+
   const args = entry.args ? JSON.stringify(entry.args) : '';
   const preview = args.length > 90 ? `${args.slice(0, 90)}…` : args;
 
@@ -222,6 +231,8 @@ export function Chat({
   runState,
   skills,
   onSend,
+  insertText,
+  onInsertConsumed,
   onInterrupt,
   onResolveApproval,
   onOpenSettings,
@@ -234,6 +245,21 @@ export function Chat({
   hasProvider,
 }: ChatProps) {
   const [draft, setDraft] = useState('');
+
+  /*
+   * A handle clicked in the room strip.
+   *
+   * Appended rather than replacing, with a trailing space so the user can
+   * keep typing — they are usually part-way through a sentence, and
+   * clobbering it would be worse than making them type the handle. The
+   * parent is told immediately, so clicking the same handle twice works.
+   */
+  useEffect(() => {
+    if (!insertText) return;
+    setDraft((current) => (current ? `${current.trimEnd()} ${insertText} ` : `${insertText} `));
+    onInsertConsumed?.();
+  }, [insertText, onInsertConsumed]);
+
   /** Absolute paths staged for the next message. */
   const [pending, setPending] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);

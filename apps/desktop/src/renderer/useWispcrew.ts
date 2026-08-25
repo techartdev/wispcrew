@@ -13,6 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  ConversationRecord,
   AgentRecord,
   AgentRunState,
   BridgeEvent,
@@ -61,6 +62,13 @@ export function useWispcrew() {
   const [personas, setPersonas] = useState<PersonaView[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServerStatus[]>([]);
   const [nodes, setNodes] = useState<NodeSummary[]>([]);
+  /*
+   * Rooms, keyed the same way agents are.
+   *
+   * A migrated room reuses its agent id, so the current selection
+   * identifies both and no second selector is needed.
+   */
+  const [conversations, setConversations] = useState<ConversationRecord[]>([]);
   const [routines, setRoutines] = useState<RoutineRecord[]>([]);
   const [skills, setSkills] = useState<SkillRecord[]>([]);
   const [grants, setGrants] = useState<ToolGrant[]>([]);
@@ -82,6 +90,18 @@ export function useWispcrew() {
   const api = window.wispcrew;
 
   /** Surface an error to the user instead of losing it in the console. */
+  /*
+   * Swap one room in the list.
+   *
+   * These calls return the updated record, so refetching the whole
+   * list would be a round trip for something already in hand.
+   */
+  const replaceRoom = useCallback(
+    (updated: ConversationRecord | undefined) => (current: ConversationRecord[]) =>
+      updated ? current.map((c) => (c.id === updated.id ? updated : c)) : current,
+    [],
+  );
+
   const fail = useCallback((err: unknown) => {
     const text = err instanceof Error ? err.message : String(err);
     setToast({ level: 'error', text });
@@ -93,7 +113,7 @@ export function useWispcrew() {
     let cancelled = false;
     void (async () => {
       try {
-        const [a, s, p, pe, m, r, sk, gr, oa, det, nd] = await Promise.all([
+        const [a, s, p, pe, m, r, sk, gr, oa, det, nd, cv] = await Promise.all([
           api.listAgents(),
           api.getSettings(),
           api.getPresets(),
@@ -105,6 +125,7 @@ export function useWispcrew() {
           api.listOAuthStatus(),
           api.listDetectedCliSignIns(),
           api.listNodes(),
+          api.listConversations(),
         ]);
         if (cancelled) return;
         // Defence in depth: main already repairs malformed stores, but a
@@ -124,6 +145,7 @@ export function useWispcrew() {
         setOauthStatuses(arr<OAuthStatusView>(oa));
         setDetectedSignIns(arr<DetectedSignIn>(det));
         setNodes(arr<NodeSummary>(nd));
+        setConversations(arr<ConversationRecord>(cv));
         setSelectedId((prev) => prev ?? agentList[0]?.id ?? null);
         setReady(true);
       } catch (err) {
@@ -285,7 +307,42 @@ export function useWispcrew() {
       async send(prompt: string, attachmentPaths?: string[]) {
         if (!selectedRef.current) return;
         try {
-          await api.sendPrompt(selectedRef.current, prompt, attachmentPaths);
+          /*
+           * Through the ROOM, so who acts follows the floor rules: a tagged
+           * agent, everyone on `@all`, or whoever this person last
+           * addressed. A room with one agent behaves exactly as before.
+           */
+          await api.sendToRoom(selectedRef.current, prompt, attachmentPaths);
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      /** Add an agent to the selected room. */
+      async addRoomAgent(agentId: string) {
+        if (!selectedRef.current) return;
+        try {
+          setConversations(replaceRoom(await api.addRoomAgent(selectedRef.current, agentId)));
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      async removeRoomParticipant(participantId: string) {
+        if (!selectedRef.current) return;
+        try {
+          setConversations(
+            replaceRoom(await api.removeRoomParticipant(selectedRef.current, participantId)),
+          );
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      async setRoomMode(mode: string) {
+        if (!selectedRef.current) return;
+        try {
+          setConversations(replaceRoom(await api.setRoomMode(selectedRef.current, mode as never)));
         } catch (err) {
           fail(err);
         }
@@ -612,6 +669,7 @@ export function useWispcrew() {
       personas,
       mcpServers,
       nodes,
+      conversations,
       routines,
       skills,
       grants,
