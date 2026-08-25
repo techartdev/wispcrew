@@ -14,7 +14,8 @@
   "scripts": {
     "//build": "Packages are built in dependency order. `--workspaces` runs them in an arbitrary order, which breaks a fresh clone: everything imports @ghostbot/shared, and TypeScript resolves it to dist/ that does not exist yet.",
     "build:packages": "npm run build --workspace @ghostbot/shared && npm run build --workspace @ghostbot/tools && npm run build --workspace @ghostbot/llm && npm run build --workspace @ghostbot/mcp && npm run build --workspace @ghostbot/core && npm run build --workspace @ghostbot/runtime",
-    "build": "npm run build:packages && npm run build --workspace @ghostbot/desktop",
+    "//build-daemon": "The daemon is built alongside the desktop app, not on demand. Tests spawn `apps/daemon/dist/cli.js` as a real process, and on a fresh clone that file did not exist — the spawn failed silently and the suite reported a timeout instead of a missing build.",
+    "build": "npm run build:packages && npm run build --workspace @ghostbot/daemon && npm run build --workspace @ghostbot/desktop",
     "//typecheck": "Typechecking also needs the declaration files, so build the packages first. On a fresh clone this is the difference between a clean run and a wall of TS2307.",
     "version:show": "node scripts/set-version.mjs",
     "version:set": "node scripts/set-version.mjs",

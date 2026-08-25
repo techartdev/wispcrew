@@ -25,6 +25,19 @@ const check = (label, cond, detail) => {
 };
 
 const cli = fileURLToPath(new URL('../../../apps/daemon/dist/cli.js', import.meta.url));
+
+/*
+ * Say what is wrong rather than timing out.
+ *
+ * On a fresh clone the daemon has not been built, and the spawn then fails
+ * silently — reporting a timeout that points at scheduling or sockets rather
+ * than at the build.
+ */
+if (!fs.existsSync(cli)) {
+  console.error(`  FAIL the daemon is not built — expected ${cli}`);
+  console.error('       run: npm run build');
+  process.exit(1);
+}
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gb-remote-'));
 const PORT = 18787;
 

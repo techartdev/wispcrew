@@ -81,6 +81,19 @@ console.log('\n[guard] a second daemon on the same profile is refused');
 {
   const cli = fileURLToPath(new URL('../../../apps/daemon/dist/cli.js', import.meta.url));
 
+  /*
+   * Say what is wrong rather than timing out.
+   *
+   * On a fresh clone the daemon had not been built, so the spawn failed
+   * silently and this reported "first daemon started — timed out" — which
+   * sent me looking at scheduling and sockets instead of the build order.
+   */
+  if (!fs.existsSync(cli)) {
+    console.error(`  FAIL the daemon is not built — expected ${cli}`);
+    console.error('       run: npm run build');
+    process.exit(1);
+  }
+
   const first = spawn(process.execPath, [cli, 'serve', '--data-dir', dir, '--listen'], {
     detached: true, stdio: 'ignore',
   });
