@@ -279,6 +279,8 @@ export function App() {
           onSave={actions.saveSettings}
           onTest={actions.testConnection}
           onPickDirectory={actions.pickDirectory}
+          onTestTelegram={actions.testTelegram}
+          onDiscoverChatId={actions.discoverChatId}
           onClose={() => setPanel(null)}
         />
       )}

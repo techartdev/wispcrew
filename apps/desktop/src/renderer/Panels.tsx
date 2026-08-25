@@ -401,7 +401,204 @@ interface SettingsPanelProps {
     baseUrl?: string;
   }): Promise<{ ok: boolean; error?: string; latencyMs?: number }>;
   onPickDirectory(): Promise<string | null>;
+  /** Send a real Telegram message, so a wrong chat id is caught at setup. */
+  onTestTelegram(): Promise<{ ok: boolean; error?: string }>;
+  /** Read the chat id from a bot the user has already messaged. */
+  onDiscoverChatId(): Promise<string | null>;
   onClose(): void;
+}
+
+/**
+ * Settings groups.
+ *
+ * Ordered by how often they are needed: the provider must work before
+ * anything else does; appearance is set once and forgotten.
+ */
+const SETTINGS_TABS = [
+  { id: 'provider', label: 'Provider' },
+  { id: 'agents', label: 'Agent defaults' },
+  { id: 'permissions', label: 'Permissions' },
+  { id: 'channels', label: 'Notifications' },
+  { id: 'appearance', label: 'Appearance' },
+] as const;
+
+type SettingsTab = (typeof SETTINGS_TABS)[number]['id'];
+
+/**
+ * Where agents may reach the user.
+ *
+ * Its own tab because it is the one setting that sends something off the
+ * machine, and that deserves room to explain itself rather than a checkbox
+ * among provider fields.
+ */
+function ChannelsSection({
+  settings,
+  onSave,
+  onTestTelegram,
+  onDiscoverChatId,
+}: {
+  settings: SettingsView;
+  onSave: (patch: Partial<GlobalSettings> & { telegramToken?: string }) => void;
+  onTestTelegram: () => Promise<{ ok: boolean; error?: string }>;
+  onDiscoverChatId: () => Promise<string | null>;
+}) {
+  const [enabled, setEnabled] = useState<string[]>(settings.channels?.enabled ?? []);
+  const [token, setToken] = useState('');
+  const [chatId, setChatId] = useState(settings.channels?.telegram?.chatId ?? '');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const telegramReady = Boolean(settings.channels?.telegram?.configured);
+
+  const toggle = (id: string) => {
+    const next = enabled.includes(id) ? enabled.filter((c) => c !== id) : [...enabled, id];
+    setEnabled(next);
+    onSave({ channels: { ...settings.channels, enabled: next as never } });
+  };
+
+  return (
+    <section className="panel-section">
+      <h3>How agents reach you</h3>
+      <p className="muted small">
+        An agent working on a schedule can tell you what it found. Choose where it may do
+        that. Whatever it sends is written to the conversation as well.
+      </p>
+
+      <label className="field checkbox-field">
+        <input type="checkbox" checked disabled />
+        <span>
+          The conversation <em className="muted">— always on, seen when you next look</em>
+        </span>
+      </label>
+
+      <label className="field checkbox-field">
+        <input
+          type="checkbox"
+          checked={enabled.includes('desktop')}
+          onChange={() => toggle('desktop')}
+        />
+        <span>
+          Desktop notification <em className="muted">— appears while the app is open</em>
+        </span>
+      </label>
+
+      <label className="field checkbox-field">
+        <input
+          type="checkbox"
+          checked={enabled.includes('telegram')}
+          onChange={() => toggle('telegram')}
+          disabled={!telegramReady}
+        />
+        <span>
+          Telegram{' '}
+          <em className="muted">
+            {telegramReady
+              ? '— a direct message, even with the app closed'
+              : '— set up below to enable'}
+          </em>
+        </span>
+      </label>
+
+      <h3>Telegram</h3>
+      <p className="muted small">
+        The only channel that reaches you away from this computer. You create the bot, so
+        nothing passes through a GhostBot service and only your own agents can write to it.
+      </p>
+      <ol className="muted small steps">
+        <li>
+          Message <code>@BotFather</code> on Telegram and send <code>/newbot</code>.
+        </li>
+        <li>Paste the token it gives you below and press Save.</li>
+        <li>Send your new bot any message, then press Find my chat.</li>
+      </ol>
+
+      <label className="field">
+        <span>
+          Bot token
+          {telegramReady && <em className="muted"> — saved; enter a new one to replace it</em>}
+        </span>
+        <input
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          placeholder={telegramReady ? 'saved' : '123456:ABC-DEF...'}
+          spellCheck={false}
+        />
+      </label>
+
+      <label className="field">
+        <span>Chat</span>
+        <input
+          value={chatId}
+          onChange={(e) => setChatId(e.target.value)}
+          placeholder="Press Find my chat after messaging your bot"
+          spellCheck={false}
+        />
+      </label>
+
+      {result && <p className={result.ok ? 'muted small' : 'list-error'}>{result.text}</p>}
+
+      <div className="row-actions">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy !== null}
+          onClick={() => {
+            onSave({
+              channels: { ...settings.channels, telegram: { configured: true, chatId } },
+              telegramToken: token || undefined,
+            });
+            setToken('');
+            setResult({ ok: true, text: 'Saved.' });
+          }}
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy !== null}
+          onClick={() => {
+            setBusy('discover');
+            setResult(null);
+            void onDiscoverChatId().then((found) => {
+              setBusy(null);
+              if (found) {
+                setChatId(found);
+                setResult({ ok: true, text: 'Found your chat. Press Save to keep it.' });
+              } else {
+                setResult({
+                  ok: false,
+                  text: 'No message found. Send your bot something first, then try again.',
+                });
+              }
+            });
+          }}
+        >
+          {busy === 'discover' ? 'Looking...' : 'Find my chat'}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy !== null || !telegramReady}
+          onClick={() => {
+            setBusy('test');
+            setResult(null);
+            void onTestTelegram().then((r) => {
+              setBusy(null);
+              setResult(
+                r.ok
+                  ? { ok: true, text: 'Sent. Check Telegram.' }
+                  : { ok: false, text: r.error ?? 'Could not send.' },
+              );
+            });
+          }}
+        >
+          {busy === 'test' ? 'Sending...' : 'Send a test'}
+        </button>
+      </div>
+    </section>
+  );
 }
 
 export function SettingsPanel({
@@ -420,8 +617,11 @@ export function SettingsPanel({
   onSave,
   onTest,
   onPickDirectory,
+  onTestTelegram,
+  onDiscoverChatId,
   onClose,
 }: SettingsPanelProps) {
+  const [tab, setTab] = useState<SettingsTab>('provider');
   const [presetId, setPresetId] = useState(settings.presetId ?? 'deepseek');
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState(settings.model ?? '');
@@ -476,6 +676,30 @@ export function SettingsPanel({
 
   return (
     <Modal title="Settings" onClose={onClose} wide>
+
+        {/*
+          Grouped rather than one long scroll.
+
+          The panel had reached 327 lines covering provider setup, agent
+          defaults, permissions and appearance; notifications would have made
+          it worse. The sections already existed, so this only groups them.
+        */}
+        <div className="tabs" role="tablist">
+          {SETTINGS_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              className={tab === t.id ? "tab active" : "tab"}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'provider' && <div className="tab-panel">
       <section className="panel-section">
         <h3>Model provider</h3>
         <div className="provider-grid">
@@ -588,7 +812,17 @@ export function SettingsPanel({
           )}
         </div>
       </section>
+      <footer className="modal-foot">
+        <button type="button" className="btn" onClick={onClose}>
+          Cancel
+        </button>
+        <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={saving}>
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </footer>
+        </div>}
 
+        {tab === 'agents' && <div className="tab-panel">
       <section className="panel-section">
         <h3>Defaults for new agents</h3>
         <label className="field">
@@ -621,7 +855,9 @@ export function SettingsPanel({
           </div>
         </label>
       </section>
+        </div>}
 
+        {tab === 'permissions' && <div className="tab-panel">
       <section className="panel-section">
         <h3>Tool permissions</h3>
         <div className="radio-list">
@@ -653,7 +889,6 @@ export function SettingsPanel({
           </p>
         )}
       </section>
-
       <section className="panel-section">
         <h3>Standing permissions</h3>
         {grants.length === 0 ? (
@@ -701,7 +936,18 @@ export function SettingsPanel({
           </>
         )}
       </section>
+        </div>}
 
+        {tab === 'channels' && <div className="tab-panel">
+          <ChannelsSection
+            settings={settings}
+            onSave={onSave}
+            onTestTelegram={onTestTelegram}
+            onDiscoverChatId={onDiscoverChatId}
+          />
+        </div>}
+
+        {tab === 'appearance' && <div className="tab-panel">
       <section className="panel-section">
         <h3>Appearance</h3>
         <label className="field">
@@ -713,15 +959,8 @@ export function SettingsPanel({
           </select>
         </label>
       </section>
+        </div>}
 
-      <footer className="modal-foot">
-        <button type="button" className="btn" onClick={onClose}>
-          Cancel
-        </button>
-        <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-      </footer>
     </Modal>
   );
 }

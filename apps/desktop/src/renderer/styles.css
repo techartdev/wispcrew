@@ -1068,6 +1068,71 @@ body {
   font-size: 12.5px;
 }
 
+/* Settings groups. The panel had outgrown a single scroll, so its existing
+   sections became tabs. */
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 0 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  /* Sits on the container's border so the active tab reads as connected to
+     its panel rather than floating above it. */
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.tab-panel > .panel-section:first-child {
+  margin-top: 0;
+}
+
+/* A checkbox belongs beside its label, not above it: `.field` stacks by
+   design, which is right for text inputs and wrong here. */
+.checkbox-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.checkbox-field input[type='checkbox'] {
+  width: auto;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+}
+
+.checkbox-field > span {
+  display: block;
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+/* Numbered setup instructions read as steps, so they keep their numbers. */
+.steps {
+  margin: 6px 0 14px;
+  padding-left: 22px;
+  line-height: 1.7;
+}
+
 /* Paired machines. Each row states what would be lost by forgetting it,
    because that is the decision the user is actually making. */
 .node-list {

@@ -312,6 +312,23 @@ export function useGhostbot() {
         }
       },
 
+      /** Confirm Telegram works by sending a real message. */
+      async testTelegram() {
+        try {
+          return await api.testTelegram();
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : String(err) };
+        }
+      },
+
+      async discoverChatId() {
+        try {
+          return await api.discoverChatId();
+        } catch {
+          return null;
+        }
+      },
+
       /** Earlier versions of the selected conversation, newest first. */
       async listHistory() {
         if (!selectedRef.current) return [];

@@ -97,6 +97,10 @@ const bridge: GhostBridge = {
   forgetNode: (nodeId: string) => ipcRenderer.invoke('gb:forgetNode', nodeId),
 
   // Recovering an earlier version of a conversation.
+  // Notification channel setup.
+  testTelegram: () => ipcRenderer.invoke('gb:testTelegram'),
+  discoverChatId: () => ipcRenderer.invoke('gb:discoverChatId'),
+
   listHistory: (agentId: string) => ipcRenderer.invoke('gb:listHistory', agentId),
   restoreHistory: (agentId: string, file: string) =>
     ipcRenderer.invoke('gb:restoreHistory', agentId, file),

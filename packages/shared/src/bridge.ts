@@ -306,6 +306,14 @@ export interface GhostBridge {
   /** Forget a node and delete its token. */
   forgetNode(nodeId: string): Promise<NodeSummary[]>;
 
+  /* -- notification channels ------------------------------------ */
+
+  /** Send a real test message, so a wrong chat id is caught at setup. */
+  testTelegram(): Promise<{ ok: boolean; error?: string }>;
+
+  /** Read the chat id from a bot the user has already messaged. */
+  discoverChatId(): Promise<string | null>;
+
   /* -- history recovery ----------------------------------------- */
 
   /**

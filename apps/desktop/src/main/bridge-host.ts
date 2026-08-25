@@ -56,8 +56,12 @@ import {
   addEventSink,
   addNode,
   emitEngineEvent,
+  discoverChatId,
+  getSecret,
   listCheckpoints,
   readCheckpoint,
+  TELEGRAM_TOKEN_KEY,
+  testTelegram,
   listNodes,
   pairWithNode,
   removeNode,
@@ -418,7 +422,26 @@ export function registerBridge(context: BridgeContext): void {
         if (agentNode) return (await agentNode.call(name, args)) as T;
 
         const remote = context.remote?.();
-        if (remote) return (await remote.call(name, args)) as T;
+        if (remote) {
+          const value = (await remote.call(name, args)) as T;
+
+          /*
+           * Encryption at rest is a property of THIS machine.
+           *
+           * A daemon has no OS keychain, so forwarding `getSettings`
+           * verbatim made the UI announce that keys were stored in plaintext
+           * — alarming, and false, because the desktop wrote them with the
+           * keychain. The client answers for its own storage.
+           */
+          if (name === 'getSettings' && value && typeof value === 'object') {
+            return {
+              ...(value as Record<string, unknown>),
+              isEncrypted: isEncryptionAvailable(),
+              encryptionDescription: undefined,
+            } as T;
+          }
+          return value;
+        }
       }
 
       try {
@@ -763,20 +786,36 @@ export function registerBridge(context: BridgeContext): void {
 
   handle('getSettings', () => settingsView());
 
-  handle('saveSettings', (patch: Partial<GlobalSettings> & { apiKey?: string }) => {
-    const { apiKey, ...rest } = patch;
+  handle(
+    'saveSettings',
+    (patch: Partial<GlobalSettings> & { apiKey?: string; telegramToken?: string }) => {
+      const { apiKey, telegramToken, ...rest } = patch;
+
+      /*
+       * A bot token is a credential, treated like an API key.
+       *
+       * It grants the ability to send as that bot for as long as it
+       * exists, so it goes to the encrypted store and never to the
+       * settings file, which is plaintext JSON a user might well paste
+       * into a bug report.
+       */
+      if (telegramToken) {
+        upsertSecrets(ctx.userDataDir, [{ key: TELEGRAM_TOKEN_KEY, value: telegramToken }]);
+      }
+
     // The key goes to the encrypted store; it must never reach the settings
     // file, which is plaintext JSON. It is stored against the provider it was
     // entered for, so configuring a second provider later does not silently
     // hand it this one's key.
-    const keyPreset = patch.presetId ?? (currentSettings().presetId as string | undefined);
-    if (apiKey && keyPreset) setProviderKey(ctx.userDataDir, keyPreset, apiKey);
-    writeSettings(ctx.userDataDir, { ...rest, apiKey: undefined } as never);
-    if (rest.mcpServers) {
-      void syncMcpServers(readSettings(ctx.userDataDir, {}) as never).then(emitMcp);
-    }
-    return settingsView();
-  });
+      const keyPreset = patch.presetId ?? (currentSettings().presetId as string | undefined);
+      if (apiKey && keyPreset) setProviderKey(ctx.userDataDir, keyPreset, apiKey);
+      writeSettings(ctx.userDataDir, { ...rest, apiKey: undefined } as never);
+      if (rest.mcpServers) {
+        void syncMcpServers(readSettings(ctx.userDataDir, {}) as never).then(emitMcp);
+      }
+      return settingsView();
+    },
+  );
 
   handle('getPresets', () =>
     PROVIDER_PRESETS.map((preset) => ({
@@ -1001,6 +1040,37 @@ export function registerBridge(context: BridgeContext): void {
     // `openPath` refuses anything that is not an existing file/dir, and we
     // never pass a URL here, so this cannot be turned into a browser launcher.
     await shell.openPath(target);
+  });
+
+  /* -- notification channels ------------------------------------ */
+
+  /**
+   * Send a real message to confirm the setup works.
+   *
+   * The only way to know a chat id is right is for something to arrive. A
+   * user who sees nothing knows immediately, rather than discovering it the
+   * first time an agent has something worth saying.
+   */
+  handle('testTelegram', async () => {
+    const token = getSecret(ctx.userDataDir, TELEGRAM_TOKEN_KEY);
+    const settings = readSettings(ctx.userDataDir, ctx.defaults()) as GlobalSettings;
+    const chatId = settings.channels?.telegram?.chatId;
+
+    if (!token) return { ok: false, error: 'No bot token saved yet.' };
+    if (!chatId) return { ok: false, error: 'No chat selected yet. Press Find my chat.' };
+    return testTelegram({ token, chatId });
+  });
+
+  /**
+   * Read the chat id from a bot the user has already messaged.
+   *
+   * Asking someone to find their own numeric chat id is a genuinely poor
+   * first experience; Telegram will report it once they have written to the
+   * bot.
+   */
+  handle('discoverChatId', async () => {
+    const token = getSecret(ctx.userDataDir, TELEGRAM_TOKEN_KEY);
+    return token ? discoverChatId(token) : null;
   });
 
   handle('getAppInfo', () => ({
