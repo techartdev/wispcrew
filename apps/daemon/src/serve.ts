@@ -30,7 +30,9 @@ import {
   clearEndpoint,
   generateToken,
   host,
+  loadOrCreateIdentity,
   localAddress,
+  PairingWindow,
   readEndpoint,
   serveNode,
   writeEndpoint,
@@ -38,6 +40,7 @@ import {
 } from '@ghostbot/runtime';
 import type { BridgeEvent } from '@ghostbot/shared';
 import { createServer } from 'node:net';
+import { createServer as createTlsServer } from 'node:tls';
 import { unlinkSync } from 'node:fs';
 
 export interface ServeOptions {
@@ -54,13 +57,26 @@ export interface ServeOptions {
   listen?: boolean;
   /** Dispatches an authenticated bridge call. Required when `listen`. */
   onCall?: (method: string, args: unknown[]) => Promise<unknown>;
+  /**
+   * Accept clients over the network, not only from this machine.
+   *
+   * Deliberately separate from `listen`: a local socket is protected by file
+   * permissions, a network port is reachable by anything that can route to
+   * it. Exposing one is a decision about risk, so it is made explicitly
+   * rather than implied by wanting a UI to connect.
+   */
+  network?: { host: string; port: number };
+  /** Open a pairing window at startup so a new client can attach. */
+  pair?: boolean;
 }
 
 export interface RunningDaemon {
   /** Stop the scheduler, close the listener and disconnect MCP servers. */
   stop(): Promise<void>;
-  /** Where clients connect, when listening. */
+  /** Where local clients connect, when listening. */
   address?: string;
+  /** The pairing code to display, when a window was opened. */
+  pairing?: { code: string; fingerprint: string; expiresAt: number };
 }
 
 /**
@@ -150,6 +166,7 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
 
   let listener: { close(): Promise<void> } | null = null;
   let address: string | undefined;
+  let pairingOffer: { code: string; fingerprint: string; expiresAt: number } | undefined;
 
   if (options.listen) {
     if (!options.onCall) {
@@ -181,6 +198,51 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
 
     listener = serveNode({ server, token, nodeName: env.nodeName, onCall: options.onCall });
 
+    /*
+     * A second, TLS listener for clients on other machines.
+     *
+     * The local socket keeps its own token and stays as it is: a machine's
+     * own UI should not need the network path, and leaving it alone means
+     * exposing a node never changes how the local case works.
+     */
+    if (options.network) {
+      const identity = loadOrCreateIdentity(env.dataDir, [
+        env.nodeName,
+        'localhost',
+        options.network.host,
+      ]);
+      const netToken = generateToken();
+      const window = new PairingWindow();
+
+      const tlsServer = createTlsServer({ cert: identity.cert, key: identity.key });
+      await new Promise<void>((resolve, reject) => {
+        tlsServer.once('error', reject);
+        tlsServer.listen(options.network!.port, options.network!.host, () => resolve());
+      });
+
+      const tlsListener = serveNode({
+        server: tlsServer,
+        token: netToken,
+        nodeName: env.nodeName,
+        onCall: options.onCall,
+        pairing: window,
+      });
+
+      if (options.pair) {
+        const offer = window.open(identity.fingerprint, netToken);
+        pairingOffer = offer;
+      }
+
+      const localOnly = listener;
+      listener = {
+        async close() {
+          await Promise.all([localOnly.close(), tlsListener.close()]);
+        },
+      };
+
+      fileLog('[daemon] network listener on', `${options.network.host}:${options.network.port}`);
+    }
+
     // Publish where and how to connect. Written 0600 — the token is a
     // credential, and on a loopback socket it is the only thing standing
     // between another local process and shell access.
@@ -197,6 +259,7 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
 
   return {
     address,
+    pairing: pairingOffer,
     async stop() {
       stopScheduler();
       await listener?.close().catch(() => {});

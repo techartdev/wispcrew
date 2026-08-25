@@ -130,6 +130,34 @@ Worth stating, because scope creep here is fatal:
   explicit export/import, not a live handoff — and pretending otherwise
   invites split-brain on the store.
 
+## What is built
+
+Steps 1–4 are done and verified end to end.
+
+| | Evidence |
+|---|---|
+| Headless runtime | 18 modules, zero Electron imports |
+| `ghostbot serve` | a routine fired with no UI open, against a live model |
+| Desktop as a client | app quit, daemon kept serving, transcripts intact |
+| Pairing over TLS | a real `--network --pair` daemon paired and driven |
+
+The pairing implementation deviates from the sketch above in one way worth
+recording: the **certificate is generated in-process** rather than by
+shelling out to `openssl`, because a stock Windows machine has none on PATH.
+The DER is assembled by hand in `node-tls.ts` — about eighty lines — which
+removes a runtime dependency from a security path at the cost of code that
+must be read carefully. It is verified against Node's own TLS stack rather
+than trusted.
+
+Two bugs that this uncovered are worth remembering:
+
+- `serveNode` listened for `connection`, which on a `tls.Server` fires with
+  the **raw TCP socket before the handshake**. Frames were read as
+  ciphertext, so the node silently ignored everything. It now selects
+  `secureConnection` when handed a TLS server.
+- A refusal was sent and then the socket `destroy`ed, which discards buffered
+  writes — so "wrong pairing code" arrived as an unexplained disconnect.
+
 ## Order of work
 
 Deliberately sequenced so each step is useful alone, and so the seam is

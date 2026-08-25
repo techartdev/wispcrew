@@ -80,8 +80,47 @@ export interface WelcomeFrame {
   version: number;
 }
 
-export type ClientFrame = HelloFrame | RequestFrame;
-export type NodeFrame = WelcomeFrame | ResponseFrame | ErrorFrame | EventFrame;
+/**
+ * A pairing attempt: the only frame accepted without a token.
+ *
+ * Carries the short code the node is displaying, exchanged once for a
+ * long-lived token. See pairing.ts for why the code is short-lived and the
+ * token is never spoken aloud.
+ */
+export interface PairFrame {
+  t: 'pair';
+  code: string;
+  /** Client build, recorded so a user can recognise what they paired. */
+  client: string;
+}
+
+/** A successful pairing: here is your token, reconnect with it. */
+export interface PairedFrame {
+  t: 'paired';
+  token: string;
+  nodeName: string;
+  version: number;
+}
+
+/**
+ * A refused pairing.
+ *
+ * Deliberately one message for wrong, expired and closed: distinguishing
+ * them would tell someone guessing whether they were close.
+ */
+export interface PairFailedFrame {
+  t: 'pair-failed';
+  message: string;
+}
+
+export type ClientFrame = HelloFrame | RequestFrame | PairFrame;
+export type NodeFrame =
+  | WelcomeFrame
+  | ResponseFrame
+  | ErrorFrame
+  | EventFrame
+  | PairedFrame
+  | PairFailedFrame;
 
 /** Bumped when a change would break an older client. */
 export const PROTOCOL_VERSION = 1;

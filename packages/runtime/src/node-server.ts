@@ -22,6 +22,7 @@ import type { Server, Socket } from 'node:net';
 import { timingSafeEqual } from 'node:crypto';
 import type { BridgeEvent } from '@ghostbot/shared';
 import { addEventSink } from './engine-events.js';
+import type { PairingWindow } from './pairing.js';
 import { fileLog } from './filelog.js';
 import {
   decodeFrames,
@@ -43,6 +44,14 @@ export interface NodeServerOptions {
   nodeName: string;
   /** Dispatches an authenticated call to the engine. */
   onCall: MethodHandler;
+  /**
+   * Open pairing window, when the node is accepting new clients.
+   *
+   * Absent means pairing is closed and a `pair` frame is refused — a node
+   * should only be pairable when its owner has just asked for it, not
+   * permanently.
+   */
+  pairing?: PairingWindow;
 }
 
 /**
@@ -69,7 +78,23 @@ export function serveNode(options: NodeServerOptions): { close(): Promise<void> 
   const { server, token, nodeName, onCall } = options;
   const connections = new Set<Socket>();
 
-  server.on('connection', (socket) => {
+  /*
+   * A TLS server emits `secureConnection`, not `connection`.
+   *
+   * `connection` does fire on a tls.Server — with the *raw* TCP socket,
+   * before the handshake. Reading from it yields ciphertext, and writing to
+   * it produces bytes the client cannot interpret. The symptom was a node
+   * that silently ignored every frame: the client connected fine, sent a
+   * pairing request, and received nothing at all.
+   *
+   * Detecting the server kind here keeps one implementation for both
+   * transports, which is the point of taking a listening server rather than
+   * creating one.
+   */
+  const isTls = typeof (server as { setSecureContext?: unknown }).setSecureContext === 'function';
+  const connectionEvent = isTls ? 'secureConnection' : 'connection';
+
+  server.on(connectionEvent, (socket: Socket) => {
     connections.add(socket);
     socket.setEncoding('utf8');
 
@@ -97,6 +122,40 @@ export function serveNode(options: NodeServerOptions): { close(): Promise<void> 
         const frame = raw as HelloFrame | RequestFrame;
 
         if (!authenticated) {
+          /*
+           * Pairing: the one exchange allowed without a token.
+           *
+           * Only while the owner has explicitly opened a window, only once
+           * per window, and the connection is closed straight afterwards so
+           * a paired client reconnects normally with its new token.
+           */
+          if ((frame as { t?: string }).t === 'pair') {
+            const claimed = options.pairing?.claim(
+              String((frame as { code?: unknown }).code ?? ''),
+            );
+            if (claimed) {
+              fileLog('[node] paired a new client');
+              send({ t: 'paired', token: claimed, nodeName, version: PROTOCOL_VERSION });
+            } else {
+              // One message for wrong, expired and closed alike: saying which
+              // would tell an attacker whether a guess was close.
+              fileLog('[node] pairing refused');
+              send({ t: 'pair-failed', message: 'That pairing code is not valid.' });
+            }
+            /*
+             * `end`, not `destroy`.
+             *
+             * `destroy` discards anything still buffered, so the frame just
+             * written never left the machine and the client saw only a
+             * closed socket — a refusal that looked like a network fault.
+             * `end` flushes first, then closes.
+             */
+            detachEvents?.();
+            connections.delete(socket);
+            socket.end();
+            return;
+          }
+
           // Nothing but `hello` is accepted before authentication — not even
           // a harmless-looking read. The method table stays unreachable.
           if (frame?.t !== 'hello' || typeof frame.token !== 'string') {

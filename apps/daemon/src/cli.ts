@@ -10,7 +10,15 @@ import { nodeMethods } from './methods.js';
 import { daemonHost, defaultDataDir } from './daemon-host.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { host, listAgents, listRoutines, readSecrets, setHost } from '@ghostbot/runtime';
+import {
+  DEFAULT_NODE_PORT,
+  host,
+  listAgents,
+  listRoutines,
+  parseAddress,
+  readSecrets,
+  setHost,
+} from '@ghostbot/runtime';
 
 const USAGE = `
 ghostbot — run agents without a window open
@@ -22,13 +30,39 @@ Options
   --data-dir <path>   where agents, transcripts and secrets live
                       (default: the same profile the desktop app uses)
   --workspace <path>  default workspace for agents that set none
+  --listen            accept clients from this machine
+  --network [addr]    accept clients over the network (default 0.0.0.0:8787)
+                      TLS with a self-signed certificate, pinned on pairing
+  --pair              open a pairing window and print a code to enter
   --verbose           print agent output as it happens
   --help              this text
+
+Attaching this machine from elsewhere
+  here:    ghostbot serve --listen --network --pair
+  client:  add a node, then enter this host and the printed code
+
+  The code is single-use and expires in five minutes. Compare the printed
+  fingerprint against the one your client shows before accepting.
 
 Environment
   GHOSTBOT_DATA_DIR   same as --data-dir
   GHOSTBOT_NODE_NAME  how this machine identifies itself (default: hostname)
 `;
+
+/**
+ * Read `--network`, `--network 9000` or `--network 0.0.0.0:9000`.
+ *
+ * Defaults to all interfaces, because a node exposed to the network is
+ * normally reached from another machine — binding loopback would look like
+ * it worked and then refuse every connection.
+ */
+function parseNetwork(value: string | boolean): { host: string; port: number } {
+  if (value === true) return { host: '0.0.0.0', port: DEFAULT_NODE_PORT };
+  const text = String(value);
+  if (/^\d+$/.test(text)) return { host: '0.0.0.0', port: Number(text) };
+  const parsed = parseAddress(text);
+  return { host: parsed.host, port: parsed.port };
+}
 
 function parseArgs(argv: string[]): Record<string, string | boolean> {
   const out: Record<string, string | boolean> = {};
@@ -107,13 +141,21 @@ async function main(): Promise<void> {
  * attack surface for no benefit. The desktop app passes it because it needs
  * to drive the engine; a cron-only node on a VPS does not.
  */
-  const listen = Boolean(args.listen);
+  /*
+   * `--network` implies `--listen`: exposing a node to other machines while
+   * refusing its own is not a state anyone wants, and silently doing nothing
+   * would be worse than assuming the obvious.
+   */
+  const network = args.network ? parseNetwork(args.network) : null;
+  const listen = Boolean(args.listen) || network !== null;
   const methods = listen ? nodeMethods() : null;
 
   const running = await serve({
     host: env,
     verbose: Boolean(args.verbose),
     listen,
+    network: network ?? undefined,
+    pair: Boolean(args.pair),
     onCall: methods
       ? async (method, callArgs) => {
           const fn = methods[method];
@@ -143,6 +185,28 @@ async function main(): Promise<void> {
       );
     }
   }
+  if (network) {
+    console.log(`  network   ${network.host}:${network.port} (TLS)`);
+  }
+
+  if (running.pairing) {
+    const minutes = Math.round((running.pairing.expiresAt - Date.now()) / 60000);
+    console.log('');
+    console.log('  Pair a client with this node');
+    console.log('');
+    console.log(`    code         ${running.pairing.code}`);
+    console.log(`    expires in   ${minutes} minute(s), single use`);
+    console.log('');
+    // Printed so a cautious user can compare it against what the client
+    // shows: that comparison is what closes the one window where an
+    // interceptor could pair someone with the wrong machine.
+    console.log(`    fingerprint  ${running.pairing.fingerprint}`);
+    console.log('');
+    console.log('  Enter the code in your client, and check the fingerprint matches.');
+  } else if (network) {
+    console.log('\n  No pairing window is open. Restart with --pair to attach a new client.');
+  }
+
   console.log('\nRunning. Ctrl+C to stop.');
 
   // Shut down cleanly so MCP child processes do not outlive us as orphans.

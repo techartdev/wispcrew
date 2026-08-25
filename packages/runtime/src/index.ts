@@ -35,5 +35,8 @@ export * from './protocol.js';
 export * from './node-server.js';
 export * from './node-client.js';
 export * from './node-identity.js';
+export * from './node-tls.js';
+export * from './pairing.js';
+export * from './node-remote.js';
 export * from './filelog.js';
 export * from './types.js';
