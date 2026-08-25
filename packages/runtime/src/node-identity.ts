@@ -12,7 +12,7 @@
  * shell commands. The token file is readable only by the owning user, which
  * is the actual boundary being relied on — the socket merely carries it.
  */
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -37,8 +37,17 @@ export interface NodeEndpoint {
  */
 export function localAddress(dataDir: string): string {
   if (process.platform === 'win32') {
-    const slug = Buffer.from(path.resolve(dataDir)).toString('hex').slice(0, 24);
-    return `\\\\.\\pipe\\ghostbot-${slug}`;
+    /*
+     * A digest of the whole path, not a prefix of it.
+     *
+     * Hex-encoding and truncating kept only the first twelve *characters* of
+     * the directory, so every profile under `C:\Users\Someone\…` produced an
+     * identical pipe name. Two profiles on one machine collided and the
+     * second daemon died with EADDRINUSE. Observed while wiring the desktop
+     * to a daemon, not theorised.
+     */
+    const digest = createHash('sha256').update(path.resolve(dataDir)).digest('hex').slice(0, 16);
+    return `\\\\.\\pipe\\ghostbot-${digest}`;
   }
   return path.join(dataDir, 'node.sock');
 }

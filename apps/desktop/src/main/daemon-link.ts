@@ -70,8 +70,18 @@ function daemonEntry(): string | null {
 function spawnDaemon(entry: string, dataDir: string): void {
   const child = spawn(process.execPath, [entry, 'serve', '--data-dir', dataDir, '--listen'], {
     detached: true,
-    // Inherited stdio would keep a handle open to the parent and, on
-    // Windows, keep the child bound to the console that started it.
+    /*
+     * All streams discarded, deliberately.
+     *
+     * Capturing stderr to diagnose a failed start seemed harmless and was
+     * not: an open pipe to a detached child keeps the parent's event loop
+     * alive, so Electron would not quit. The app hung on exit until this
+     * went back to `ignore`.
+     *
+     * The daemon writes to the shared log file instead, which is where its
+     * startup problems belong anyway — a client that has already exited
+     * cannot report them.
+     */
     stdio: 'ignore',
     env: {
       ...process.env,
@@ -80,8 +90,9 @@ function spawnDaemon(entry: string, dataDir: string): void {
       ELECTRON_RUN_AS_NODE: '1',
     },
   });
+
   child.unref();
-  fileLog('[daemon-link] spawned daemon pid', String(child.pid ?? 'unknown'));
+  fileLog('[daemon-link] spawned daemon pid', String(child.pid ?? 'unknown'), 'entry', entry);
 }
 
 /** Wait for a daemon to publish a usable endpoint. */
@@ -114,6 +125,18 @@ export async function linkToDaemon(
   dataDir: string,
   onEvent: (event: unknown) => void,
 ): Promise<DaemonLink | null> {
+  /*
+   * An explicit way back to the single-process app.
+   *
+   * Useful when diagnosing whether a problem belongs to the daemon or to the
+   * app, and as a safety valve for a user whose environment cannot spawn one
+   * — a locked-down machine, an antivirus that objects to a detached child.
+   */
+  if (process.env.GHOSTBOT_NO_DAEMON) {
+    fileLog('[daemon-link] disabled by GHOSTBOT_NO_DAEMON; running in-process');
+    return null;
+  }
+
   let endpoint = readEndpoint(dataDir);
   let started = false;
 
@@ -133,8 +156,25 @@ export async function linkToDaemon(
   }
 
   try {
+    const socket = net.connect(endpoint.address);
+
+    /*
+     * `unref` the socket so it is never a reason to stay alive.
+     *
+     * An open connection is a live handle in the event loop, and Electron
+     * will not exit while one exists. Without this the app HUNG at quit: the
+     * window closed, the daemon was healthy, and the process simply never
+     * ended. Closing the socket in `before-quit` did not help, because the
+     * handle had already pinned the loop.
+     *
+     * Unreferencing does not close it — frames still flow normally while the
+     * app runs. It only removes it from the set of handles keeping the
+     * process alive.
+     */
+    socket.unref();
+
     const client = await connectNode({
-      socket: net.connect(endpoint.address),
+      socket,
       token: endpoint.token,
       clientName: `ghostbot-desktop/${app.getVersion()}`,
       onEvent,

@@ -102,6 +102,24 @@ let mainWindow: BrowserWindow | null = null;
  * daemon, quitting closes a socket and leaves the work running.
  */
 let daemonLink: DaemonLink | null = null;
+
+/**
+ * How long startup waits for a background engine.
+ *
+ * Kept short because nothing is on screen until it resolves. Starting a
+ * daemon takes well under a second when it works; anything longer means
+ * something is wrong, and the user is better served by a running app than a
+ * blank one.
+ */
+const DAEMON_LINK_TIMEOUT_MS = 4000;
+
+/** Resolve with `fallback` if the promise has not settled in time. */
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
 let userDataDir = '';
 
 function buildMenu(): void {
@@ -226,8 +244,19 @@ async function createWindow(): Promise<void> {
         } catch (err) {
           fileLog('[capture] failed', (err as Error).message);
         } finally {
-          if (ok) app.quit();
-          else app.exit(1);
+          /*
+           * `app.exit`, not `app.quit`.
+           *
+           * `quit` waits for outstanding handles, and once the app has
+           * spawned a detached daemon it never stops waiting — measured: the
+           * app rendered correctly and simply never ended, while the same
+           * build with GHOSTBOT_NO_DAEMON exited in 8.6s.
+           *
+           * This is a CI gate that has already captured its screenshot and
+           * written the file, so there is nothing left to flush. Exiting with
+           * the right status is the entire remaining job.
+           */
+          app.exit(ok ? 0 : 1);
         }
       })();
     }, Number(process.env.GHOSTBOT_CAPTURE_DELAY ?? 8000));
@@ -271,16 +300,45 @@ app.whenReady().then(async () => {
   // so adding a second provider does not hand the first one's key to it.
   migrateLegacyKey(userDataDir, (readSettings(userDataDir, {}) as GlobalSettings).presetId);
 
-  // Every install has at least one agent so the UI is never empty.
+  /*
+   * Every install has at least one agent so the UI is never empty.
+   *
+   * Done before the daemon link, while this process is still the only thing
+   * touching the store. The daemon does the same check on its own startup,
+   * so whichever runs first wins and the other sees a non-empty roster —
+   * they never both create one.
+   */
   if (store.listAgents().length === 0) {
     store.createAgent({ name: 'Assistant', persona: 'general' });
     fileLog('[main] created default agent');
   }
 
+  /*
+   * Connect to the background engine before the bridge is registered.
+   *
+   * Order matters: the bridge asks `remote()` on every call, so the link must
+   * exist before the first one arrives. Doing it afterwards would let the
+   * window's opening calls run locally while later ones go to the daemon —
+   * two writers for a moment, which is the state that loses data.
+   *
+   * Bounded, because this blocks the window from opening. A daemon that
+   * cannot be reached quickly is treated as absent and the app runs the
+   * engine itself; an app that will not launch is worse than one whose
+   * agents stop at quit.
+   */
+  daemonLink = await withTimeout(
+    linkToDaemon(userDataDir, (event) => emitEvent(event as never)),
+    DAEMON_LINK_TIMEOUT_MS,
+    null,
+  );
+
   registerBridge({
     userDataDir,
     runPrompt,
     defaults: defaultSettings,
+    // Read per call rather than captured, so losing the daemon mid-session
+    // falls back to the local engine instead of failing every method.
+    remote: () => daemonLink?.client ?? null,
   });
 
   /*
@@ -319,28 +377,29 @@ app.whenReady().then(async () => {
   await createWindow();
 
   /*
-   * The engine still runs in-process, deliberately.
+   * Exactly one engine owns this profile.
    *
-   * Handing the scheduler to a daemon while the window keeps serving chat
-   * would put two processes on one JSON store, and that loses data. Measured,
-   * not assumed: two writers starting from the same snapshot each save the
-   * whole transcript, so the second silently erases the first. A user's typed
-   * message disappearing because a routine fired at the same moment is not an
-   * acceptable failure.
+   * With a daemon attached it runs the scheduler and the MCP servers, and
+   * this process runs neither. Starting a second scheduler here would fire
+   * every routine twice, and a second writer on one JSON store silently
+   * loses updates — measured, see the concurrency note in store.ts.
    *
-   * Atomic writes prevent a *torn* file; they do nothing about a lost update.
-   *
-   * The daemon becomes authoritative once the bridge routes every method
-   * through it (`callBridgeMethod` over the socket), so there is exactly one
-   * writer. Until then the app owns the engine, and `ghostbot serve` is for
-   * machines with no UI — where it is already the only writer.
+   * Without a daemon the app is the engine. That is a real downgrade —
+   * quitting stops agents — but a working app beats refusing to launch
+   * because a background process failed to start.
    */
-  // Connect MCP servers in the background; failures are reported, not fatal.
-  void syncMcpServers(readSettings(userDataDir, defaultSettings()) as never)
-    .then(emitMcp)
-    .catch((err) => fileLog('[mcp] initial sync failed', (err as Error).message));
+  if (daemonLink) {
+    fileLog('[main] engine owned by the daemon:', daemonLink.endpoint.nodeName);
+  } else {
+    fileLog('[main] no daemon reachable; running the engine in-process');
 
-  startScheduler(runRoutine, emitRoutines);
+    // Connect MCP servers in the background; failures are reported, not fatal.
+    void syncMcpServers(readSettings(userDataDir, defaultSettings()) as never)
+      .then(emitMcp)
+      .catch((err) => fileLog('[mcp] initial sync failed', (err as Error).message));
+
+    startScheduler(runRoutine, emitRoutines);
+  }
   emitAgents();
 
   app.on('activate', () => {
@@ -367,4 +426,23 @@ app.on('before-quit', () => {
   }
   stopScheduler();
   void closeAllMcp();
+});
+
+/*
+ * Make sure quitting actually ends the process.
+ *
+ * Spawning a detached daemon leaves this process with handles Electron does
+ * not consider disposable — measured: with a daemon the app rendered and ran
+ * correctly but never exited, while the same build with GHOSTBOT_NO_DAEMON
+ * exited in 8.6s. Chasing each handle individually is a losing game, and a
+ * desktop app that lingers invisibly after the user quits is a bug they will
+ * notice long before they notice why.
+ *
+ * `will-quit` fires after `before-quit`, so the socket has already been
+ * closed and the daemon left running by the time this runs. Exiting here is
+ * therefore a clean shutdown that simply refuses to wait for stragglers.
+ */
+app.on('will-quit', () => {
+  // Give any in-flight write a tick to flush, then leave.
+  setTimeout(() => process.exit(0), 50).unref();
 });
