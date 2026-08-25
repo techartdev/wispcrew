@@ -31,6 +31,7 @@ import {
   generateToken,
   host,
   localAddress,
+  readEndpoint,
   serveNode,
   writeEndpoint,
   type HostEnvironment,
@@ -70,6 +71,26 @@ export interface RunningDaemon {
  */
 export async function serve(options: ServeOptions): Promise<RunningDaemon> {
   setHost(options.host);
+
+  /*
+   * Refuse to start if another daemon already owns this profile.
+   *
+   * Two engines on one JSON store lose data: each loads a collection,
+   * appends to its own copy and saves it back, so the second silently erases
+   * the first. Measured, not assumed — see the concurrency note in store.ts.
+   *
+   * Failing loudly here is far better than the symptom, which is a routine's
+   * output or a user's message disappearing with nothing to explain it.
+   */
+  {
+    const existing = readEndpoint(options.host.dataDir);
+    if (existing && existing.pid !== process.pid) {
+      throw new Error(
+        `Another GhostBot daemon (pid ${existing.pid}) already uses ${options.host.dataDir}.\n` +
+          'Two engines on one profile lose data. Stop that one first, or pass --data-dir.',
+      );
+    }
+  }
 
   const env = host();
   initStore(env.dataDir);

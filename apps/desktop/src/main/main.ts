@@ -55,6 +55,7 @@ import { readSecrets, upsertSecrets } from '@ghostbot/runtime';
 import { migrateUserData } from './userdata-migration.js';
 import { electronHost } from './electron-host.js';
 import { handoffIsCurrent, writeDaemonSecrets } from './secrets-handoff.js';
+import { linkToDaemon, type DaemonLink } from './daemon-link.js';
 import * as store from '@ghostbot/runtime';
 import {
   attachWindowEventSink,
@@ -94,6 +95,13 @@ const ICON_PATH = (() => {
 })();
 
 let mainWindow: BrowserWindow | null = null;
+/**
+ * Set when a background daemon owns the engine; null when running in-process.
+ *
+ * Also the switch that decides whether quitting stops anything: with a
+ * daemon, quitting closes a socket and leaves the work running.
+ */
+let daemonLink: DaemonLink | null = null;
 let userDataDir = '';
 
 function buildMenu(): void {
@@ -310,6 +318,23 @@ app.whenReady().then(async () => {
   buildMenu();
   await createWindow();
 
+  /*
+   * The engine still runs in-process, deliberately.
+   *
+   * Handing the scheduler to a daemon while the window keeps serving chat
+   * would put two processes on one JSON store, and that loses data. Measured,
+   * not assumed: two writers starting from the same snapshot each save the
+   * whole transcript, so the second silently erases the first. A user's typed
+   * message disappearing because a routine fired at the same moment is not an
+   * acceptable failure.
+   *
+   * Atomic writes prevent a *torn* file; they do nothing about a lost update.
+   *
+   * The daemon becomes authoritative once the bridge routes every method
+   * through it (`callBridgeMethod` over the socket), so there is exactly one
+   * writer. Until then the app owns the engine, and `ghostbot serve` is for
+   * machines with no UI — where it is already the only writer.
+   */
   // Connect MCP servers in the background; failures are reported, not fatal.
   void syncMcpServers(readSettings(userDataDir, defaultSettings()) as never)
     .then(emitMcp)
@@ -328,6 +353,18 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  /*
+   * Close the socket and nothing else.
+   *
+   * When a daemon owns the engine, quitting must NOT stop it — that is the
+   * whole point. Only the in-process fallback has a scheduler and MCP
+   * servers of its own to shut down.
+   */
+  if (daemonLink) {
+    daemonLink.client.close();
+    daemonLink = null;
+    return;
+  }
   stopScheduler();
   void closeAllMcp();
 });

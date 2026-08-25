@@ -12,6 +12,26 @@
  *    `JSON.parse` on such a file throws on the first character.
  *  - **Writes are atomic** (temp file + rename). A crash mid-write would
  *    otherwise truncate a user's entire agent roster.
+ *
+ * ## Concurrency: one writer per profile
+ *
+ * Atomic writes prevent a *torn* file. They do nothing about a **lost
+ * update**, and the difference matters now that a daemon exists.
+ *
+ * Measured, not assumed: two writers that each load a collection, append to
+ * their own copy, and save it back end with only the second writer's change
+ * — the first is silently erased. In practice that would be a user's typed
+ * message vanishing because a routine fired at the same instant.
+ *
+ * The read-modify-write helpers here (`upsertTranscriptEntry`,
+ * `updateAgent`, and friends) re-read immediately before saving, so
+ * interleaved calls are safe. What is **not** safe is holding a snapshot and
+ * calling `saveTranscript`/`saveAgents` with it later.
+ *
+ * Consequently a profile has exactly one engine writing to it. The desktop
+ * app runs its own engine; `ghostbot serve` is for machines where it is the
+ * only writer. Pointing both at one profile is a supported *sequence* (start
+ * one, stop it, start the other) but never a supported *overlap*.
  */
 import fs from 'node:fs';
 import path from 'node:path';
