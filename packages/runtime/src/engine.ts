@@ -199,10 +199,63 @@ async function effectiveConfig(agent: AgentRecord | undefined, settings: GlobalS
  * An explicit `description` is the agent's own durable instruction set and
  * takes precedence; otherwise we fall back to the chosen built-in persona.
  */
+
+/**
+ * Real state for the prompt: what this agent can actually do right now.
+ *
+ * Read from the store rather than asserted, so the description cannot drift
+ * from the truth as routines are added or removed.
+ */
+function environmentOptions(agent: AgentRecord | undefined) {
+  return {
+    // A daemon owns the engine whenever one is attached, which is what makes
+    // unattended work possible at all.
+    persistent: true,
+    routines: agent
+      ? store
+          .listRoutines(agent.id)
+          .filter((r) => r.enabled !== false)
+          .map((r) => `"${r.name}" (${r.cron})`)
+      : [],
+  };
+}
+
+/**
+ * The environment block on its own, for prompts that replace the persona.
+ *
+ * Built by generating the general persona and slicing out the section, so
+ * there is one source of these facts rather than two that can disagree.
+ */
+function environmentFacts(agent: AgentRecord | undefined, model?: string): string {
+  const generic = personaById('general')?.build({
+    modelHint: model,
+    ...environmentOptions(agent),
+  });
+  if (!generic) return '';
+  const start = generic.indexOf('## Your environment');
+  const end = generic.indexOf('## How to work');
+  return start === -1 || end === -1 ? '' : generic.slice(start, end).trim();
+}
+
 function systemPromptFor(agent: AgentRecord | undefined, personaId: string | undefined, model?: string) {
+  /*
+   * Describe the environment even when the user wrote their own prompt.
+   *
+   * A custom description replaces the persona entirely, which meant an agent
+   * with standing instructions knew nothing about routines, persistence or
+   * how to reach its user — and would confidently tell them it had no
+   * scheduler. The user's words still lead; the facts about what this agent
+   * runs inside are appended, because they are true either way and the model
+   * cannot infer them.
+   */
   const described = agent?.description?.trim();
-  if (described) return described;
-  return personaById(personaId)?.build({ modelHint: model }) ?? undefined;
+  if (described) {
+    const facts = environmentFacts(agent, model);
+    return facts ? `${described}\n\n${facts}` : described;
+  }
+  return personaById(personaId)?.build({
+    ...environmentOptions(agent),
+    modelHint: model }) ?? undefined;
 }
 
 /**

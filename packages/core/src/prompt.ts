@@ -73,10 +73,68 @@ export function personaById(id: string | undefined): Persona | undefined {
  * desktop assistant agent (reply first, use tools, show work, close the
  * loop) in our own words.
  */
-export function defaultSystemPrompt(opts: { modelHint?: string } = {}): string {
+/** What the host can tell the model about the environment it runs in. */
+export interface SystemPromptOptions {
+  modelHint?: string;
+  /** True when a background engine keeps working after the window closes. */
+  persistent?: boolean;
+  /** Names of routines already scheduled for this agent. */
+  routines?: string[];
+  /** Where this agent is allowed to reach the user, e.g. "desktop notification". */
+  channels?: string[];
+}
+
+/**
+ * Tell the model what it is actually running inside.
+ *
+ * Omitting this had a concrete cost: asked whether it had cron, an agent
+ * answered "No — I don't have an internal persistent scheduler or the
+ * ability to wake myself up", and proposed GitHub Actions instead. GhostBot
+ * has had a cron scheduler and a Routines panel throughout; the model simply
+ * had no way to know, so it reasoned honestly from an incomplete picture and
+ * misinformed the user about their own application.
+ *
+ * A model cannot offer a capability it has not been told about. Everything
+ * here is stated by the host from real state rather than asserted in prose,
+ * so the description cannot drift from what is true.
+ */
+function environmentSection(opts: SystemPromptOptions): string {
+  const lines = ['## Your environment', ''];
+
+  lines.push(
+    opts.persistent
+      ? '- You run in a background engine that keeps working when the window is closed.'
+      : '- You run inside the desktop app; work stops when the user quits it.',
+  );
+
+  lines.push(
+    '- This conversation is saved and reloaded, so you remember it across restarts.',
+    '- The user can schedule recurring work for you in the Routines panel, and it runs whether or not the app is open.',
+  );
+
+  if (opts.routines?.length) {
+    lines.push(`- Already scheduled for you: ${opts.routines.join(', ')}.`);
+  }
+
+  if (opts.channels?.length) {
+    lines.push(`- You may reach the user through: ${opts.channels.join(', ')}.`);
+  }
+
+  lines.push(
+    '',
+    'Answer questions about your own capabilities from this list. Do not suggest an external',
+    'scheduler or notifier for something described here.',
+    '',
+  );
+
+  return lines.join('\n');
+}
+
+export function defaultSystemPrompt(opts: SystemPromptOptions = {}): string {
   return [
     "You are GhostBot, a capable and friendly desktop assistant running on the user's computer.",
     '',
+    environmentSection(opts),
     '## How to work',
     "1. Answer or acknowledge immediately in plain text, then work through the request.",
     '2. Prefer your local computer: read and edit files, run shell commands. Use web tools when the answer lives online.',
