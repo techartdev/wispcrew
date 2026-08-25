@@ -504,9 +504,23 @@ export function registerBridge(context: BridgeContext): void {
         : {}),
     });
 
-    // Deliberately not awaited: the call returns as soon as the prompt is
-    // accepted, and results stream back as events.
-    void ctx.runPrompt(agentId, text, attachments);
+    /*
+     * Deliberately not awaited: the call returns as soon as the prompt is
+     * accepted, so the user can keep typing, and results stream back as
+     * events.
+     *
+     * That makes this the last place a failure can be handled. Left
+     * uncaught it is an unhandled rejection, and the user sees a turn that
+     * simply never finishes with nothing to explain why.
+     */
+    void ctx.runPrompt(agentId, text, attachments).catch((err: Error) => {
+      fileLog('[bridge] turn failed', agentId, err?.message ?? String(err));
+      emitEvent({
+        type: 'notice',
+        level: 'error',
+        text: err?.message ?? 'The turn failed.',
+      });
+    });
   });
 
   handle('pickFiles', async () => {

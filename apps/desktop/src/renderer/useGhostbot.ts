@@ -196,10 +196,28 @@ export function useGhostbot() {
       setTranscript([]);
       return;
     }
+
+    /*
+     * Clear before fetching, not after.
+     *
+     * Loading is asynchronous, so for as long as it takes the transcript
+     * still holds the *previous* agent's messages. Streaming events for the
+     * newly selected agent arrive in that window and were appended to them,
+     * so switching mid-run showed two conversations spliced together — and
+     * because the fetch then overwrote everything, whether you saw it
+     * depended entirely on timing.
+     *
+     * Showing an empty conversation for a moment is honest; showing someone
+     * else's messages is not.
+     */
+    setTranscript([]);
+
     let cancelled = false;
     void api
       .getTranscript(selectedId, MAX_RENDERED_ENTRIES)
       .then((entries) => {
+        // A second switch while this was in flight must win, or the slower
+        // request would clobber the newer agent's conversation.
         if (!cancelled) setTranscript(entries);
       })
       .catch(fail);

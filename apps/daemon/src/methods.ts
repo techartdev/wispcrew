@@ -25,6 +25,8 @@ import {
   allStatuses,
   clearSession,
   clearTranscript,
+  emitEngineEvent,
+  fileLog,
   duplicateAgent,
   hasProviderKey,
   setProviderKey,
@@ -44,6 +46,8 @@ import {
   listRoutines,
   listSkills,
   loadTranscript,
+  newId,
+  pushTranscript,
   statuses as mcpStatuses,
   readSettings,
   revokeAll,
@@ -107,7 +111,55 @@ export function nodeMethods(): MethodTable {
     /* conversation */
     getTranscript: (id: never) => loadTranscript(id),
     clearTranscript: (id: never) => clearTranscript(id),
-    sendPrompt: (id: never, prompt: never) => runPrompt(id, prompt),
+    /**
+     * Accept a prompt and start a turn.
+     *
+     * Two things here were wrong when this table was first written, and both
+     * were visible to the user:
+     *
+     *  1. It called `runPrompt` directly, which does NOT record the user's
+     *     message — the desktop bridge did that separately. Once the desktop
+     *     started forwarding to a daemon, typed messages stopped appearing in
+     *     the transcript at all.
+     *
+     *  2. It awaited the turn, so the call did not return until the agent had
+     *     finished. A client could not send anything mid-run, because the
+     *     previous request was still in flight.
+     *
+     * The message is now persisted first and the run is deliberately not
+     * awaited: results stream back as events, exactly as they do locally.
+     */
+    sendPrompt: (id: never, prompt: never) => {
+      const agentId = id as unknown as string;
+      const text = String(prompt ?? '').trim();
+      if (!text) return;
+
+      pushTranscript(agentId, {
+        kind: 'message',
+        id: newId('usr'),
+        role: 'user',
+        content: text,
+        createdAt: Date.now(),
+      });
+
+      /*
+       * Not awaited, and its failures are caught here.
+       *
+       * Fire-and-forget is what lets a client keep talking while the agent
+       * works — but it also makes this the last place a rejection can be
+       * handled. Without the catch it becomes an unhandled rejection, and on
+       * a daemon that means the process dies: every other agent stops and
+       * every scheduled routine with it, because one turn failed.
+       */
+      void runPrompt(agentId, text).catch((err: Error) => {
+        fileLog('[node] turn failed', agentId, err?.message ?? String(err));
+        emitEngineEvent({
+          type: 'notice',
+          level: 'error',
+          text: err?.message ?? 'The turn failed.',
+        });
+      });
+    },
     stopAgent: (id: never) => abortSession(id),
     // The UI calls this `interrupt`; same operation, kept under both names so
     // a client does not need to know which engine it is talking to.
