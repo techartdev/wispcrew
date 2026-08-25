@@ -185,7 +185,7 @@ export interface BridgeContext {
 
 let ctx: BridgeContext;
 
-/** Pending approvals: requestId —žÂ¢ resolver awaiting the user's decision. */
+/** Pending approvals: requestId to the resolver awaiting the user's decision. */
 const pendingApprovals = new Map<string, (approved: boolean) => void>();
 /** Tools the user chose "always allow" for, per agent, for this app run. */
 /**
@@ -716,7 +716,7 @@ export function registerBridge(context: BridgeContext): void {
            *
            * Resolved per provider, then the legacy shared key. Reading only
            * the legacy name made Test report "needs an API key" for a
-           * provider whose key was present and working â€” the migration had
+           * provider whose key was present and working — the migration had
            * moved it to GHOSTBOT_KEY_<preset>, and this path had not been
            * updated to look there.
            */

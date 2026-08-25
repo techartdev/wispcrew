@@ -14,7 +14,7 @@ export * from './retry.js';
  * Both define `generatePkce`, `buildAuthorizeUrl`, `exchangeAuthorizationCode`
  * and `refreshCredential`, so a flat `export *` would silently drop one
  * vendor's version. Namespacing also keeps call sites explicit about which
- * provider they are signing into â€” a mix-up there produces a confusing
+ * provider they are signing into — a mix-up there produces a confusing
  * "invalid client" rather than a type error.
  */
 export * as claudeOAuth from './oauth-flow.js';
@@ -38,7 +38,7 @@ import { CodexSubscriptionProvider, type CodexConfig } from './codex-backend.js'
  *    rejects those tokens outright.
  *  - **OpenAI reasoning models** (gpt-5.x, o-series) go to the Responses API,
  *    because `/v1/chat/completions` refuses function tools for them unless
- *    reasoning is switched off â€” and switching it off measurably degrades
+ *    reasoning is switched off — and switching it off measurably degrades
  *    answers.
  *  - Everything else keeps chat-completions, which is the only thing
  *    DeepSeek, Ollama, Groq, LM Studio and OpenRouter implement.

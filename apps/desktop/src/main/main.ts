@@ -232,8 +232,8 @@ app.whenReady().then(async () => {
   /*
    * Hand the headless engine its environment before anything touches disk.
    *
-   * `@ghostbot/runtime` refuses to guess a data directory â€” a wrong guess
-   * would put someone's agents and keys somewhere they never chose â€” so this
+   * `@ghostbot/runtime` refuses to guess a data directory — a wrong guess
+   * would put someone's agents and keys somewhere they never chose — so this
    * must run before the first store or secrets access.
    */
   setHost(electronHost(userDataDir));

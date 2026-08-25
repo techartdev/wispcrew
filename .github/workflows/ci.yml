@@ -120,6 +120,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Source files must stay valid UTF-8. Tooling that reads a file as
+      # Windows-1252 and writes it back silently turns "—" into mojibake, and
+      # nobody notices until they read the comment. This has happened more
+      # than once, so it is checked rather than remembered.
+      - name: Reject mangled encoding
+        run: node scripts/fix-encoding.mjs --check
+
       # GhostBot is entirely original work. This guards against a vendored
       # third-party application tree reappearing anywhere in the repository —
       # checked at every depth, because a nested copy under apps/ once
