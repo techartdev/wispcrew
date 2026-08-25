@@ -73,6 +73,7 @@ apps/daemon/             headless host — keeps agents alive with the UI closed
   src/methods.ts         the node's method table
 
 examples/cli-agent/      headless CLI + the offline test suites
+docs/CLI.md              the planned `wispcrew` binary, and why it matters
 docs/CONVERSATIONS.md    where the conversation model is going
 docs/GROUP-CHAT.md       who speaks when several agents share a chat
 ```

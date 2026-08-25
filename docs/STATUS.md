@@ -3,6 +3,24 @@
 Last verified: **2026-08-24**, from a clean build on Windows 11 with a live
 OpenAI key.
 
+
+## Planned: a real CLI
+
+A `wispcrew` binary, as a third client of the daemon alongside the desktop
+and the Telegram host. See [CLI.md](CLI.md).
+
+The reason is not that headless machines lack a window, though they do. It is
+that **every coding agent already knows how to run a shell command** — so a
+CLI lets Claude Code, Codex, Cursor or a CI job drive WispCrew with no SDK,
+plugin or integration work. And a WispCrew agent's shell tool can invoke
+those same binaries, which makes the relationship composable rather than
+competitive.
+
+`WispBridge` is already transport-independent: it mentions Electron in a
+comment and a version string, and the daemon already implements 41 of its 56
+methods over NDJSON. The CLI is a third transport, not a second engine.
+
+
 ## Verified working
 
 Everything below was confirmed by running it — screenshots, transcript
