@@ -83,7 +83,24 @@ export const shellTool: Tool<ShellArgs> = {
 
     const isWin = process.platform === 'win32';
     const shell = isWin ? 'cmd.exe' : '/bin/sh';
-    const shellArgs = isWin ? ['/d', '/s', '/c', args.command] : ['-c', args.command];
+    /*
+     * Wrap the whole command line in quotes on Windows.
+     *
+     * `cmd /s /c` has a documented rule: it strips the first and last
+     * character of the command string when both are quotes, then runs the
+     * rest verbatim. Passing a bare command means a line that *begins* with
+     * a quoted path — `"C:\Program Files\...\ssh.exe" -i ...` — loses that
+     * opening quote and splits at the first space, giving:
+     *
+     *   'C:\Program' is not recognized as an internal or external command
+     *
+     * Adding an outer pair gives /s something to strip, so the command
+     * arrives intact. This is the same trick cmd's own documentation
+     * describes, and it is why `cmd /s /c ""a b" "c d""` works.
+     */
+    const shellArgs = isWin
+      ? ['/d', '/s', '/c', `"${args.command}"`]
+      : ['-c', args.command];
 
     return await new Promise<ToolResult>((resolve) => {
       let child;
@@ -97,6 +114,29 @@ export const shellTool: Tool<ShellArgs> = {
           env: { ...process.env, ...(ctx.env ?? {}) },
           windowsHide: true,
           stdio: ['ignore', 'pipe', 'pipe'],
+          /*
+           * Hand the command line to cmd.exe exactly as written.
+           *
+           * Windows has no argv array — a process receives one string and
+           * parses it itself. Node therefore builds that string, and by
+           * default it escapes embedded quotes with backslashes. `cmd.exe`
+           * does not use backslash escaping, so a command containing quoted
+           * paths arrived as literal \" and failed:
+           *
+           *   '\"C:\Program Files\nodejs\node.exe\"' is not recognized...
+           *
+           * Every command with a quoted path was affected, which is most
+           * real Windows commands. An agent trying to use an ssh key under
+           * "C:\Users\Vanyo Vanev\.ssh" concluded the problem was the space
+           * in the path and started copying files to work around it; the
+           * space was fine, the escaping was not.
+           *
+           * `windowsVerbatimArguments` passes the string through untouched,
+           * which is what a shell needs. It is safe here precisely *because*
+           * this is a shell: the string is already a command line by
+           * definition, not a list of arguments being assembled.
+           */
+          windowsVerbatimArguments: isWin,
         });
       } catch (err) {
         resolve({
