@@ -12,6 +12,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -147,6 +148,108 @@ try {
   /* no matches */
 }
 check('no credentials in tracked files', keys.trim() === '', keys.split('\n')[0]);
+
+check('LICENSE exists', fs.existsSync(path.join(repo, 'LICENSE')));
+
+/*
+ * Boot the app and confirm the window actually paints.
+ *
+ * The most valuable thing CI does, and it works locally too — this machine
+ * simply cannot speak for macOS or Linux. A blank window is roughly 4KB of
+ * PNG; a rendered one is 40KB or more, so the size is a reliable signal that
+ * the renderer got past its first paint.
+ *
+ * Skipped with --fast, because it costs about a minute and most changes do
+ * not touch the desktop app.
+ */
+if (!process.argv.includes('--fast')) {
+  console.log('');
+  process.stdout.write('app boots and paints'.padEnd(34));
+
+  const shot = path.join(os.tmpdir(), `wispcrew-verify-${Date.now()}.png`);
+  try {
+    const electron = path.join(
+      repo,
+      'node_modules',
+      'electron',
+      'dist',
+      process.platform === 'win32' ? 'electron.exe' : 'electron',
+    );
+
+    if (!fs.existsSync(electron)) {
+      console.log('skipped — electron not installed');
+    } else {
+      /*
+       * A throwaway profile, via Electron's own flag.
+       *
+       * CI needs no such thing — a fresh runner has no profile — but on a
+       * developer's machine this would otherwise start a daemon against
+       * their real agents and conversations. `--user-data-dir` is Chromium's
+       * own switch, so it needs no support from the app.
+       */
+      const profile = path.join(os.tmpdir(), `wispcrew-verify-${process.pid}`);
+
+      /*
+       * `stdio: 'ignore'`, not 'pipe'.
+       *
+       * The app spawns a detached daemon that inherits its pipes and keeps
+       * them open after the app itself exits. `execFileSync` waits for every
+       * stdio stream to close, so piping meant the call hung until its
+       * timeout even though the screenshot had been written seconds earlier
+       * — the same trap this project already hit in its shell tool, where a
+       * killed process emitted `exit` with no `close`.
+       *
+       * The screenshot on disk is the result; the child's output is not
+       * needed.
+       */
+      try {
+        execFileSync(electron, ['.', `--user-data-dir=${profile}`], {
+          cwd: path.join(repo, 'apps', 'desktop'),
+          stdio: 'ignore',
+          timeout: 60_000,
+          env: {
+            ...process.env,
+            WISPCREW_CAPTURE: shot,
+            WISPCREW_CAPTURE_DELAY: '9000',
+          },
+        });
+      } catch {
+        // A non-zero exit or a timeout is judged by the screenshot below,
+        // which is the thing actually being tested.
+      }
+
+      /*
+       * Stop the daemon this boot started.
+       *
+       * It is detached by design and outlives the app, so without this every
+       * verification run leaves another daemon holding a throwaway profile.
+       */
+      try {
+        const endpoint = JSON.parse(
+          fs.readFileSync(path.join(profile, 'node-endpoint.json'), 'utf8'),
+        );
+        if (typeof endpoint.pid === 'number') process.kill(endpoint.pid);
+      } catch {
+        /* no daemon, or already gone */
+      }
+
+      fs.rmSync(profile, { recursive: true, force: true });
+
+      const size = fs.existsSync(shot) ? fs.statSync(shot).size : 0;
+      if (size >= 10_000) {
+        console.log(`ok (${Math.round(size / 1024)}KB)`);
+      } else {
+        console.log(`FAILED — ${size === 0 ? 'no screenshot' : `${size} bytes, window looks blank`}`);
+        failed++;
+      }
+    }
+  } catch (err) {
+    console.log(`FAILED — ${(err.message ?? '').split('\n')[0]}`);
+    failed++;
+  } finally {
+    fs.rmSync(shot, { force: true });
+  }
+}
 
 console.log('');
 if (failed > 0) {
