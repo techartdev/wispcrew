@@ -58,3 +58,4 @@ client-persistence.json
 
 # Bot tokens and similar credentials used for live verification.
 *token*.txt
+.routines-test.mjs

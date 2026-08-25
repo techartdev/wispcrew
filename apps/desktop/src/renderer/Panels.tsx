@@ -10,7 +10,7 @@
 // that compile JSX with the classic runtime (the offline UI tests render them
 // through react-dom/server outside the Vite build). It is a no-op under the
 // automatic runtime Vite uses.
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   AgentRecord,
   ApprovalPolicy,
@@ -1638,6 +1638,40 @@ const CRON_PRESETS: Array<{ label: string; cron: string }> = [
   { label: 'First of the month', cron: '0 9 1 * *' },
 ];
 
+export /**
+ * Say what wakes a routine.
+ *
+ * There are three triggers now — a schedule, a one-shot follow-up, and a
+ * filesystem watch — and a cron expression only describes the first. Showing
+ * `r.cron` for the others rendered an empty code block and "next —", which
+ * told the user nothing about work their agent had scheduled for itself.
+ */
+function describeTrigger(routine: RoutineRecord): ReactNode {
+  const when = (at?: number) =>
+    at ? new Date(at).toLocaleString() : 'not scheduled';
+
+  if (routine.watchPath) {
+    const folder = routine.watchPath.split(/[\\/]/).filter(Boolean).pop() ?? routine.watchPath;
+    return (
+      <>
+        Watching <code>{routine.watchPattern ?? 'everything'}</code> in {folder}
+      </>
+    );
+  }
+
+  if (typeof routine.runAt === 'number') {
+    // A one-shot that has already run is disabled rather than deleted, so the
+    // user can still see what their agent did.
+    return routine.enabled ? <>Once, at {when(routine.runAt)}</> : <>Ran once, {when(routine.runAt)}</>;
+  }
+
+  return (
+    <>
+      <code>{routine.cron}</code> · next {when(routine.nextRunAt)}
+    </>
+  );
+}
+
 export function RoutinesPanel({
   routines,
   agents,
@@ -1691,7 +1725,13 @@ export function RoutinesPanel({
                   <span className="muted"> — {agent?.name ?? 'deleted agent'}</span>
                 </div>
                 <div className="muted list-sub">
-                  <code>{r.cron}</code> · next {fmt(r.nextRunAt)}
+                  {/*
+                    Three kinds of trigger now, and a cron expression only
+                    describes one. A watch has no schedule and a follow-up
+                    fires once, so showing `r.cron` for either rendered an
+                    empty <code> and "next —".
+                  */}
+                  {describeTrigger(r)}
                   {lastRun && ` · last ${lastRun.status}`}
                 </div>
                 <div className="muted list-sub routine-prompt">{r.prompt.slice(0, 120)}</div>
