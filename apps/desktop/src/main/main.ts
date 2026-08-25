@@ -33,6 +33,7 @@ import {
   createNodeCrypto,
   initGrants,
   installNotifySender,
+  migrateAgentsToConversations,
   installScheduler,
   runPrompt,
   runRoutine,
@@ -362,6 +363,13 @@ app.whenReady().then(async () => {
    * windows, and raise an approval card. A daemon supplies different
    * answers for both — and with nobody to ask, denies.
    */
+  /*
+   * Give every agent a room.
+   *
+   * Idempotent: a migrated room reuses the agent id, so a second run
+   * finds nothing to do. Either host may start first.
+   */
+  migrateAgentsToConversations();
   installNotifySender();
   installScheduler();
   /*

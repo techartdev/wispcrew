@@ -17,6 +17,7 @@ import {
   fileLog,
   initGrants,
   installNotifySender,
+  migrateAgentsToConversations,
   installScheduler,
   initStore,
   listAgents,
@@ -123,6 +124,13 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
    * while the app is closed, which is exactly when an unattended agent
    * has something to say.
    */
+  /*
+   * Give every agent a room.
+   *
+   * Idempotent: a migrated room reuses the agent id, so a second run
+   * finds nothing to do. Either host may start first.
+   */
+  migrateAgentsToConversations();
   installNotifySender();
   installScheduler();
   initGrants(env.dataDir);

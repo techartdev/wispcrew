@@ -139,6 +139,11 @@ export function newId(prefix: string): string {
 
 const AGENTS_FILE = 'agents.json';
 
+/** Where rooms live. See `conversations.ts`. */
+export function conversationsPath(): string {
+  return filePath('conversations.json');
+}
+
 export function listAgents(): AgentRecord[] {
   return readArray<AgentRecord>(filePath(AGENTS_FILE));
 }

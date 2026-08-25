@@ -1,3 +1,5 @@
+import type { ChannelId, RoomEvent } from './conversation.js';
+
 /**
  * WispCrew — durable domain types.
  *
@@ -114,6 +116,21 @@ export type TranscriptEntry =
       id: string;
       role: 'user' | 'assistant';
       content: string;
+      /**
+       * Which participant said this.
+       *
+       * Optional because every entry written before conversations existed
+       * has none. A reader treats an absent author as "the single agent in
+       * this room", which is exactly what those transcripts meant.
+       */
+      authorId?: string;
+      /**
+       * The door it arrived through, when not the app.
+       *
+       * Renders as "You · via Telegram". Deliberately separate from
+       * `authorId`: the channel did not say it, a person did.
+       */
+      via?: ChannelId;
       /** True while tokens are still streaming into this entry. */
       isStreaming?: boolean;
       createdAt: number;
@@ -157,6 +174,17 @@ export type TranscriptEntry =
       /** `error` renders prominently; `info` is muted. */
       level: 'info' | 'error';
       text: string;
+      /**
+       * Set when this notice records something that happened TO the room —
+       * a join, a departure, an approval, a floor request.
+       *
+       * Room events reuse notices rather than inventing a parallel entry
+       * kind: notices already render, already persist, and already survive
+       * rewind and branch. The extra field lets the UI style them
+       * differently and lets a reader distinguish "the room changed" from
+       * "something went wrong".
+       */
+      event?: RoomEvent;
       createdAt: number;
     };
 
@@ -316,8 +344,6 @@ export interface ChannelSettings {
   };
 }
 
-/** Somewhere a message can be delivered. */
-export type ChannelId = 'app' | 'desktop' | 'telegram';
 
 export interface GlobalSettings {
   presetId?: string;

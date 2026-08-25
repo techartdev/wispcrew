@@ -17,6 +17,7 @@ export * from './store.js';
 export * from './checkpoints.js';
 export * from './notify-host.js';
 export * from './schedule-host.js';
+export * from './conversations.js';
 export * from './channel-telegram.js';
 export * from './channels.js';
 export * from './settings-file.js';
