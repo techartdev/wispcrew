@@ -191,6 +191,15 @@ export interface ToolContext {
   workspaceRoot: string;
   /** Timeout in ms applied by tools that support it. */
   defaultTimeoutMs: number;
+  /**
+   * Ceiling for a single tool call, enforced by the registry.
+   *
+   * A backstop, not a replacement for a tool's own timeout: a tool that
+   * settles itself reports a better reason. This exists so a tool *without*
+   * one — an MCP server that never answers, a fetch to a black-hole host —
+   * cannot leave an agent waiting forever.
+   */
+  toolDeadlineMs?: number;
   /** Extra per-tool options from the agent config. */
   env?: Record<string, string | undefined>;
 }

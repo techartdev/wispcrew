@@ -14,6 +14,7 @@ export * from './host.js';
 export * from './node-crypto.js';
 
 export * from './store.js';
+export * from './checkpoints.js';
 export * from './settings-file.js';
 export * from './secrets-store.js';
 export * from './provider-keys.js';

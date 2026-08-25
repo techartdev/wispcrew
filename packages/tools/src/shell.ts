@@ -7,6 +7,7 @@
  */
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { retainText } from './retention.js';
 import type { Tool, ToolContext, ToolResult } from '@ghostbot/shared';
 
 interface ShellArgs {
@@ -189,21 +190,35 @@ export const shellTool: Tool<ShellArgs> = {
         killTree();
       }, timeoutMs);
 
+      /*
+       * Collect everything; bound it once, at the end.
+       *
+       * The previous version cut each stream at 200 KB and threw the rest
+       * away, and — separately — set `timedOut` when it did, so a merely
+       * chatty command was reported to the model as having timed out. It had
+       * not; it had said too much.
+       *
+       * A hard ceiling still exists so a runaway process cannot exhaust
+       * memory, but it is far above the point where output stops being
+       * useful inline, and hitting it is a reason to stop reading rather
+       * than a failure.
+       */
+      const HARD_CEILING = 4_000_000;
+      let stoppedForVolume = false;
+
       child.stdout?.on('data', (d: Buffer) => {
         stdout += d.toString();
-        if (stdout.length > 200_000) {
-          stdout = stdout.slice(0, 200_000) + '\n...[stdout truncated]';
-          timedOut = true;
-          try {
-            killTree();
-          } catch {
-            /* noop */
-          }
+        if (stdout.length > HARD_CEILING) {
+          stoppedForVolume = true;
+          killTree();
         }
       });
       child.stderr?.on('data', (d: Buffer) => {
         stderr += d.toString();
-        if (stderr.length > 200_000) stderr = stderr.slice(0, 200_000) + '\n...[stderr truncated]';
+        if (stderr.length > HARD_CEILING) {
+          stoppedForVolume = true;
+          killTree();
+        }
       });
 
       child.on('error', (err) => {
@@ -241,10 +256,22 @@ export const shellTool: Tool<ShellArgs> = {
         settled = true;
         clearTimeout(timer);
 
+        /*
+         * Bound each stream, spilling the rest to a file rather than
+         * discarding it. The model gets the head and tail plus a statement
+         * of what was omitted and where to find it; the user can open the
+         * file. Nothing is destroyed.
+         */
+        const outRetained = retainText(stdout, { label: 'stdout' });
+        const errRetained = retainText(stderr, { label: 'stderr' });
+
         const content = [
           timedOut ? `[timed out after ${timeoutMs}ms]` : '',
-          stdout ? `--- stdout ---\n${stdout}` : '',
-          stderr ? `--- stderr ---\n${stderr}` : '',
+          stoppedForVolume
+            ? '[stopped: the command produced more output than can be collected]'
+            : '',
+          outRetained.text ? `--- stdout ---\n${outRetained.text}` : '',
+          errRetained.text ? `--- stderr ---\n${errRetained.text}` : '',
           `--- exit code: ${code ?? 'null'}${signal ? ` (signal ${signal})` : ''}`,
         ]
           .filter(Boolean)

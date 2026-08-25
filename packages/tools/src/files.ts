@@ -4,6 +4,7 @@
 import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
 import type { Tool, ToolContext, ToolResult } from '@ghostbot/shared';
+import { checkWrite, noteObserved } from './observation.js';
 
 const MAX_READ_BYTES = 300_000;
 
@@ -102,6 +103,16 @@ export const readFileTool: Tool<ReadArgs> = {
         const { bytesRead } = await handle.read(buf, 0, limit, offset);
         const text = buf.subarray(0, bytesRead).toString('utf8');
         const truncated = bytesRead >= limit && stat.size > offset + limit;
+
+        /*
+         * Only a COMPLETE read counts as having observed the file.
+         *
+         * A partial or offset read leaves parts unseen, and permitting an
+         * overwrite on the strength of it would destroy content the agent
+         * never looked at — precisely the failure the guard exists for.
+         */
+        if (offset === 0 && !truncated) noteObserved(full);
+
         return {
           id: '',
           name: 'read_file',
@@ -165,10 +176,36 @@ export const writeFileTool: Tool<WriteArgs> = {
         };
       }
 
+      /*
+       * A full replacement of an existing file must be earned by reading it.
+       *
+       * Appending adds without removing, and creating a new file destroys
+       * nothing — both proceed freely. Only overwriting is guarded, because
+       * that is the operation that silently discards content nobody looked
+       * at. Two incidents in this project's own history were exactly this.
+       */
+      if (!args.append) {
+        const verdict = checkWrite(full);
+        if (!verdict.allowed) {
+          return {
+            id: '',
+            name: 'write_file',
+            ok: false,
+            errorCode: verdict.errorCode,
+            content: verdict.reason,
+          };
+        }
+      }
+
       await fs.mkdir(path.dirname(full), { recursive: true });
       const flags = args.append ? 'a' : 'w';
       await fs.writeFile(full, args.content, { encoding: 'utf8', flag: flags });
       const stat = await fs.stat(full);
+
+      // What is on disk is now exactly what we just wrote, so a follow-up
+      // write needs no fresh read.
+      noteObserved(full, args.append ? undefined : args.content);
+
       return {
         id: '',
         name: 'write_file',

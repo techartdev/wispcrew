@@ -42,6 +42,7 @@ import type {
   TranscriptEntry,
 } from '@ghostbot/shared';
 import { fileLog } from './filelog.js';
+import { writeCheckpoint } from './checkpoints.js';
 
 let baseDir = '';
 
@@ -237,7 +238,34 @@ export function loadTranscript(agentId: string): TranscriptEntry[] {
   return readArray<TranscriptEntry>(transcriptPath(agentId));
 }
 
-export function saveTranscript(agentId: string, entries: TranscriptEntry[]): void {
+export function saveTranscript(
+  agentId: string,
+  entries: TranscriptEntry[],
+  reason = 'write',
+): void {
+  /*
+   * Keep the old version when a write would lose content.
+   *
+   * A transcript is written whole, so anything that shortens one destroys
+   * the difference permanently. That happened for real during development —
+   * a careless cleanup erased a 33-entry conversation with nothing to
+   * restore from.
+   *
+   * Only shrinking writes are checkpointed. Streaming rewrites the file on
+   * every token, and a growing transcript has lost nothing: the previous
+   * state is a prefix of the new one. Losing entries is the rare event worth
+   * capturing, and it is cheap to detect.
+   */
+  try {
+    const previous = loadTranscript(agentId);
+    if (previous.length > entries.length) {
+      writeCheckpoint(baseDir, agentId, previous, reason);
+    }
+  } catch {
+    // A checkpoint is a safety net. Failing to take one must never block the
+    // write the caller actually asked for.
+  }
+
   writeJson(transcriptPath(agentId), entries.slice(-MAX_TRANSCRIPT_ENTRIES));
 }
 

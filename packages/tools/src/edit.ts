@@ -4,6 +4,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Tool, ToolContext, ToolResult } from '@ghostbot/shared';
+import { noteObserved } from './observation.js';
 
 interface EditArgs {
   path: string;
@@ -56,6 +57,9 @@ export const editFileTool: Tool<EditArgs> = {
       }
       const updated = args.replaceAll ? content.split(args.oldText).join(args.newText) : content.replace(args.oldText, args.newText);
       await fs.writeFile(full, updated, 'utf8');
+      // An edit reads the file, replaces a known substring and writes the
+      // result — the contents are known exactly, so record them.
+      noteObserved(full, updated);
       const added = updated.length - content.length;
       return {
         id: '',
