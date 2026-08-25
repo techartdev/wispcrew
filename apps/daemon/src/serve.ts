@@ -17,6 +17,7 @@ import {
   fileLog,
   initGrants,
   installNotifySender,
+  startTelegram,
   migrateAgentsToConversations,
   installScheduler,
   initStore,
@@ -27,6 +28,7 @@ import {
   setApprovalAsker,
   setHost,
   startScheduler,
+  stopTelegram,
   stopWatches,
   syncWatches,
   stopScheduler,
@@ -132,6 +134,9 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
    */
   migrateAgentsToConversations();
   installNotifySender();
+  // A phone is a door into a room, and the daemon is what keeps it open
+  // when the desktop is closed.
+  startTelegram();
   installScheduler();
   initGrants(env.dataDir);
 
@@ -293,6 +298,7 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
     async stop() {
       stopScheduler();
       stopWatches();
+      stopTelegram();
       await listener?.close().catch(() => {});
       if (options.listen) clearEndpoint(env.dataDir);
       await closeAllMcp().catch(() => {});
