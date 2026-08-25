@@ -82,6 +82,22 @@ export interface SystemPromptOptions {
   routines?: string[];
   /** Where this agent is allowed to reach the user, e.g. "desktop notification". */
   channels?: string[];
+  /**
+   * The room this agent is speaking in, when it shares one with others.
+   *
+   * Without this an agent has no idea it is in company: it cannot tell that
+   * `@sums` addresses itself, that a message it can see was meant for
+   * somebody else, or that the reply it writes will be read by everyone.
+   * Measured — an agent asked "what is 2 + 2?" in a two-agent room called a
+   * notification tool instead of answering, because nothing in its context
+   * suggested it had been spoken to.
+   */
+  room?: {
+    /** This agent's own handle, e.g. "sums". */
+    handle: string;
+    /** The other agents present, by handle. */
+    others: string[];
+  };
 }
 
 /**
@@ -126,6 +142,32 @@ function environmentSection(opts: SystemPromptOptions): string {
     'scheduler or notifier for something described here.',
     '',
   );
+
+  /*
+   * Being in company changes what a message means.
+   *
+   * Without this an agent cannot tell that `@sums` addresses it, that a
+   * message it can see was meant for somebody else, or that its reply will
+   * be read by everyone. It is also the only way it learns not to hand the
+   * question to a room-mate: the delegation tool no longer offers them, but
+   * an agent that does not know why will keep trying.
+   */
+  if (opts.room) {
+    lines.push(
+      '## This conversation has several participants',
+      '',
+      `- You are **@${opts.room.handle}**.`,
+      opts.room.others.length
+        ? `- Also here: ${opts.room.others.map((h) => `@${h}`).join(', ')}.`
+        : '- You are the only agent here at the moment.',
+      '- Everyone sees every message, including yours.',
+      '- You are being asked to reply because you were addressed. Answer directly.',
+      '- Do not hand this to another participant. They are colleagues in the room,',
+      '  not helpers you delegate to; the user can address them themselves.',
+      '- To draw someone in deliberately, mention them by handle in your reply.',
+      '',
+    );
+  }
 
   return lines.join('\n');
 }

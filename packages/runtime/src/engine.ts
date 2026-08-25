@@ -221,7 +221,32 @@ async function effectiveConfig(agent: AgentRecord | undefined, settings: GlobalS
  * Read from the store rather than asserted, so the description cannot drift
  * from the truth as routines are added or removed.
  */
-function environmentOptions(agent: AgentRecord | undefined) {
+function environmentOptions(agent: AgentRecord | undefined, conversationId?: string) {
+  /*
+   * Who else is in the room.
+   *
+   * Only when there is actually company: telling a lone agent it is "in a
+   * conversation with @itself" is noise, and the single-agent case is still
+   * the common one.
+   */
+  let room: { handle: string; others: string[] } | undefined;
+
+  if (agent && conversationId) {
+    const participants = (getConversation(conversationId)?.participants ?? []).filter(
+      (p) => p.kind === 'agent',
+    );
+
+    if (participants.length > 1) {
+      const self = participants.find((p) => p.id === agent.id);
+      if (self) {
+        room = {
+          handle: self.handle,
+          others: participants.filter((p) => p.id !== agent.id).map((p) => p.handle),
+        };
+      }
+    }
+  }
+
   return {
     // A daemon owns the engine whenever one is attached, which is what makes
     // unattended work possible at all.
@@ -232,6 +257,7 @@ function environmentOptions(agent: AgentRecord | undefined) {
           .filter((r) => r.enabled !== false)
           .map((r) => `"${r.name}" (${r.cron})`)
       : [],
+    room,
   };
 }
 
@@ -241,10 +267,14 @@ function environmentOptions(agent: AgentRecord | undefined) {
  * Built by generating the general persona and slicing out the section, so
  * there is one source of these facts rather than two that can disagree.
  */
-function environmentFacts(agent: AgentRecord | undefined, model?: string): string {
+function environmentFacts(
+  agent: AgentRecord | undefined,
+  model?: string,
+  conversationId?: string,
+): string {
   const generic = personaById('general')?.build({
     modelHint: model,
-    ...environmentOptions(agent),
+    ...environmentOptions(agent, conversationId),
   });
   if (!generic) return '';
   const start = generic.indexOf('## Your environment');
@@ -252,7 +282,12 @@ function environmentFacts(agent: AgentRecord | undefined, model?: string): strin
   return start === -1 || end === -1 ? '' : generic.slice(start, end).trim();
 }
 
-function systemPromptFor(agent: AgentRecord | undefined, personaId: string | undefined, model?: string) {
+function systemPromptFor(
+  agent: AgentRecord | undefined,
+  personaId: string | undefined,
+  model?: string,
+  conversationId?: string,
+) {
   /*
    * Describe the environment even when the user wrote their own prompt.
    *
@@ -265,11 +300,11 @@ function systemPromptFor(agent: AgentRecord | undefined, personaId: string | und
    */
   const described = agent?.description?.trim();
   if (described) {
-    const facts = environmentFacts(agent, model);
+    const facts = environmentFacts(agent, model, conversationId);
     return facts ? `${described}\n\n${facts}` : described;
   }
   return personaById(personaId)?.build({
-    ...environmentOptions(agent),
+    ...environmentOptions(agent, conversationId),
     modelHint: model }) ?? undefined;
 }
 
@@ -494,12 +529,18 @@ export async function runPrompt(
    * everyone; a delegate is asked privately and reports back. Offering both
    * made an agent hand its question to a room-mate rather than answer it.
    */
-  const roomMembers =
-    outputId !== agentId
-      ? (getConversation(outputId)?.participants ?? [])
-          .filter((p) => p.kind === 'agent')
-          .map((p) => p.id)
-      : undefined;
+  /*
+   * Ask the room, not the ids.
+   *
+   * An earlier version skipped this whenever `outputId === agentId`, on the
+   * assumption that meant "no room". It does not: a migrated room REUSES its
+   * first agent's id, so the agent whose id names the room was still offered
+   * its own room-mates as delegates. Measured — two delegations in a room
+   * that should have had none.
+   */
+  const roomMembers = (getConversation(outputId)?.participants ?? [])
+    .filter((p) => p.kind === 'agent')
+    .map((p) => p.id);
 
   const chain = delegation ?? rootContext(resolved.policy, agentId, roomMembers);
   const effectivePolicy = delegation ? delegation.policy : resolved.policy;
@@ -534,7 +575,10 @@ export async function runPrompt(
     provider,
     tools,
     workspaceRoot: cfg.workspaceRoot,
-    systemPrompt: systemPromptFor(agent, cfg.persona, preset.model),
+    // `outputId` names the room when there is one, so an agent in company is
+    // told so — otherwise it cannot tell that `@sums` addresses it, or that
+    // its reply will be read by everyone.
+    systemPrompt: systemPromptFor(agent, cfg.persona, preset.model, outputId),
     fingerprint,
     // Cold start: rebuild what the model should remember from the transcript
     // the user can see. Without this, restarting the app (or opening a
