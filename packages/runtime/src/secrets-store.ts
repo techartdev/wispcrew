@@ -23,6 +23,7 @@ import { host } from './host.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileLog } from './filelog.js';
+import { createNodeCrypto } from './node-crypto.js';
 
 export type SecretMap = Record<string, string>;
 
@@ -75,6 +76,30 @@ function readPlainFile(file: string): SecretMap {
 }
 
 /** Read all secrets, migrating a legacy plaintext file when present. */
+/**
+ * Rename keys that carried the old product name.
+ *
+ * Entries are stored under names like `GHOSTBOT_KEY_NVIDIA` and
+ * `GHOSTBOT_OAUTH_CHATGPT`. Nothing looks for those any more, so without
+ * this a migrated profile has the user's credentials on disk and reports
+ * having none — which is exactly the maddening failure the store's own
+ * comments warn about.
+ *
+ * Applied on read rather than by rewriting the file: the blob may not be
+ * writable by this process, and a read-time mapping cannot corrupt anything.
+ */
+function withCurrentNames(secrets: SecretMap): SecretMap {
+  const out: SecretMap = {};
+  for (const [key, value] of Object.entries(secrets)) {
+    const renamed = key.startsWith('GHOSTBOT_')
+      ? `WISPCREW_${key.slice('GHOSTBOT_'.length)}`
+      : key;
+    // A current entry always wins over a legacy one with the same meaning.
+    if (!(renamed in out) || key === renamed) out[renamed] = value;
+  }
+  return out;
+}
+
 export function readSecrets(userDataDir: string): SecretMap {
   const encrypted = encPath(userDataDir);
   const plain = plainPath(userDataDir);
@@ -114,16 +139,33 @@ export function readSecrets(userDataDir: string): SecretMap {
        */
       const shared = nodePath(userDataDir);
       if (fs.existsSync(shared)) {
-        try {
-          const json = host().crypto.decrypt(fs.readFileSync(shared));
-          const parsed = JSON.parse(json) as SecretMap;
-          if (parsed && typeof parsed === 'object') {
-            fileLog('[secrets] using the copy shared by the desktop app');
-            return parsed;
+        /*
+         * Try the machine-local key file, not this host's crypto.
+         *
+         * The shared copy is always written with the key-file backend, so
+         * that is what reads it. Using `host().crypto` here meant the
+         * DESKTOP could never open it — DPAPI cannot decrypt a `gbk1` blob —
+         * and the fallback only ever worked in the direction it was written
+         * for.
+         *
+         * That mattered the moment the app was renamed: Electron scopes
+         * `safeStorage` by application name, so every DPAPI blob written as
+         * "GhostBot" became unreadable as "WispCrew". The user's API keys
+         * were still on disk in the shared copy, and still unreachable.
+         */
+        for (const attempt of [createNodeCrypto(userDataDir), host().crypto]) {
+          try {
+            const json = attempt.decrypt(fs.readFileSync(shared));
+            const parsed = JSON.parse(json) as SecretMap;
+            if (parsed && typeof parsed === 'object') {
+              fileLog('[secrets] recovered from the machine-local copy');
+              return withCurrentNames(parsed);
+            }
+          } catch {
+            /* try the next backend */
           }
-        } catch (shareErr) {
-          fileLog('[secrets] shared copy unreadable', (shareErr as Error).message);
         }
+        fileLog('[secrets] the shared copy could not be read either');
       }
 
       fileLog('[secrets] decrypt failed', (err as Error).message);
