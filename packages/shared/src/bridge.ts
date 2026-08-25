@@ -29,6 +29,7 @@ import type {
   ToolGrant,
   TranscriptEntry,
 } from './domain.js';
+import type { ConversationRecord, RoomMode } from './conversation.js';
 
 /* ------------------------------------------------------------------ */
 /* Push events (main → renderer)                                       */
@@ -306,7 +307,33 @@ export interface WispBridge {
   /** Forget a node and delete its token. */
   forgetNode(nodeId: string): Promise<NodeSummary[]>;
 
-  /* -- notification channels ------------------------------------ */
+  /* -- rooms ----------------------------------------------------- */
+
+  /** Every conversation, newest first. */
+  listConversations(): Promise<ConversationRecord[]>;
+
+  /** Add an agent to a room. Records who did it. */
+  addRoomAgent(conversationId: string, agentId: string): Promise<ConversationRecord | undefined>;
+
+  /** Remove a participant. Their data stays where it is. */
+  removeRoomParticipant(
+    conversationId: string,
+    participantId: string,
+  ): Promise<ConversationRecord | undefined>;
+
+  /** How much the room constrains who may speak. */
+  setRoomMode(conversationId: string, mode: RoomMode): Promise<ConversationRecord | undefined>;
+
+  /**
+   * Send a message to a ROOM rather than an agent.
+   *
+   * Who acts is decided by the floor rules: tagged agents speak, `@all`
+   * reaches everyone, and an untagged message continues with whoever you
+   * last addressed.
+   */
+  sendToRoom(conversationId: string, text: string, attachmentPaths?: string[]): Promise<void>;
+
+  /* -- notification channels ------------------------------------------ */
 
   /** Send a real test message, so a wrong chat id is caught at setup. */
   testTelegram(): Promise<{ ok: boolean; error?: string }>;

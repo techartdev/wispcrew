@@ -42,6 +42,7 @@ import type {
   SkillRecord,
   TranscriptEntry,
 } from '@wispcrew/shared';
+import { handleFor } from '@wispcrew/shared';
 import * as store from '@wispcrew/runtime';
 import { loadAttachments } from '@wispcrew/runtime';
 import { readSettings, writeSettings } from '@wispcrew/runtime';
@@ -58,8 +59,15 @@ import {
   emitEngineEvent,
   discoverChatId,
   getSecret,
+  addParticipant,
+  getConversation,
   listCheckpoints,
+  listConversations,
   readCheckpoint,
+  removeParticipant,
+  runRoomTurn,
+  updateConversation,
+  LOCAL_HUMAN_ID,
   TELEGRAM_TOKEN_KEY,
   testTelegram,
   listNodes,
@@ -1042,7 +1050,68 @@ export function registerBridge(context: BridgeContext): void {
     await shell.openPath(target);
   });
 
-  /* -- notification channels ------------------------------------ */
+  /* -- rooms ----------------------------------------------------- */
+
+  handle('listConversations', () => listConversations());
+
+  handle('addRoomAgent', (conversationId: string, agentId: string) => {
+    const agent = store.listAgents().find((a) => a.id === agentId);
+    if (!agent) throw new Error('No such agent.');
+
+    const room = getConversation(conversationId);
+    if (!room) throw new Error('No such conversation.');
+
+    /*
+     * A handle unique WITHIN this room.
+     *
+     * Two agents called "Build server" would otherwise share `@build`, and
+     * an ambiguous mention is worst exactly when precision matters.
+     */
+    const taken = room.participants
+      .filter((p) => p.kind === 'agent')
+      .map((p) => (p as { handle: string }).handle);
+
+    const updated = addParticipant(
+      conversationId,
+      { kind: 'agent', id: agent.id, handle: handleFor(agent.name, taken) },
+      LOCAL_HUMAN_ID,
+      'You',
+    );
+    emitEvent({ type: 'agents-changed', agents: store.listAgents() });
+    return updated;
+  });
+
+  handle('removeRoomParticipant', (conversationId: string, participantId: string) => {
+    const updated = removeParticipant(conversationId, participantId, LOCAL_HUMAN_ID, 'You');
+    emitEvent({ type: 'agents-changed', agents: store.listAgents() });
+    return updated;
+  });
+
+  handle('setRoomMode', (conversationId: string, mode: string) => {
+    const updated = updateConversation(conversationId, { mode: mode as never });
+    emitEvent({ type: 'agents-changed', agents: store.listAgents() });
+    return updated;
+  });
+
+  handle('sendToRoom', async (conversationId: string, text: string, attachmentPaths?: string[]) => {
+    const paths = Array.isArray(attachmentPaths)
+      ? attachmentPaths.filter((p) => typeof p === 'string')
+      : [];
+    const attachments = paths.length ? await loadAttachments(paths) : [];
+
+    // Fire and forget: a turn can take minutes, and the caller must be free
+    // to send another message or interrupt while it runs.
+    void runRoomTurn({
+      conversationId,
+      text,
+      speakerId: LOCAL_HUMAN_ID,
+      attachments,
+    }).catch((err: Error) => {
+      emitEvent({ type: 'notice', level: 'error', text: err.message });
+    });
+  });
+
+  /* -- notification channels ------------------------------------------ */
 
   /**
    * Send a real message to confirm the setup works.

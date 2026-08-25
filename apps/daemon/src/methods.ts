@@ -45,8 +45,15 @@ import {
   listGrants,
   listRoutines,
   listSkills,
+  addParticipant,
+  getConversation,
   listCheckpoints,
+  listConversations,
   loadTranscript,
+  removeParticipant,
+  runRoomTurn,
+  updateConversation,
+  LOCAL_HUMAN_ID,
   readCheckpoint,
   saveTranscript,
   newId,
@@ -62,6 +69,7 @@ import {
   updateSkill,
   writeSettings,
 } from '@wispcrew/runtime';
+import { handleFor } from '@wispcrew/shared';
 
 export type MethodTable = Record<string, (...args: never[]) => unknown>;
 
@@ -110,6 +118,62 @@ export function nodeMethods(): MethodTable {
     updateAgent: (id: never, patch: never) => updateAgent(id, patch),
     deleteAgent: (id: never) => deleteAgent(id),
     duplicateAgent: (id: never) => duplicateAgent(id),
+
+    /* rooms — conversations with participants */
+    listConversations: () => listConversations(),
+
+    addRoomAgent: (conversationId: never, agentId: never) => {
+      const id = conversationId as unknown as string;
+      const agent = listAgents().find((a) => a.id === (agentId as unknown as string));
+      if (!agent) throw new Error('No such agent.');
+
+      const room = getConversation(id);
+      if (!room) throw new Error('No such conversation.');
+
+      // A handle unique within THIS room: two agents called "Build server"
+      // would otherwise share `@build`, and an ambiguous mention is worst
+      // exactly when precision matters.
+      const taken = room.participants
+        .filter((p) => p.kind === 'agent')
+        .map((p) => (p as { handle: string }).handle);
+
+      return addParticipant(
+        id,
+        { kind: 'agent', id: agent.id, handle: handleFor(agent.name, taken) },
+        LOCAL_HUMAN_ID,
+        'You',
+      );
+    },
+
+    removeRoomParticipant: (conversationId: never, participantId: never) =>
+      removeParticipant(
+        conversationId as unknown as string,
+        participantId as unknown as string,
+        LOCAL_HUMAN_ID,
+        'You',
+      ),
+
+    setRoomMode: (conversationId: never, mode: never) =>
+      updateConversation(conversationId as unknown as string, {
+        mode: mode as unknown as 'directed' | 'open' | 'free',
+      }),
+
+    sendToRoom: (conversationId: never, text: never) => {
+      /*
+       * Fire and forget, like sendPrompt.
+       *
+       * A turn can take minutes and the caller must stay free to send
+       * another message or interrupt. An un-awaited rejection here would
+       * take down the daemon and every agent with it, so it is caught.
+       */
+      void runRoomTurn({
+        conversationId: conversationId as unknown as string,
+        text: text as unknown as string,
+        speakerId: LOCAL_HUMAN_ID,
+      }).catch((err: Error) => {
+        emitEngineEvent({ type: 'notice', level: 'error', text: err.message });
+      });
+    },
 
     /* conversation */
     getTranscript: (id: never) => loadTranscript(id),

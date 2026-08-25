@@ -97,6 +97,17 @@ const bridge: WispBridge = {
   forgetNode: (nodeId: string) => ipcRenderer.invoke('wc:forgetNode', nodeId),
 
   // Recovering an earlier version of a conversation.
+  // Rooms: conversations with participants.
+  listConversations: () => ipcRenderer.invoke('wc:listConversations'),
+  addRoomAgent: (conversationId: string, agentId: string) =>
+    ipcRenderer.invoke('wc:addRoomAgent', conversationId, agentId),
+  removeRoomParticipant: (conversationId: string, participantId: string) =>
+    ipcRenderer.invoke('wc:removeRoomParticipant', conversationId, participantId),
+  setRoomMode: (conversationId: string, mode: string) =>
+    ipcRenderer.invoke('wc:setRoomMode', conversationId, mode),
+  sendToRoom: (conversationId: string, text: string, attachmentPaths?: string[]) =>
+    ipcRenderer.invoke('wc:sendToRoom', conversationId, text, attachmentPaths),
+
   // Notification channel setup.
   testTelegram: () => ipcRenderer.invoke('wc:testTelegram'),
   discoverChatId: () => ipcRenderer.invoke('wc:discoverChatId'),
