@@ -1,0 +1,30 @@
+{
+  "name": "@ghostbot/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Headless GhostBot engine: store, scheduler, agent sessions, MCP. No Electron.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ghostbot/shared": "0.1.0",
+    "@ghostbot/llm": "0.1.0",
+    "@ghostbot/core": "0.1.0",
+    "@ghostbot/tools": "0.1.0",
+    "@ghostbot/mcp": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

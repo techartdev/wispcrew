@@ -1,0 +1,33 @@
+/**
+ * @ghostbot/runtime — the headless GhostBot engine.
+ *
+ * Everything durable and everything that acts: the store, the cron
+ * scheduler, agent sessions, MCP servers, tool grants, delegation, secrets.
+ * No Electron, no window, no assumption that a user is watching.
+ *
+ * The desktop app is one host for this engine; `ghostbot serve` is another.
+ * Both call `setHost()` first to say where data lives and how to encrypt
+ * secrets, then use the same modules — so a routine behaves identically
+ * whether it fires under a GUI or on a headless box at 3am.
+ */
+export * from './host.js';
+export * from './node-crypto.js';
+
+export * from './store.js';
+export * from './settings-file.js';
+export * from './secrets-store.js';
+export * from './provider-keys.js';
+export * from './oauth-store.js';
+export * from './grants.js';
+
+export * from './cron.js';
+export * from './scheduler.js';
+
+export * from './agent-sessions.js';
+export * from './delegation.js';
+export * from './branching.js';
+export * from './attachments.js';
+export * from './mcp-manager.js';
+
+export * from './filelog.js';
+export * from './types.js';

@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import * as store from '../../../apps/desktop/src/main/store.js';
+import * as store from '@ghostbot/runtime';
 import {
   isTerminal,
   MAX_CALLS_PER_TURN,
@@ -21,7 +21,7 @@ import {
   rootContext,
   TERMINAL_NOTICE,
   type DelegationContext,
-} from '../../../apps/desktop/src/main/delegation.js';
+} from '@ghostbot/runtime';
 import type { ApprovalPolicy, ToolContext } from '@ghostbot/shared';
 
 let failures = 0;

@@ -13,7 +13,7 @@ import {
   nextRun,
   parseCron,
   validateCron,
-} from '../../../apps/desktop/src/main/cron.js';
+} from '@ghostbot/runtime';
 
 let failures = 0;
 

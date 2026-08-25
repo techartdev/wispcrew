@@ -18,7 +18,7 @@ import {
   revoke,
   revokeAll,
   revokeForAgent,
-} from '../../../apps/desktop/src/main/grants.js';
+} from '@ghostbot/runtime';
 
 let failures = 0;
 

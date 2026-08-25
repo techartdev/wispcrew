@@ -1,4 +1,4 @@
-﻿/**
+/**
  * bridge-host.ts ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â main-process implementation of the `GhostBridge` contract.
  *
  * This is the entire renderer-facing surface of the app. It replaces the
@@ -42,16 +42,16 @@ import type {
   SkillRecord,
   TranscriptEntry,
 } from '@ghostbot/shared';
-import * as store from './store.js';
-import { loadAttachments } from './attachments.js';
-import { readSettings, writeSettings } from './settings-file.js';
-import { readSecrets, upsertSecrets, isEncryptionAvailable } from './secrets-store.js';
-import { statuses as mcpStatuses, syncMcpServers } from './mcp-manager.js';
-import { runRoutineNow, refreshNextRunTime, refreshNextRunTimes } from './scheduler.js';
-import { abortSession, clearSession, seedSessionHistory } from './agent-sessions.js';
-import { prefixBefore, prefixThrough, rebuildHistory } from './branching.js';
-import { hasProviderKey, providerSecretKey, setProviderKey } from './provider-keys.js';
-import { grant, isGranted, listGrants, revoke, revokeAll, revokeForAgent } from './grants.js';
+import * as store from '@ghostbot/runtime';
+import { loadAttachments } from '@ghostbot/runtime';
+import { readSettings, writeSettings } from '@ghostbot/runtime';
+import { readSecrets, upsertSecrets, isEncryptionAvailable } from '@ghostbot/runtime';
+import { statuses as mcpStatuses, syncMcpServers } from '@ghostbot/runtime';
+import { runRoutineNow, refreshNextRunTime, refreshNextRunTimes } from '@ghostbot/runtime';
+import { abortSession, clearSession, seedSessionHistory } from '@ghostbot/runtime';
+import { prefixBefore, prefixThrough, rebuildHistory } from '@ghostbot/runtime';
+import { hasProviderKey, providerSecretKey, setProviderKey } from '@ghostbot/runtime';
+import { grant, isGranted, listGrants, revoke, revokeAll, revokeForAgent } from '@ghostbot/runtime';
 import {
   allStatuses,
   resolveToken,
@@ -59,8 +59,8 @@ import {
   signOut,
   status,
   type OAuthVendor,
-} from './oauth-store.js';
-import { fileLog } from './filelog.js';
+} from '@ghostbot/runtime';
+import { fileLog } from '@ghostbot/runtime';
 
 /**
  * Ask the user to paste the authorization code Anthropic's callback page

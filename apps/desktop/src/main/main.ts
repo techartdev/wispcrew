@@ -1,4 +1,4 @@
-﻿/**
+/**
  * GhostBot â€” Electron main process.
  *
  * Startup:
@@ -26,11 +26,11 @@ import type {
   RoutineRecord,
   TranscriptEntry,
 } from '@ghostbot/shared';
-import { attachmentsToPromptText } from './attachments.js';
-import { rebuildHistory } from './branching.js';
-import { initGrants } from './grants.js';
-import { allStatuses, recordUsage, resolveToken, type OAuthVendor } from './oauth-store.js';
-import { migrateLegacyKey, providerSecretKey, setProviderKey } from './provider-keys.js';
+import { attachmentsToPromptText } from '@ghostbot/runtime';
+import { rebuildHistory } from '@ghostbot/runtime';
+import { initGrants, setHost } from '@ghostbot/runtime';
+import { allStatuses, recordUsage, resolveToken, type OAuthVendor } from '@ghostbot/runtime';
+import { migrateLegacyKey, providerSecretKey, setProviderKey } from '@ghostbot/runtime';
 import type { UsageSnapshot } from '@ghostbot/llm';
 import {
   isTerminal,
@@ -38,14 +38,15 @@ import {
   rootContext,
   TERMINAL_NOTICE,
   type DelegationContext,
-} from './delegation.js';
-import { initFileLog, fileLog } from './filelog.js';
-import { readSettings, writeSettings } from './settings-file.js';
-import { getSession, setRunning } from './agent-sessions.js';
-import { buildMcpTools, syncMcpServers, closeAllMcp } from './mcp-manager.js';
-import { readSecrets, upsertSecrets } from './secrets-store.js';
+} from '@ghostbot/runtime';
+import { initFileLog, fileLog } from '@ghostbot/runtime';
+import { readSettings, writeSettings } from '@ghostbot/runtime';
+import { getSession, setRunning } from '@ghostbot/runtime';
+import { buildMcpTools, syncMcpServers, closeAllMcp } from '@ghostbot/runtime';
+import { readSecrets, upsertSecrets } from '@ghostbot/runtime';
 import { migrateUserData } from './userdata-migration.js';
-import * as store from './store.js';
+import { electronHost } from './electron-host.js';
+import * as store from '@ghostbot/runtime';
 import {
   registerBridge,
   emitEvent,
@@ -55,7 +56,7 @@ import {
   pushTranscript,
   requestApproval,
 } from './bridge-host.js';
-import { startScheduler, stopScheduler } from './scheduler.js';
+import { startScheduler, stopScheduler } from '@ghostbot/runtime';
 
 // Must run at module scope, BEFORE anything reads app.getPath('userData').
 // Electron caches the userData path on first access and otherwise derives it
@@ -702,6 +703,14 @@ async function createWindow(): Promise<void> {
 app.whenReady().then(async () => {
   initFileLog();
   userDataDir = migrateUserData();
+  /*
+   * Hand the headless engine its environment before anything touches disk.
+   *
+   * `@ghostbot/runtime` refuses to guess a data directory — a wrong guess
+   * would put someone's agents and keys somewhere they never chose — so this
+   * must run before the first store or secrets access.
+   */
+  setHost(electronHost(userDataDir));
   store.initStore(userDataDir);
   initGrants(userDataDir);
 

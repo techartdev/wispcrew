@@ -14,7 +14,7 @@ import {
   prefixBefore,
   prefixThrough,
   rebuildHistory,
-} from '../../../apps/desktop/src/main/branching.js';
+} from '@ghostbot/runtime';
 import type { ChatMessage, TranscriptEntry } from '@ghostbot/shared';
 
 let failures = 0;

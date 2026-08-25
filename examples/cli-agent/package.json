@@ -29,6 +29,7 @@
     "@ghostbot/core": "0.1.0",
     "@ghostbot/tools": "0.1.0",
     "@ghostbot/mcp": "0.1.0",
+    "@ghostbot/runtime": "0.1.0",
     "tsx": "^4.19.0"
   },
   "devDependencies": {

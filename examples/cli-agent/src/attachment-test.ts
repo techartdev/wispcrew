@@ -22,7 +22,7 @@ import {
   loadAttachments,
   attachmentsToPromptText,
   MAX_ATTACHMENTS,
-} from '../../../apps/desktop/src/main/attachments.js';
+} from '@ghostbot/runtime';
 import { configFromPreset, createProvider } from '@ghostbot/llm';
 import type { Attachment } from '@ghostbot/shared';
 

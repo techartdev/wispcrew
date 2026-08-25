@@ -17,7 +17,7 @@
 import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileLog } from './filelog.js';
+import { fileLog } from '@ghostbot/runtime';
 
 /** old basename → new basename */
 const FILE_RENAMES: Record<string, string> = {

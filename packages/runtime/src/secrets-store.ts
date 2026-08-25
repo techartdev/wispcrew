@@ -1,21 +1,25 @@
 /**
  * secrets-store.ts — encrypted-at-rest storage for provider API keys.
  *
- * Uses Electron `safeStorage`, which is backed by the OS keychain
- * (DPAPI on Windows, Keychain on macOS, libsecret/kwallet on Linux). The
- * ciphertext lives in `<userData>/ghostbot-secrets.enc`; only the OS user
- * account that wrote it can decrypt it.
+ * Encryption is supplied by the host, because the right answer differs by
+ * environment: the desktop app uses Electron `safeStorage` (DPAPI, Keychain,
+ * libsecret), while a headless daemon on a VPS has no keychain and uses a
+ * machine-local key file instead. Ciphertext lives in
+ * `<dataDir>/ghostbot-secrets.enc`.
+ *
+ * Whichever backend is in use reports `available()` truthfully, and that is
+ * what reaches the UI — a keyless host says so rather than implying the same
+ * protection an OS keychain earns.
  *
  * Migration: earlier builds stored secrets as plaintext JSON in
  * `ghostbot-secrets.json`. On first access we transparently import that
  * file, rewrite it encrypted, and delete the plaintext original.
  *
- * Fallback: if the platform reports encryption unavailable (some headless
- * Linux sessions without a keyring), we fall back to the plaintext file so
- * the app keeps working, and report `isPersistent`/`isEncrypted` honestly
- * to the UI rather than pretending the data is protected.
+ * Fallback: if encryption is unavailable entirely, we fall back to the
+ * plaintext file so the app keeps working, and report
+ * `isPersistent`/`isEncrypted` honestly rather than pretending otherwise.
  */
-import { safeStorage } from 'electron';
+import { host } from './host.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileLog } from './filelog.js';
@@ -35,7 +39,7 @@ function plainPath(userDataDir: string): string {
 /** True when the OS can actually encrypt (keychain/DPAPI available). */
 export function isEncryptionAvailable(): boolean {
   try {
-    return safeStorage.isEncryptionAvailable();
+    return host().crypto.available();
   } catch {
     return false;
   }
@@ -67,7 +71,7 @@ export function readSecrets(userDataDir: string): SecretMap {
   if (fs.existsSync(encrypted) && isEncryptionAvailable()) {
     try {
       const buf = fs.readFileSync(encrypted);
-      const json = safeStorage.decryptString(buf);
+      const json = host().crypto.decrypt(buf);
       const parsed = JSON.parse(json) as SecretMap;
       return parsed && typeof parsed === 'object' ? parsed : {};
     } catch (err) {
@@ -107,7 +111,7 @@ export function writeSecrets(userDataDir: string, store: SecretMap): boolean {
 
   if (isEncryptionAvailable()) {
     try {
-      const buf = safeStorage.encryptString(json);
+      const buf = host().crypto.encrypt(json);
       fs.writeFileSync(encPath(userDataDir), buf);
       return true;
     } catch (err) {

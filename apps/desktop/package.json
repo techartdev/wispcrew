@@ -25,6 +25,7 @@
     "@ghostbot/core": "0.1.0",
     "@ghostbot/llm": "0.1.0",
     "@ghostbot/mcp": "0.1.0",
+    "@ghostbot/runtime": "0.1.0",
     "@ghostbot/shared": "0.1.0",
     "@ghostbot/tools": "0.1.0",
     "react": "^19.1.0",
