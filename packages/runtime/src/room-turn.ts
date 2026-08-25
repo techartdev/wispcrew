@@ -134,7 +134,14 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
    */
   await Promise.all(
     routing.speakers.map((agent) =>
-      run(agent.id, text, input.attachments ?? [], undefined, input.channel).catch(
+      /*
+       * The room, not the agent, owns the transcript.
+       *
+       * Without the last argument each agent writes into its own file, so a
+       * second agent's replies never appear in the room — measured: `@all`
+       * ran two agents and showed nothing.
+       */
+      run(agent.id, text, input.attachments ?? [], undefined, input.channel, conversation.id).catch(
         (err: Error) => {
           // One agent failing must not take down the others.
           fileLog('[room] turn failed for', agent.handle, err.message);

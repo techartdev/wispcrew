@@ -89,6 +89,24 @@ export function createConversation(patch: {
   return record;
 }
 
+/**
+ * Create an agent together with its room.
+ *
+ * Every agent needs one: `sendToRoom` is now the only send path, and an
+ * agent without a room cannot be talked to at all. The startup migration
+ * covers agents that already existed, but said nothing about agents created
+ * afterwards — which meant every NEW agent was unreachable. Found by running
+ * a live conversation, not by reading the code.
+ *
+ * Lives here rather than in `store.ts` because the store cannot import this
+ * module without a cycle: `conversations` already depends on `store`.
+ */
+export function createAgentWithRoom(patch: Parameters<typeof store.createAgent>[0]) {
+  const agent = store.createAgent(patch);
+  createConversation({ agentId: agent.id, agentName: agent.name });
+  return agent;
+}
+
 export function updateConversation(
   id: string,
   patch: Partial<ConversationRecord>,

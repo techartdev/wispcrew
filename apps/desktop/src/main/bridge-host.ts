@@ -44,6 +44,14 @@ import type {
 } from '@wispcrew/shared';
 import { handleFor } from '@wispcrew/shared';
 import * as store from '@wispcrew/runtime';
+/*
+ * Creating an agent must also create its room.
+ *
+ * `sendToRoom` is the only send path now, so an agent without a room cannot
+ * be talked to at all. The startup migration covers agents that already
+ * existed and said nothing about ones created afterwards.
+ */
+import { createAgentWithRoom } from '@wispcrew/runtime';
 import { loadAttachments } from '@wispcrew/runtime';
 import { readSettings, writeSettings } from '@wispcrew/runtime';
 import { readSecrets, upsertSecrets, isEncryptionAvailable } from '@wispcrew/runtime';
@@ -472,7 +480,8 @@ export function registerBridge(context: BridgeContext): void {
   handle('listAgents', () => store.listAgents());
 
   handle('createAgent', (patch: Partial<AgentRecord>) => {
-    const created = store.createAgent(patch);
+    // With its room: an agent that has none cannot be talked to.
+    const created = createAgentWithRoom(patch);
     emitAgents();
     return created;
   });
@@ -664,7 +673,7 @@ export function registerBridge(context: BridgeContext): void {
 
     // A branch is a new agent with the same configuration, seeded with the
     // shared prefix. The original conversation is untouched.
-    const branch = store.createAgent({
+    const branch = createAgentWithRoom({
       ...source,
       id: undefined,
       name: nextBranchName(source.name),

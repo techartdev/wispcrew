@@ -29,6 +29,7 @@ import type {
 import { attachmentsToPromptText } from '@wispcrew/runtime';
 import { rebuildHistory } from '@wispcrew/runtime';
 import {
+  createAgentWithRoom,
   defaultSettings,
   createNodeCrypto,
   initGrants,
@@ -314,7 +315,7 @@ app.whenReady().then(async () => {
    * they never both create one.
    */
   if (store.listAgents().length === 0) {
-    store.createAgent({ name: 'Assistant', persona: 'general' });
+    createAgentWithRoom({ name: 'Assistant', persona: 'general' });
     fileLog('[main] created default agent');
   }
 

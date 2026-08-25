@@ -21,6 +21,7 @@
 import { PERSONAS } from '@wispcrew/core';
 import { describeLookup, findAllSubscriptions, PROVIDER_PRESETS } from '@wispcrew/llm';
 import {
+  createAgentWithRoom,
   abortSession,
   allStatuses,
   clearSession,
@@ -114,7 +115,8 @@ export function nodeMethods(): MethodTable {
   return {
     /* agents */
     listAgents: () => listAgents(),
-    createAgent: (patch: never) => createAgent(patch),
+    // With its room: an agent that has none cannot be talked to.
+    createAgent: (patch: never) => createAgentWithRoom(patch),
     updateAgent: (id: never, patch: never) => updateAgent(id, patch),
     deleteAgent: (id: never) => deleteAgent(id),
     duplicateAgent: (id: never) => duplicateAgent(id),

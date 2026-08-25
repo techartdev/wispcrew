@@ -31,6 +31,7 @@ import { ToolRegistry } from '@wispcrew/tools';
 
 import * as store from './store.js';
 import { host } from './host.js';
+import { getConversation } from './conversations.js';
 import { downgradeNotice, resolvePolicy } from './approval-policy.js';
 import { readSettings } from './settings-file.js';
 import { readSecrets } from './secrets-store.js';
@@ -328,7 +329,30 @@ export async function runPrompt(
    * holding the user's phone.
    */
   channel?: ChannelId,
+  /*
+   * Where this run's output belongs.
+   *
+   * An agent used to own its conversation, so the two were the same file.
+   * In a room with several agents they are not: the second agent would
+   * write its replies into its OWN transcript, and the room would look
+   * empty. Measured, not theorised — `@all` produced two runs and no
+   * visible answers.
+   *
+   * Defaults to the agent's own id, which is what a single-agent
+   * conversation has always meant.
+   */
+  transcriptId?: string,
 ): Promise<string> {
+  /*
+   * Where this run's output goes.
+   *
+   * An agent used to own its conversation, so `agentId` served as both.
+   * In a room with several agents they differ, and writing to the agent's
+   * own file made the second agent's replies invisible — the room looked
+   * empty while two runs were happening.
+   */
+  const outputId = transcriptId ?? agentId;
+
   const expanded = expandSkill(rawPrompt);
   // Non-image attachments are inlined ahead of the user's own words so the
   // model reads the material before the instruction about it. Images travel
@@ -343,7 +367,7 @@ export async function runPrompt(
   // A subscription preset with no sign-in fails here with a message that
   // names the fix, rather than reaching the provider and returning a 401.
   if (cfg.credentialError) {
-    pushTranscript(agentId, {
+    pushTranscript(outputId, {
       kind: 'notice',
       id: store.newId('err'),
       level: 'error',
@@ -383,7 +407,7 @@ export async function runPrompt(
   const provider = createProvider(preset);
   const check = provider.validate();
   if (!check.ok) {
-    pushTranscript(agentId, {
+    pushTranscript(outputId, {
       kind: 'notice',
       id: store.newId('err'),
       level: 'error',
@@ -427,7 +451,7 @@ export async function runPrompt(
       isStreaming: streaming,
       createdAt: Date.now(),
     };
-    pushTranscript(agentId, entry);
+    pushTranscript(outputId, entry);
   };
 
   /** Close the current text segment so what follows appears after it. */
@@ -451,7 +475,7 @@ export async function runPrompt(
 
   if (resolved.downgraded) {
     // Say so, or "it asked me again" is indistinguishable from a bug.
-    pushTranscript(agentId, {
+    pushTranscript(outputId, {
       kind: 'notice',
       id: store.newId('note'),
       level: 'info',
@@ -463,7 +487,21 @@ export async function runPrompt(
   // A delegated run inherits the caller's (possibly narrowed) policy so an
   // agent cannot gain permissions by asking a more privileged agent to act
   // for it. A top-level run starts a fresh delegation chain.
-  const chain = delegation ?? rootContext(resolved.policy, agentId);
+  /*
+   * Room-mates are not delegates.
+   *
+   * An agent in a room is addressed with `@handle` and answers in front of
+   * everyone; a delegate is asked privately and reports back. Offering both
+   * made an agent hand its question to a room-mate rather than answer it.
+   */
+  const roomMembers =
+    outputId !== agentId
+      ? (getConversation(outputId)?.participants ?? [])
+          .filter((p) => p.kind === 'agent')
+          .map((p) => p.id)
+      : undefined;
+
+  const chain = delegation ?? rootContext(resolved.policy, agentId, roomMembers);
   const effectivePolicy = delegation ? delegation.policy : resolved.policy;
 
   // Built-in tools plus anything the configured MCP servers expose.
@@ -506,7 +544,7 @@ export async function runPrompt(
     // The caller has already appended this turn's user message to the
     // transcript, and `Agent.run` appends it again — so the trailing user
     // entry is dropped here to avoid sending it twice.
-    initialHistory: rebuildHistory(dropTrailingUserEntry(store.loadTranscript(agentId))),
+    initialHistory: rebuildHistory(dropTrailingUserEntry(store.loadTranscript(outputId))),
     onApprovalRequired: async (req) => {
       // `readonly` denies anything needing approval; `auto` grants it.
       if (effectivePolicy === 'readonly') return false;
@@ -528,7 +566,7 @@ export async function runPrompt(
       // Close any prose written before this call so the card lands *after*
       // it, and the answer the model writes next lands after the card.
       settleSegment();
-      pushTranscript(agentId, {
+      pushTranscript(outputId, {
         kind: 'tool-call',
         id: e.call.id,
         toolName: e.call.name,
@@ -537,7 +575,7 @@ export async function runPrompt(
         createdAt: Date.now(),
       });
     } else if (e.type === 'tool_call_result') {
-      pushTranscript(agentId, {
+      pushTranscript(outputId, {
         kind: 'tool-call',
         id: e.result.id,
         toolName: e.result.name,
@@ -552,7 +590,7 @@ export async function runPrompt(
       // explanation. Non-fatal notices (e.g. "Turn aborted by user") have no
       // second chance, so they are still shown.
       if (e.fatal) return;
-      pushTranscript(agentId, {
+      pushTranscript(outputId, {
         kind: 'notice',
         id: store.newId('err'),
         level: 'error',
@@ -596,7 +634,7 @@ export async function runPrompt(
       model: preset.model,
     });
     if (friendly) {
-      pushTranscript(agentId, {
+      pushTranscript(outputId, {
         kind: 'notice',
         id: store.newId('err'),
         level: 'error',

@@ -11,6 +11,7 @@
  * had been exercised.
  */
 import {
+  createAgentWithRoom,
   closeAllMcp,
   defaultSettings,
   emitEngineEvent,
@@ -179,7 +180,7 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
   // Every install has at least one agent, so a fresh daemon is usable
   // immediately rather than presenting an empty roster.
   if (listAgents().length === 0) {
-    createAgent({ name: 'Assistant', persona: 'general' });
+    createAgentWithRoom({ name: 'Assistant', persona: 'general' });
     fileLog('[daemon] created default agent');
   }
 

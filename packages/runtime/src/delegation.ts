@@ -50,11 +50,27 @@ export interface DelegationContext {
   callsUsed: { count: number };
   /** The caller's policy; a delegate may not exceed it. */
   policy: ApprovalPolicy;
+  /**
+   * Agents already in this conversation, which are NOT delegates.
+   *
+   * Delegation and room membership are different relationships. A delegate
+   * is asked privately and reports back; a room member is addressed with
+   * `@handle` and answers in front of everyone. Offering both meant an
+   * agent that had just been asked a question handed it to a room-mate
+   * instead of answering it — measured, not theorised: two agents in a room
+   * each delegated to a third, and the room filled with "Reply from
+   * Assistant" while nobody actually answered.
+   */
+  roomMembers?: string[];
 }
 
 /** A fresh context for a turn started by the human. */
-export function rootContext(policy: ApprovalPolicy, agentId: string): DelegationContext {
-  return { depth: 0, stack: [agentId], callsUsed: { count: 0 }, policy };
+export function rootContext(
+  policy: ApprovalPolicy,
+  agentId: string,
+  roomMembers?: string[],
+): DelegationContext {
+  return { depth: 0, stack: [agentId], callsUsed: { count: 0 }, policy, roomMembers };
 }
 
 /**
@@ -118,7 +134,14 @@ export function makeAskAgentTool(
 ): Tool<AskAgentArgs> | null {
   const candidates = store
     .listAgents()
-    .filter((a) => !a.archived && a.id !== callerId && !ctx.stack.includes(a.id));
+    .filter(
+      (a) =>
+        !a.archived &&
+        a.id !== callerId &&
+        !ctx.stack.includes(a.id) &&
+        // A room-mate is addressed with @handle, not delegated to.
+        !(ctx.roomMembers ?? []).includes(a.id),
+    );
 
   // Nothing to delegate to: do not advertise a tool that can only fail.
   if (candidates.length === 0) return null;
