@@ -15,11 +15,11 @@
  * The desktop's bridge imports Electron for those three methods, so a daemon
  * cannot import it. Rather than contort that module, the node exposes the
  * engine directly: the implementations below are thin calls into
- * `@ghostbot/runtime`, which is the same code the desktop ultimately runs.
+ * `@wispcrew/runtime`, which is the same code the desktop ultimately runs.
  * The duplication is the method *list*, not the behaviour.
  */
-import { PERSONAS } from '@ghostbot/core';
-import { describeLookup, findAllSubscriptions, PROVIDER_PRESETS } from '@ghostbot/llm';
+import { PERSONAS } from '@wispcrew/core';
+import { describeLookup, findAllSubscriptions, PROVIDER_PRESETS } from '@wispcrew/llm';
 import {
   abortSession,
   allStatuses,
@@ -61,7 +61,7 @@ import {
   updateRoutine,
   updateSkill,
   writeSettings,
-} from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
 
 export type MethodTable = Record<string, (...args: never[]) => unknown>;
 

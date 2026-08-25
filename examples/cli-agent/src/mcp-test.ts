@@ -8,10 +8,10 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { McpStdioClient, mcpToolsToTools, quoteWindowsArg } from '@ghostbot/mcp';
-import { Agent } from '@ghostbot/core';
-import { ToolRegistry } from '@ghostbot/tools';
-import type { ChatProvider, ChatRequest, ProviderChunk, ToolResult } from '@ghostbot/shared';
+import { McpStdioClient, mcpToolsToTools, quoteWindowsArg } from '@wispcrew/mcp';
+import { Agent } from '@wispcrew/core';
+import { ToolRegistry } from '@wispcrew/tools';
+import type { ChatProvider, ChatRequest, ProviderChunk, ToolResult } from '@wispcrew/shared';
 
 const fixturePath = fileURLToPath(new URL('./mcp-server-fixture.mjs', import.meta.url));
 

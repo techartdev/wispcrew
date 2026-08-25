@@ -15,13 +15,13 @@
  *    case-insensitive filesystems while Linux does not
  *  - NUL bytes, which historically truncate paths in native layers
  *
- * Run: npm run test:sandbox --workspace @ghostbot/examples-cli
+ * Run: npm run test:sandbox --workspace @wispcrew/examples-cli
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readFileTool, writeFileTool, listDirTool, shellTool } from '@ghostbot/tools';
-import type { ToolContext } from '@ghostbot/shared';
+import { readFileTool, writeFileTool, listDirTool, shellTool } from '@wispcrew/tools';
+import type { ToolContext } from '@wispcrew/shared';
 
 let failures = 0;
 

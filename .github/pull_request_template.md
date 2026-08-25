@@ -8,7 +8,7 @@
 
 - [ ] `npm run typecheck`
 - [ ] `npm run build`
-- [ ] `npm run test --workspace @ghostbot/examples-cli`
+- [ ] `npm run test --workspace @wispcrew/examples-cli`
 - [ ] Launched the app (`npm run desktop`) if `apps/desktop` changed
 
 ## Anything you could not verify?

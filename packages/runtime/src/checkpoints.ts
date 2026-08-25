@@ -22,7 +22,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import type { TranscriptEntry } from '@ghostbot/shared';
+import type { TranscriptEntry } from '@wispcrew/shared';
 import { fileLog } from './filelog.js';
 
 /** Directory holding checkpoints, beside the transcripts they protect. */

@@ -36,10 +36,10 @@ import {
   fileLog,
   readSecrets,
   type SecretCrypto,
-} from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
 
 /** Where the daemon-readable copy lives, beside the keychain-encrypted one. */
-const DAEMON_SECRETS = 'ghostbot-secrets-node.enc';
+const DAEMON_SECRETS = 'wispcrew-secrets-node.enc';
 
 export function daemonSecretsPath(dataDir: string): string {
   return path.join(dataDir, DAEMON_SECRETS);

@@ -11,7 +11,7 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
-import type { AgentRecord, AgentRunState, SkillRecord, TranscriptEntry } from '@ghostbot/shared';
+import type { AgentRecord, AgentRunState, SkillRecord, TranscriptEntry } from '@wispcrew/shared';
 import { Markdown } from './Markdown';
 
 interface ChatProps {
@@ -206,7 +206,7 @@ function ApprovalCard({
         </button>
       </div>
       <p className="approval-hint">
-        “Always allow” applies to this agent until GhostBot restarts.
+        “Always allow” applies to this agent until WispCrew restarts.
       </p>
     </div>
   );

@@ -23,7 +23,7 @@ import {
   removeNode,
   setHost,
   updateAgent,
-} from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
 
 let failures = 0;
 const check = (label, cond, detail) => {
@@ -71,7 +71,7 @@ console.log('\n[the token is a credential, not metadata]');
   check('getNode returns it', getNode(dir, node.id)?.token === TOKEN);
 
   // And it must be in the encrypted store, not lying around.
-  const enc = path.join(dir, 'ghostbot-secrets.enc');
+  const enc = path.join(dir, 'wispcrew-secrets.enc');
   check('an encrypted store exists', fs.existsSync(enc));
   check('the token is not readable in it', !fs.readFileSync(enc).includes(Buffer.from(TOKEN)));
 }
@@ -104,7 +104,7 @@ console.log('\n[forgetting takes the credential too]');
   check('and so is its token', getNode(dir, node.id) === null);
 
   // Leaving a token behind would keep access the user believes they revoked.
-  const enc = path.join(dir, 'ghostbot-secrets.enc');
+  const enc = path.join(dir, 'wispcrew-secrets.enc');
   if (fs.existsSync(enc)) {
     check('nothing left in the secret store', !fs.readFileSync(enc).includes(Buffer.from(TOKEN)));
   }

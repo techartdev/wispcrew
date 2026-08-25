@@ -3,7 +3,7 @@
 Written at the end of the build-out. This is the honest state of the project:
 what is verified, what is assumed, and what to do first.
 
-## What GhostBot is
+## What WispCrew is
 
 A free, MIT-licensed, local-first desktop AI agent. The user brings their own
 model — DeepSeek, OpenAI, Anthropic, Groq, OpenRouter, Ollama, LM Studio, or
@@ -16,7 +16,7 @@ component. Conversations and API keys stay on the user's machine.
    never been pushed. The remote is not configured.
 
    ```bash
-   git remote add origin https://github.com/techartdev/ghostbot.git
+   git remote add origin https://github.com/techartdev/wispcrew.git
    git push -u origin main
    ```
 
@@ -25,7 +25,7 @@ component. Conversations and API keys stay on the user's machine.
    every commit), but it exists in two places on this machine:
 
    - `testkey.txt` in the repository root
-   - `%APPDATA%\GhostBot\ghostbot-secrets.enc` (encrypted, but recoverable
+   - `%APPDATA%\WispCrew\wispcrew-secrets.enc` (encrypted, but recoverable
      by this OS user)
 
    It also sat in **plaintext** in the settings file briefly during round 2,
@@ -72,7 +72,7 @@ working tree — during the final round.
 The renderer is fully sandboxed and reaches the main process only through an
 enumerated IPC surface (`packages/shared/src/bridge.ts`, implemented by
 `apps/desktop/src/main/bridge-host.ts`). A message flows
-`sendPrompt → runPrompt → @ghostbot/core Agent → provider`, with results
+`sendPrompt → runPrompt → @wispcrew/core Agent → provider`, with results
 **pushed** back as events rather than polled. Tool calls pass through an
 approval policy. Everything durable is plain JSON under `<userData>`, written
 atomically. See `docs/ARCHITECTURE.md`.
@@ -98,7 +98,7 @@ the problem:
   live.
 - **The cron parser and Markdown renderer are hand-written.** This app runs
   shell commands; every dependency is a supply-chain decision.
-- **Build order is explicit.** Everything imports `@ghostbot/shared` through
+- **Build order is explicit.** Everything imports `@wispcrew/shared` through
   its generated `.d.ts`, so `--workspaces` in arbitrary order breaks a fresh
   clone. If you add a package, add it to `build:packages`.
 

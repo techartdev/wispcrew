@@ -70,7 +70,7 @@ export function setHost(host: HostEnvironment): void {
 export function host(): HostEnvironment {
   if (!current) {
     throw new Error(
-      'GhostBot runtime used before setHost(): the engine does not guess where to store data.',
+      'WispCrew runtime used before setHost(): the engine does not guess where to store data.',
     );
   }
   return current;

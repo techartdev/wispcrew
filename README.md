@@ -1,6 +1,6 @@
 <div align="center">
 
-# GhostBot
+# WispCrew
 
 **A free, open-source desktop AI agent. Bring your own model.**
 
@@ -16,7 +16,7 @@ Runs locally, talks to whichever LLM provider you choose.
 
 ## What it is
 
-GhostBot is a desktop agent that can actually *do* things on your computer —
+WispCrew is a desktop agent that can actually *do* things on your computer —
 read and write files, run shell commands, search code, fetch web pages — while
 you stay in control of every action that touches your system.
 
@@ -27,7 +27,7 @@ you asked for, sent to the provider you chose.
 ### Why it exists
 
 Most capable desktop agents are tied to one company's model, one subscription,
-and one cloud. GhostBot keeps the useful parts of that experience — durable
+and one cloud. WispCrew keeps the useful parts of that experience — durable
 agents, tool use, scheduled work, extensibility — without the account, the
 monthly fee, or the requirement to run your work on someone else's computer.
 
@@ -57,8 +57,8 @@ monthly fee, or the requirement to run your work on someone else's computer.
 Requires **Node.js 20+**.
 
 ```bash
-git clone https://github.com/techartdev/ghostbot
-cd ghostbot
+git clone https://github.com/techartdev/wispcrew
+cd wispcrew
 npm install
 npm run desktop
 ```
@@ -79,8 +79,8 @@ npm run dist:linux   # AppImage
 The agent core also runs headless:
 
 ```bash
-GHOSTBOT_PROVIDER=openai GHOSTBOT_API_KEY=sk-... \
-  npm run agent --workspace @ghostbot/examples-cli -- "summarize the files here"
+WISPCREW_PROVIDER=openai WISPCREW_API_KEY=sk-... \
+  npm run agent --workspace @wispcrew/examples-cli -- "summarize the files here"
 ```
 
 Omit the prompt for an interactive REPL.
@@ -107,7 +107,7 @@ events. There is no polling and no hidden network path.
 
 ### Subscription sign-in (optional, and read this first)
 
-GhostBot can sign in with a **Claude Pro/Max** or **ChatGPT** subscription
+WispCrew can sign in with a **Claude Pro/Max** or **ChatGPT** subscription
 instead of an API key, either through your browser or by adopting a sign-in
 that Claude Code or Codex CLI already holds on your machine. Where the
 provider reports it, Settings shows how much of your plan you have used and
@@ -120,7 +120,7 @@ when it resets.
   suspended without warning. The account at risk is yours.
 - **OpenAI does not document it for third-party apps.** "Sign in with ChatGPT"
   is a real product, but the subscription-billing path is documented for
-  OpenAI's own surfaces. The endpoint GhostBot uses is private and can change
+  OpenAI's own surfaces. The endpoint WispCrew uses is private and can change
   at any time.
 
 It is off by default, never enabled silently, and the warning appears above
@@ -133,7 +133,7 @@ Free tiers throttle. NVIDIA's is roughly 40 requests per minute, and an agent
 turn is several requests — think, call a tool, think again — so a busy turn
 can brush against it.
 
-GhostBot retries transient failures (429 and 5xx) with exponential backoff
+WispCrew retries transient failures (429 and 5xx) with exponential backoff
 and jitter, honouring `Retry-After` when the provider sends one. It also
 catches capacity errors that arrive *inside* a successful response, which
 NVIDIA does under load. Permanent failures — a bad key, an unknown model — are
@@ -171,7 +171,7 @@ Found a problem? Please see [SECURITY.md](SECURITY.md).
 ```bash
 npm run typecheck                               # everywhere
 npm run build                                   # all packages + desktop
-npm run test --workspace @ghostbot/examples-cli # six offline suites, no API key needed
+npm run test --workspace @wispcrew/examples-cli # six offline suites, no API key needed
 npm run desktop                                 # build + launch
 ```
 
@@ -209,6 +209,6 @@ Please read the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 [MIT](LICENSE) — do what you like, including commercially.
 
-GhostBot is an independent project. It is not affiliated with, endorsed by, or
+WispCrew is an independent project. It is not affiliated with, endorsed by, or
 derived from any commercial AI assistant product. All code in this repository
 is original work by its contributors or a permissively licensed dependency.

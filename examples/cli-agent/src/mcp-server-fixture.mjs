@@ -26,7 +26,7 @@ rl.on('line', (line) => {
       result: {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { name: 'ghostbot-fixture-server', version: '1.0.0' },
+        serverInfo: { name: 'wispcrew-fixture-server', version: '1.0.0' },
       },
     });
     return;

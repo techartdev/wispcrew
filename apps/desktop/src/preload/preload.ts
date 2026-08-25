@@ -12,7 +12,7 @@
  * is the security boundary.
  */
 import { contextBridge, ipcRenderer } from 'electron';
-import type { BridgeEvent, GhostBridge } from '@ghostbot/shared';
+import type { BridgeEvent, GhostBridge } from '@wispcrew/shared';
 
 const bridge: GhostBridge = {
   onEvent(listener: (event: BridgeEvent) => void): () => void {
@@ -106,4 +106,4 @@ const bridge: GhostBridge = {
     ipcRenderer.invoke('gb:restoreHistory', agentId, file),
 };
 
-contextBridge.exposeInMainWorld('ghostbot', bridge);
+contextBridge.exposeInMainWorld('wispcrew', bridge);

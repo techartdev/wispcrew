@@ -20,7 +20,7 @@
  */
 import type { Server, Socket } from 'node:net';
 import { timingSafeEqual } from 'node:crypto';
-import type { BridgeEvent } from '@ghostbot/shared';
+import type { BridgeEvent } from '@wispcrew/shared';
 import { addEventSink } from './engine-events.js';
 import type { PairingWindow } from './pairing.js';
 import { fileLog } from './filelog.js';

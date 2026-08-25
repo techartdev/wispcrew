@@ -14,7 +14,7 @@ import {
   markNodeSeen,
   parseAddress,
   type NodeClient,
-} from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
 
 /** Methods whose FIRST argument is an agent id. */
 const AGENT_SCOPED = new Set([
@@ -69,7 +69,7 @@ export async function linkToNode(
     const client = await connectRemoteNode(
       { host, port, fingerprint: node.fingerprint, token: node.token },
       {
-        clientName: 'ghostbot-desktop',
+        clientName: 'wispcrew-desktop',
         onEvent,
         onClose: () => {
           // Drop the link so the next call reconnects rather than writing

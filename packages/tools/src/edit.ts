@@ -3,7 +3,7 @@
  */
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { Tool, ToolContext, ToolResult } from '@ghostbot/shared';
+import type { Tool, ToolContext, ToolResult } from '@wispcrew/shared';
 import { noteObserved } from './observation.js';
 
 interface EditArgs {

@@ -23,7 +23,7 @@
  *  - **The tick is idempotent per minute.** We remember the last fired minute
  *    per routine so a slightly early/late timer cannot double-fire.
  */
-import type { RoutineRecord } from '@ghostbot/shared';
+import type { RoutineRecord } from '@wispcrew/shared';
 import { listRoutines, recordRoutineRun, updateRoutine, newId } from './store.js';
 import { matches, nextRun, parseCron, systemTimeZone } from './cron.js';
 import { fileLog } from './filelog.js';

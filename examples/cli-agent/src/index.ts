@@ -1,28 +1,28 @@
 /**
- * GhostBot CLI example — headless agent with any LLM.
+ * WispCrew CLI example — headless agent with any LLM.
  *
  * Usage:
- *   GHOSTBOT_PROVIDER=deepseek GHOSTBOT_API_KEY=sk-... npm run agent -- "list files and summarize"
- *   GHOSTBOT_PROVIDER=ollama npm run agent -- "what time is it?"   (local, no key)
+ *   WISPCREW_PROVIDER=deepseek WISPCREW_API_KEY=sk-... npm run agent -- "list files and summarize"
+ *   WISPCREW_PROVIDER=ollama npm run agent -- "what time is it?"   (local, no key)
  *
  * Interactive REPL when no prompt argument is given.
  */
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { configFromPreset, createProvider } from '@ghostbot/llm';
-import { Agent } from '@ghostbot/core';
-import type { AgentEvent, ApprovalRequest } from '@ghostbot/shared';
+import { configFromPreset, createProvider } from '@wispcrew/llm';
+import { Agent } from '@wispcrew/core';
+import type { AgentEvent, ApprovalRequest } from '@wispcrew/shared';
 
 function env(key: string): string | undefined {
   return process.env[key];
 }
 
 function buildAgent() {
-  const presetId = env('GHOSTBOT_PROVIDER') ?? 'deepseek';
+  const presetId = env('WISPCREW_PROVIDER') ?? 'deepseek';
   const config = configFromPreset(presetId, {
-    apiKey: env('GHOSTBOT_API_KEY'),
-    model: env('GHOSTBOT_MODEL'),
-    baseUrl: env('GHOSTBOT_BASE_URL'),
+    apiKey: env('WISPCREW_API_KEY'),
+    model: env('WISPCREW_MODEL'),
+    baseUrl: env('WISPCREW_BASE_URL'),
   });
   const provider = createProvider(config);
   const check = provider.validate();
@@ -66,7 +66,7 @@ async function main() {
     return;
   }
 
-  console.log('GhostBot CLI — type a message, Ctrl+C to exit.');
+  console.log('WispCrew CLI — type a message, Ctrl+C to exit.');
   while (true) {
     const line = await rl.question('\x1b[32m> \x1b[0m');
     if (!line.trim()) continue;

@@ -3,7 +3,7 @@
  *
  * Asked whether it had cron, an agent answered "No — I don't have an
  * internal persistent scheduler or the ability to wake myself up", and
- * suggested GitHub Actions instead. GhostBot has had a cron scheduler and a
+ * suggested GitHub Actions instead. WispCrew has had a cron scheduler and a
  * Routines panel throughout. The model simply had no way to know, so it
  * reasoned honestly from an incomplete picture and misinformed the user
  * about their own application.
@@ -12,7 +12,7 @@
  *
  * Offline: prompt construction only.
  */
-import { defaultSystemPrompt, personaById } from '@ghostbot/core';
+import { defaultSystemPrompt, personaById } from '@wispcrew/core';
 
 let failures = 0;
 const check = (label, cond, detail) => {

@@ -9,14 +9,14 @@
  *  - **Never retry a permanent failure.** Retrying a 401 or a malformed 400
  *    cannot succeed; it just turns a clear error into a mysterious delay.
  *
- * Run: npm run test:retry --workspace @ghostbot/examples-cli
+ * Run: npm run test:retry --workspace @wispcrew/examples-cli
  */
 import {
   backoffDelay,
   isRetryableStatus,
   isTransientErrorMessage,
   parseRetryAfter,
-} from '@ghostbot/llm';
+} from '@wispcrew/llm';
 
 let failures = 0;
 

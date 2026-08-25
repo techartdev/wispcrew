@@ -129,7 +129,7 @@ export function generateSelfSigned(hostnames: string[]): NodeIdentity {
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   });
 
-  const name = commonName(hostnames[0] ?? 'ghostbot-node');
+  const name = commonName(hostnames[0] ?? 'wispcrew-node');
   const now = new Date();
   const until = new Date(now.getTime() + 10 * 365 * 24 * 60 * 60 * 1000);
 

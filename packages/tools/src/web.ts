@@ -5,7 +5,7 @@
  * web_search: minimal DuckDuckGo HTML search fallback (no API key needed).
  * Both are best-effort; providers without network access will see errors.
  */
-import type { Tool, ToolResult } from '@ghostbot/shared';
+import type { Tool, ToolResult } from '@wispcrew/shared';
 
 const MAX_BODY = 300_000;
 const USER_AGENT =

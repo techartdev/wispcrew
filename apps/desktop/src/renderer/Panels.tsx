@@ -27,7 +27,7 @@ import type {
   SettingsView,
   SkillRecord,
   ToolGrant,
-} from '@ghostbot/shared';
+} from '@wispcrew/shared';
 
 /* ------------------------------------------------------------------ */
 /* Modal shell                                                         */
@@ -502,7 +502,7 @@ function ChannelsSection({
       <h3>Telegram</h3>
       <p className="muted small">
         The only channel that reaches you away from this computer. You create the bot, so
-        nothing passes through a GhostBot service and only your own agents can write to it.
+        nothing passes through a WispCrew service and only your own agents can write to it.
       </p>
       <ol className="muted small steps">
         <li>
@@ -1476,7 +1476,7 @@ export function NodesPanel({
       {adding ? (
         <div className="node-form">
           <p className="muted small">
-            On the other machine run <code>ghostbot serve --listen --network --pair</code>.
+            On the other machine run <code>wispcrew serve --listen --network --pair</code>.
             It prints a code and a fingerprint.
           </p>
           {/*
@@ -1591,7 +1591,7 @@ export function McpPanel({
     <Modal title="Plugins (MCP servers)" onClose={onClose} wide>
       <p className="muted">
         MCP servers extend your agents with extra tools. They run as local processes on your
-        machine; GhostBot spawns them with the command you provide.
+        machine; WispCrew spawns them with the command you provide.
       </p>
 
       <div className="list">

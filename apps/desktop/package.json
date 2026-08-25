@@ -1,14 +1,14 @@
 {
-  "name": "@ghostbot/desktop",
+  "name": "@wispcrew/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "GhostBot desktop app — Electron shell + chat UI.",
+  "description": "WispCrew desktop app — Electron shell + chat UI.",
   "license": "MIT",
-  "author": "GhostBot contributors",
+  "author": "WispCrew contributors",
   "type": "module",
   "main": "dist/main.mjs",
   "scripts": {
-    "build:main": "esbuild src/main/main.ts --bundle --platform=node --format=esm --outfile=dist/main.mjs --external:electron --external:@ghostbot/* --sourcemap",
+    "build:main": "esbuild src/main/main.ts --bundle --platform=node --format=esm --outfile=dist/main.mjs --external:electron --external:@wispcrew/* --sourcemap",
     "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --format=cjs --outfile=dist/preload.cjs --external:electron --sourcemap",
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:preload && npm run build:renderer",
@@ -22,12 +22,12 @@
     "dist:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {
-    "@ghostbot/core": "0.1.0",
-    "@ghostbot/llm": "0.1.0",
-    "@ghostbot/mcp": "0.1.0",
-    "@ghostbot/runtime": "0.1.0",
-    "@ghostbot/shared": "0.1.0",
-    "@ghostbot/tools": "0.1.0",
+    "@wispcrew/core": "0.1.0",
+    "@wispcrew/llm": "0.1.0",
+    "@wispcrew/mcp": "0.1.0",
+    "@wispcrew/runtime": "0.1.0",
+    "@wispcrew/shared": "0.1.0",
+    "@wispcrew/tools": "0.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

@@ -27,7 +27,7 @@
  * transcript is a first-class record the user can open and read, not a hidden
  * side effect.
  */
-import type { AgentRecord, ApprovalPolicy, Tool, ToolContext, ToolResult } from '@ghostbot/shared';
+import type { AgentRecord, ApprovalPolicy, Tool, ToolContext, ToolResult } from '@wispcrew/shared';
 import * as store from './store.js';
 import { fileLog } from './filelog.js';
 

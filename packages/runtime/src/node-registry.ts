@@ -9,7 +9,7 @@
  *
  * A node token grants shell access on that machine for as long as it exists.
  * That is at least as sensitive as an API key, so it is kept the same way —
- * in `ghostbot-secrets.enc`, never in the plaintext settings file, and never
+ * in `wispcrew-secrets.enc`, never in the plaintext settings file, and never
  * handed to the renderer.
  *
  * The rest of a node's record — name, address, fingerprint — is not secret
@@ -26,7 +26,7 @@ const NODES_FILE = 'nodes.json';
 
 /** Where a node's token is kept in the encrypted store. */
 function tokenKey(nodeId: string): string {
-  return `GHOSTBOT_NODE_TOKEN_${nodeId.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
+  return `WISPCREW_NODE_TOKEN_${nodeId.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
 }
 
 /** A node as stored on disk: everything except the token. */

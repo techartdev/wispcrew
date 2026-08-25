@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { connectNode, isProcessAlive, readEndpoint } from '@ghostbot/runtime';
+import { connectNode, isProcessAlive, readEndpoint } from '@wispcrew/runtime';
 
 let failures = 0;
 const check = (label, cond, detail) => {
@@ -51,8 +51,8 @@ const app = spawn(electron, ['.', `--user-data-dir=${dir}`], {
   stdio: 'ignore',
   env: {
     ...process.env,
-    GHOSTBOT_CAPTURE: path.join(dir, 'shot.png'),
-    GHOSTBOT_CAPTURE_DELAY: '6000',
+    WISPCREW_CAPTURE: path.join(dir, 'shot.png'),
+    WISPCREW_CAPTURE_DELAY: '6000',
   },
 });
 

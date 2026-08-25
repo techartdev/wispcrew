@@ -28,8 +28,8 @@ import {
   findAnthropicSubscription,
   findOpenAiSubscription,
   PROVIDER_PRESETS,
-} from '@ghostbot/llm';
-import { PERSONAS } from '@ghostbot/core';
+} from '@wispcrew/llm';
+import { PERSONAS } from '@wispcrew/core';
 import type {
   AgentRecord,
   ApprovalResolution,
@@ -41,16 +41,16 @@ import type {
   SettingsView,
   SkillRecord,
   TranscriptEntry,
-} from '@ghostbot/shared';
-import * as store from '@ghostbot/runtime';
-import { loadAttachments } from '@ghostbot/runtime';
-import { readSettings, writeSettings } from '@ghostbot/runtime';
-import { readSecrets, upsertSecrets, isEncryptionAvailable } from '@ghostbot/runtime';
-import { statuses as mcpStatuses, syncMcpServers } from '@ghostbot/runtime';
-import { runRoutineNow, refreshNextRunTime, refreshNextRunTimes } from '@ghostbot/runtime';
-import { abortSession, clearSession, seedSessionHistory } from '@ghostbot/runtime';
-import { prefixBefore, prefixThrough, rebuildHistory } from '@ghostbot/runtime';
-import { isClientOnlyMethod } from '@ghostbot/shared';
+} from '@wispcrew/shared';
+import * as store from '@wispcrew/runtime';
+import { loadAttachments } from '@wispcrew/runtime';
+import { readSettings, writeSettings } from '@wispcrew/runtime';
+import { readSecrets, upsertSecrets, isEncryptionAvailable } from '@wispcrew/runtime';
+import { statuses as mcpStatuses, syncMcpServers } from '@wispcrew/runtime';
+import { runRoutineNow, refreshNextRunTime, refreshNextRunTimes } from '@wispcrew/runtime';
+import { abortSession, clearSession, seedSessionHistory } from '@wispcrew/runtime';
+import { prefixBefore, prefixThrough, rebuildHistory } from '@wispcrew/runtime';
+import { isClientOnlyMethod } from '@wispcrew/shared';
 import { existingLink, linkToNode } from './node-links.js';
 import {
   addEventSink,
@@ -68,8 +68,8 @@ import {
   hasProviderKey,
   providerSecretKey,
   setProviderKey,
-} from '@ghostbot/runtime';
-import { grant, isGranted, listGrants, revoke, revokeAll, revokeForAgent } from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
+import { grant, isGranted, listGrants, revoke, revokeAll, revokeForAgent } from '@wispcrew/runtime';
 import {
   allStatuses,
   resolveToken,
@@ -77,8 +77,8 @@ import {
   signOut,
   status,
   type OAuthVendor,
-} from '@ghostbot/runtime';
-import { fileLog } from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
+import { fileLog } from '@wispcrew/runtime';
 
 /**
  * Ask the user to paste the authorization code Anthropic's callback page
@@ -128,7 +128,7 @@ codes expire after about a minute.</p>
   <button class="primary" onclick="done(document.getElementById('c').value)">Sign in</button>
 </div>
 <script>
- function done(v){ location.href = 'ghostbot-code://' + encodeURIComponent(v); }
+ function done(v){ location.href = 'wispcrew-code://' + encodeURIComponent(v); }
  document.getElementById('c').addEventListener('keydown', e => {
    if (e.key === 'Enter') done(e.target.value);
    if (e.key === 'Escape') done('');
@@ -147,9 +147,9 @@ codes expire after about a minute.</p>
     // The page signals its result by navigating to a custom scheme, which we
     // intercept — no preload or IPC channel needed for a one-shot dialog.
     prompt.webContents.on('will-navigate', (event, url) => {
-      if (!url.startsWith('ghostbot-code://')) return;
+      if (!url.startsWith('wispcrew-code://')) return;
       event.preventDefault();
-      const value = decodeURIComponent(url.slice('ghostbot-code://'.length)).trim();
+      const value = decodeURIComponent(url.slice('wispcrew-code://'.length)).trim();
       finish(value || null);
     });
     prompt.on('closed', () => finish(null));
@@ -334,7 +334,7 @@ function hasStoredKey(presetId: string): boolean {
   // Legacy shared key and the env fallback, both still honoured so existing
   // installs and scripted runs keep working.
   const secrets = readSecrets(ctx.userDataDir);
-  return Boolean(secrets.GHOSTBOT_API_KEY || process.env.GHOSTBOT_API_KEY);
+  return Boolean(secrets.WISPCREW_API_KEY || process.env.WISPCREW_API_KEY);
 }
 
 function settingsView(): SettingsView {
@@ -737,7 +737,7 @@ export function registerBridge(context: BridgeContext): void {
        * though the CLI's file contains one.
        *
        * This is deliberate and was learned the hard way. Refresh tokens
-       * rotate: exchanging one retires it server-side. If GhostBot refreshed
+       * rotate: exchanging one retires it server-side. If WispCrew refreshed
        * a token it borrowed from Claude Code or Codex, the CLI's stored copy
        * would instantly become invalid and the user would be signed out of a
        * tool they never asked us to touch — with a 401 that gives no hint
@@ -746,7 +746,7 @@ export function registerBridge(context: BridgeContext): void {
        * So a borrowed sign-in is read-only and expires naturally. When it
        * lapses, `resolveToken` finds no refresh token, clears it, and the UI
        * says "signed in" is no longer true — at which point the user can
-       * re-import, or sign in through GhostBot's own flow, which owns its
+       * re-import, or sign in through WispCrew's own flow, which owns its
        * credential and may rotate it freely.
        */
       refresh: '',
@@ -889,15 +889,15 @@ export function registerBridge(context: BridgeContext): void {
            * Resolved per provider, then the legacy shared key. Reading only
            * the legacy name made Test report "needs an API key" for a
            * provider whose key was present and working — the migration had
-           * moved it to GHOSTBOT_KEY_<preset>, and this path had not been
+           * moved it to WISPCREW_KEY_<preset>, and this path had not been
            * updated to look there.
            */
           const secrets = readSecrets(ctx.userDataDir);
           key =
             cfg.apiKey ||
             secrets[providerSecretKey(cfg.presetId)] ||
-            secrets.GHOSTBOT_API_KEY ||
-            process.env.GHOSTBOT_API_KEY;
+            secrets.WISPCREW_API_KEY ||
+            process.env.WISPCREW_API_KEY;
         }
 
         const preset = {
@@ -1101,7 +1101,7 @@ export function registerBridge(context: BridgeContext): void {
 
   handle('pairNode', async (address: string, code: string, expectFingerprint?: string) => {
     const result = await pairWithNode(address, code, {
-      clientName: `ghostbot-desktop/${app.getVersion()}`,
+      clientName: `wispcrew-desktop/${app.getVersion()}`,
       expectFingerprint: expectFingerprint || undefined,
     });
     const record = addNode(ctx.userDataDir, {

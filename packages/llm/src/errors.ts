@@ -3,7 +3,7 @@
  *
  * Raw failures are hostile: an HTTP 401 arrives as a wall of JSON, and a
  * wrong base URL arrives as the single word "fetch failed". Neither tells
- * someone what to change. Since GhostBot's whole premise is that you bring
+ * someone what to change. Since WispCrew's whole premise is that you bring
  * your own provider, misconfiguration is the *expected* first-run state, not
  * an edge case — so these messages are part of the product.
  *

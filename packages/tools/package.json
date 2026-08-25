@@ -1,7 +1,7 @@
 {
-  "name": "@ghostbot/tools",
+  "name": "@wispcrew/tools",
   "version": "0.1.0",
-  "description": "GhostBot built-in tools: shell, files, web fetch.",
+  "description": "WispCrew built-in tools: shell, files, web fetch.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,7 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ghostbot/shared": "0.1.0"
+    "@wispcrew/shared": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -2,7 +2,7 @@
  * chatgpt-oauth.ts — sign in to ChatGPT with a browser, no CLI required.
  *
  * Unlike the Claude flow, this one needs **no paste step**: OpenAI's client
- * accepts a loopback redirect, so GhostBot runs a one-shot local server, the
+ * accepts a loopback redirect, so WispCrew runs a one-shot local server, the
  * browser is redirected straight back to it, and the code never touches the
  * clipboard.
  *
@@ -296,7 +296,7 @@ export async function startLogin(): Promise<PendingLogin> {
 
     res
       .writeHead(200, { 'Content-Type': 'text/html' })
-      .end(page('Signed in to GhostBot', 'You can close this tab and return to the app.'));
+      .end(page('Signed in to WispCrew', 'You can close this tab and return to the app.'));
 
     exchangeAuthorizationCode(code, verifier)
       .then((credential) => settle?.(credential))

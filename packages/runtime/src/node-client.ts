@@ -1,5 +1,5 @@
 /**
- * node-client.ts — talk to a GhostBot node over a stream.
+ * node-client.ts — talk to a WispCrew node over a stream.
  *
  * Presents the same shape the desktop already uses: call a method, await a
  * value, and receive pushed events. The difference is that the engine may be
@@ -44,7 +44,7 @@ export interface NodeClient {
  * rather than on the first method call.
  */
 export function connectNode(options: NodeClientOptions): Promise<NodeClient> {
-  const { socket, token, clientName = 'ghostbot-desktop', onEvent, onClose } = options;
+  const { socket, token, clientName = 'wispcrew-desktop', onEvent, onClose } = options;
 
   return new Promise((resolve, reject) => {
     let buffered = '';

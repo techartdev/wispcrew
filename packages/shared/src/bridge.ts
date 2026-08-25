@@ -1,5 +1,5 @@
 /**
- * GhostBot — the renderer ⇄ main IPC contract.
+ * WispCrew — the renderer ⇄ main IPC contract.
  *
  * This is the entire surface the desktop UI may use. It replaces the
  * reverse-engineered protocol shim with a small, explicit API that we own.
@@ -158,7 +158,7 @@ export interface DetectedSignIn {
 /* ------------------------------------------------------------------ */
 
 /**
- * The API exposed on `window.ghostbot`. Every method is asynchronous and
+ * The API exposed on `window.wispcrew`. Every method is asynchronous and
  * rejects with a plain `Error` on failure.
  */
 export interface GhostBridge {
@@ -357,6 +357,6 @@ export interface NodeSummary {
 
 declare global {
   interface Window {
-    ghostbot: GhostBridge;
+    wispcrew: GhostBridge;
   }
 }

@@ -11,7 +11,7 @@
  *
  * Uses a fake fetch so it runs offline and asserts the exact JSON we send.
  *
- * Run: npm run test:attachments --workspace @ghostbot/examples-cli
+ * Run: npm run test:attachments --workspace @wispcrew/examples-cli
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -22,9 +22,9 @@ import {
   loadAttachments,
   attachmentsToPromptText,
   MAX_ATTACHMENTS,
-} from '@ghostbot/runtime';
-import { configFromPreset, createProvider } from '@ghostbot/llm';
-import type { Attachment } from '@ghostbot/shared';
+} from '@wispcrew/runtime';
+import { configFromPreset, createProvider } from '@wispcrew/llm';
+import type { Attachment } from '@wispcrew/shared';
 
 let failures = 0;
 

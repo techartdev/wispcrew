@@ -13,8 +13,8 @@ import path from 'node:path';
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gb-stack-'));
 const key = fs.readFileSync('testkey-nvidia.txt', 'utf8').trim();
 
-const { daemonHost } = await import('@ghostbot/daemon/host');
-const rt = await import('@ghostbot/runtime');
+const { daemonHost } = await import('@wispcrew/daemon/host');
+const rt = await import('@wispcrew/runtime');
 
 const env = daemonHost({ dataDir: dir });
 rt.setHost(env);

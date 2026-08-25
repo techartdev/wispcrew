@@ -6,12 +6,12 @@
  * agent escalate its own permissions by asking a permissive agent to act for
  * it. Every assertion here corresponds to a specific way that goes wrong.
  *
- * Run: npm run test:delegation --workspace @ghostbot/examples-cli
+ * Run: npm run test:delegation --workspace @wispcrew/examples-cli
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import * as store from '@ghostbot/runtime';
+import * as store from '@wispcrew/runtime';
 import {
   isTerminal,
   MAX_CALLS_PER_TURN,
@@ -21,8 +21,8 @@ import {
   rootContext,
   TERMINAL_NOTICE,
   type DelegationContext,
-} from '@ghostbot/runtime';
-import type { ApprovalPolicy, ToolContext } from '@ghostbot/shared';
+} from '@wispcrew/runtime';
+import type { ApprovalPolicy, ToolContext } from '@wispcrew/shared';
 
 let failures = 0;
 

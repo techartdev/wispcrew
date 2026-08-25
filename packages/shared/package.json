@@ -1,7 +1,7 @@
 {
-  "name": "@ghostbot/shared",
+  "name": "@wispcrew/shared",
   "version": "0.1.0",
-  "description": "GhostBot shared protocol types: messages, tool contracts, provider config.",
+  "description": "WispCrew shared protocol types: messages, tool contracts, provider config.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",

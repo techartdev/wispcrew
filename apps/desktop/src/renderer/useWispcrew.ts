@@ -1,5 +1,5 @@
 /**
- * useGhostbot.ts — the renderer's single source of truth.
+ * useWispcrew.ts — the renderer's single source of truth.
  *
  * All app state lives here: the agent roster, the selected agent, its
  * transcript, run state, settings, MCP servers, routines, and skills. The
@@ -27,12 +27,12 @@ import type {
   SkillRecord,
   ToolGrant,
   TranscriptEntry,
-} from '@ghostbot/shared';
+} from '@wispcrew/shared';
 
 /** Transcript entries capped in memory; the store keeps the durable history. */
 const MAX_RENDERED_ENTRIES = 500;
 
-export interface GhostbotState {
+export interface WispcrewState {
   ready: boolean;
   agents: AgentRecord[];
   selectedId: string | null;
@@ -51,7 +51,7 @@ export interface GhostbotState {
   toast: { level: 'info' | 'error'; text: string } | null;
 }
 
-export function useGhostbot() {
+export function useWispcrew() {
   const [agents, setAgents] = useState<AgentRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
@@ -67,7 +67,7 @@ export function useGhostbot() {
   const [oauthStatuses, setOauthStatuses] = useState<OAuthStatusView[]>([]);
   const [detectedSignIns, setDetectedSignIns] = useState<DetectedSignIn[]>([]);
   const [ready, setReady] = useState(false);
-  const [toast, setToast] = useState<GhostbotState['toast']>(null);
+  const [toast, setToast] = useState<WispcrewState['toast']>(null);
 
   // The event handler needs the current selection without re-subscribing on
   // every change, so it reads from a ref rather than a closure capture.
@@ -79,7 +79,7 @@ export function useGhostbot() {
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   transcriptRef.current = transcript;
 
-  const api = window.ghostbot;
+  const api = window.wispcrew;
 
   /** Surface an error to the user instead of losing it in the console. */
   const fail = useCallback((err: unknown) => {

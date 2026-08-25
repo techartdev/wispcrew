@@ -21,7 +21,7 @@
  * to. So it goes through the same approval gate as any consequential tool
  * call, and the user sees exactly what they are agreeing to.
  */
-import type { Tool, ToolContext, ToolResult } from '@ghostbot/shared';
+import type { Tool, ToolContext, ToolResult } from '@wispcrew/shared';
 
 export interface ScheduleFollowUpArgs {
   /** Minutes from now. */

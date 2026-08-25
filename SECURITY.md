@@ -18,15 +18,15 @@ you would rather stay anonymous.
 
 ## Supported versions
 
-GhostBot is pre-1.0. Fixes land on the `main` branch and in the next release.
+WispCrew is pre-1.0. Fixes land on the `main` branch and in the next release.
 There are no long-term support branches yet.
 
 ## Threat model
 
-Understanding what GhostBot *is* makes it clearer what counts as a
+Understanding what WispCrew *is* makes it clearer what counts as a
 vulnerability.
 
-**GhostBot deliberately runs code on your machine.** An agent can execute shell
+**WispCrew deliberately runs code on your machine.** An agent can execute shell
 commands and write files — that is the product. The security boundary is not
 "the agent cannot act", it is:
 

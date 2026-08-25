@@ -22,7 +22,7 @@
  * fails with an opaque 400. `rebuildHistory` guarantees that never happens by
  * dropping any trailing assistant turn whose tool calls are unanswered.
  */
-import type { ChatMessage, TranscriptEntry } from '@ghostbot/shared';
+import type { ChatMessage, TranscriptEntry } from '@wispcrew/shared';
 
 /**
  * Rebuild the model-visible history from a transcript prefix.

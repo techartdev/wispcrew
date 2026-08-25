@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * cli.ts — `ghostbot serve` and friends.
+ * cli.ts — `wispcrew serve` and friends.
  *
  * Small on purpose. Anything that looks like product behaviour belongs in
  * the runtime, so it behaves identically under the desktop app.
@@ -18,13 +18,13 @@ import {
   parseAddress,
   readSecrets,
   setHost,
-} from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
 
 const USAGE = `
-ghostbot — run agents without a window open
+wispcrew — run agents without a window open
 
-  ghostbot serve [options]     run the engine until stopped
-  ghostbot status              show what a daemon would use, then exit
+  wispcrew serve [options]     run the engine until stopped
+  wispcrew status              show what a daemon would use, then exit
 
 Options
   --data-dir <path>   where agents, transcripts and secrets live
@@ -38,15 +38,15 @@ Options
   --help              this text
 
 Attaching this machine from elsewhere
-  here:    ghostbot serve --listen --network --pair
+  here:    wispcrew serve --listen --network --pair
   client:  add a node, then enter this host and the printed code
 
   The code is single-use and expires in five minutes. Compare the printed
   fingerprint against the one your client shows before accepting.
 
 Environment
-  GHOSTBOT_DATA_DIR   same as --data-dir
-  GHOSTBOT_NODE_NAME  how this machine identifies itself (default: hostname)
+  WISPCREW_DATA_DIR   same as --data-dir
+  WISPCREW_NODE_NAME  how this machine identifies itself (default: hostname)
 `;
 
 /**
@@ -114,7 +114,7 @@ async function main(): Promise<void> {
      */
     setHost(env);
     const secretCount = Object.keys(readSecrets(env.dataDir)).length;
-    const storeExists = existsSync(join(env.dataDir, 'ghostbot-secrets.enc'));
+    const storeExists = existsSync(join(env.dataDir, 'wispcrew-secrets.enc'));
     if (storeExists && secretCount === 0) {
       console.log('');
       console.log('WARNING  a secret store exists here but cannot be read with this backend.');
@@ -168,7 +168,7 @@ async function main(): Promise<void> {
   const agents = listAgents();
   const routines = listRoutines().filter((r) => r.enabled !== false);
 
-  console.log(`GhostBot daemon on ${host().nodeName}`);
+  console.log(`WispCrew daemon on ${host().nodeName}`);
   console.log(`  data      ${host().dataDir}`);
   console.log(`  secrets   ${host().crypto.describe()}`);
   console.log(`  agents    ${agents.length}`);
@@ -223,6 +223,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: Error) => {
-  console.error(`ghostbot: ${err.message}`);
+  console.error(`wispcrew: ${err.message}`);
   process.exitCode = 1;
 });

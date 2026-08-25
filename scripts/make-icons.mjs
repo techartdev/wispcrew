@@ -1,5 +1,5 @@
 /**
- * make-icons.mjs — rasterize the GhostBot mascot into every icon artifact.
+ * make-icons.mjs — rasterize the WispCrew mascot into every icon artifact.
  *
  * Source of truth: `build/icon.svg` (the Pac-Man-style ghost/squid).
  * Rendering is done by Electron's own Chromium, so there is no native image
@@ -127,7 +127,7 @@ async function main() {
   const svgText = fs.readFileSync(SVG, 'utf8');
   console.log(`Rendering ${path.relative(root, SVG)}${dryRun ? ' (dry run)' : ''}`);
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ghostbot-icons-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wispcrew-icons-'));
   const rendered = new Map();
   try {
     // Rasterize once at full resolution, then derive every size from it.

@@ -5,7 +5,7 @@
  * wrong hour, and nobody notices for days. These assertions pin the parser,
  * the POSIX day-union rule, DST behaviour, and `nextRun`.
  *
- * Run: npm run test:cron --workspace @ghostbot/examples-cli
+ * Run: npm run test:cron --workspace @wispcrew/examples-cli
  */
 import {
   describeCron,
@@ -13,7 +13,7 @@ import {
   nextRun,
   parseCron,
   validateCron,
-} from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
 
 let failures = 0;
 

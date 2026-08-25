@@ -1,13 +1,13 @@
 /**
  * errors-test.ts — guards the user-facing provider error messages.
  *
- * GhostBot's premise is "bring your own provider", which makes
+ * WispCrew's premise is "bring your own provider", which makes
  * misconfiguration the *expected* first-run state rather than an edge case.
  * These messages are therefore part of the product, and they have two jobs:
  * say what went wrong, and say what to change. A raw `fetch failed` does
  * neither.
  *
- * Run: npm run test:errors --workspace @ghostbot/examples-cli
+ * Run: npm run test:errors --workspace @wispcrew/examples-cli
  */
 import {
   configFromPreset,
@@ -15,7 +15,7 @@ import {
   describeHttpFailure,
   describeProviderError,
   endpointAllowsNoKey,
-} from '@ghostbot/llm';
+} from '@wispcrew/llm';
 
 let failures = 0;
 

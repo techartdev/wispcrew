@@ -48,7 +48,7 @@ export interface RetainedText {
  * with somewhere better can say so.
  */
 export function defaultSpillDir(): string {
-  return path.join(os.tmpdir(), 'ghostbot-output');
+  return path.join(os.tmpdir(), 'wispcrew-output');
 }
 
 /**

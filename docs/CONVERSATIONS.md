@@ -1,12 +1,12 @@
 # Conversations
 
-A design note. This is the model GhostBot is moving to, why the current one
+A design note. This is the model WispCrew is moving to, why the current one
 runs out, and the decisions that are expensive to reverse.
 
 ## The problem
 
 Today a transcript is `f(agentId)` — one conversation per agent, and nowhere
-else for a conversation to live. That was fine while GhostBot was one person
+else for a conversation to live. That was fine while WispCrew was one person
 typing to one agent in one window. Three things it cannot express:
 
 **Talking to an agent from your phone.** Delivery works: an agent can send
@@ -118,6 +118,45 @@ reflex.
 **A hard turn budget per conversation.** Even with the above, a chain of
 explicit addresses can run away. A conversation has a maximum number of
 consecutive agent-to-agent turns before it stops and asks the user.
+
+## What happened, not just what was said
+
+A conversation records **events**, not only messages: who joined, who left,
+what was approved, who asked to speak.
+
+This is not bookkeeping. An agent added halfway through needs to know how the
+room reached its current state:
+
+```
+User added participant @linux to the chat.
+User removed participant @mac from the chat.
+User: Please investigate why the Linux build is failing. @windows,
+      describe the problem to the linux agent and give him a task.
+```
+
+Without the first two lines, `@linux` has no idea why it is being addressed,
+that `@mac` ever existed, or why nobody is speaking for macOS. These events
+are part of what was said, so they belong in the transcript rather than in a
+side table only the UI reads.
+
+Four kinds:
+
+| Event | Example |
+|---|---|
+| Membership | `User added participant @linux.` |
+| Channels | `User connected Telegram to this conversation.` |
+| Approvals | `User approved shell access for @windows.` |
+| Floor | `@macos asked to speak. User declined.` |
+
+Channel events matter more than they look: an agent that knows the
+conversation is now reachable from a phone may reasonably keep its answers
+shorter. Approval events make the authority trail visible to every
+participant rather than only to whoever clicked — which matters when one
+agent is about to ask another to do something it may not be permitted to do.
+
+These reuse the existing `notice` entry kind rather than inventing a parallel
+concept. Notices already render, already persist, and already survive rewind
+and branch.
 
 ## Storage
 

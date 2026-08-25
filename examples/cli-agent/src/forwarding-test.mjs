@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isClientOnlyMethod } from '@ghostbot/shared';
+import { isClientOnlyMethod } from '@wispcrew/shared';
 import {
   connectNode,
   createNodeCrypto,
@@ -22,8 +22,8 @@ import {
   serveNode,
   setHost,
   initGrants,
-} from '@ghostbot/runtime';
-import { nodeMethods } from '@ghostbot/daemon/methods';
+} from '@wispcrew/runtime';
+import { nodeMethods } from '@wispcrew/daemon/methods';
 
 let failures = 0;
 const check = (label, cond, detail) => {
@@ -127,9 +127,9 @@ console.log('\n[secrets stay put] a key saved to the node stays on the node');
   check('the node now reports a key', settings.hasApiKey === true);
 
   // It must be in the node's encrypted store, and never in plaintext settings.
-  const plain = fs.readFileSync(path.join(dir, 'ghostbot-settings.json'), 'utf8');
+  const plain = fs.readFileSync(path.join(dir, 'wispcrew-settings.json'), 'utf8');
   check('the key is not in the settings file', !plain.includes('nv-test-key-not-real'));
-  check('an encrypted store exists', fs.existsSync(path.join(dir, 'ghostbot-secrets.enc')));
+  check('an encrypted store exists', fs.existsSync(path.join(dir, 'wispcrew-secrets.enc')));
 }
 
 console.log('\n[interactive] a node refuses what it cannot do, and says why');

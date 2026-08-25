@@ -1,7 +1,7 @@
 /**
  * engine.ts — running agents, independent of any window.
  *
- * This is the part of GhostBot that does the work: expanding skills,
+ * This is the part of WispCrew that does the work: expanding skills,
  * resolving which provider an agent uses, driving the agent loop, running
  * scheduled routines and handling delegation. It was previously inside the
  * Electron main process, which meant closing the window stopped it.
@@ -18,16 +18,16 @@ import type {
   GlobalSettings,
   RoutineRecord,
   TranscriptEntry,
-} from '@ghostbot/shared';
-import { Agent, personaById } from '@ghostbot/core';
+} from '@wispcrew/shared';
+import { Agent, personaById } from '@wispcrew/core';
 import {
   configFromPreset,
   createProvider,
   describeProviderError,
   PROVIDER_PRESETS,
   type UsageSnapshot,
-} from '@ghostbot/llm';
-import { ToolRegistry } from '@ghostbot/tools';
+} from '@wispcrew/llm';
+import { ToolRegistry } from '@wispcrew/tools';
 
 import * as store from './store.js';
 import { host } from './host.js';
@@ -91,9 +91,9 @@ function requestApproval(
 
 export function defaultSettings(): GlobalSettings {
   return {
-    presetId: process.env.GHOSTBOT_PROVIDER ?? 'deepseek',
-    model: process.env.GHOSTBOT_MODEL,
-    baseUrl: process.env.GHOSTBOT_BASE_URL,
+    presetId: process.env.WISPCREW_PROVIDER ?? 'deepseek',
+    model: process.env.WISPCREW_MODEL,
+    baseUrl: process.env.WISPCREW_BASE_URL,
     approvalPolicy: 'ask',
     theme: 'system',
   };
@@ -136,13 +136,13 @@ async function resolveCredential(
 /**
  * Read the API key for one provider.
  *
- * Keys are stored **per provider** (`GHOSTBOT_KEY_<preset>`), so several can
+ * Keys are stored **per provider** (`WISPCREW_KEY_<preset>`), so several can
  * be configured at once and each agent uses the right one. This matters more
  * than it sounds: a single shared key meant an agent switched to OpenAI sent
  * an OpenAI key to whatever host the global settings pointed at — and the
  * provider that answered was not the one the error named.
  *
- * The legacy shared `GHOSTBOT_API_KEY` is still honoured as a last resort so
+ * The legacy shared `WISPCREW_API_KEY` is still honoured as a last resort so
  * existing installs keep working; `migrateLegacyKey` moves it to its proper
  * home on startup.
  */
@@ -150,8 +150,8 @@ function resolveApiKey(presetId: string): string | undefined {
   const secrets = readSecrets(dataDir());
   return (
     secrets[providerSecretKey(presetId)] ??
-    secrets.GHOSTBOT_API_KEY ??
-    process.env.GHOSTBOT_API_KEY
+    secrets.WISPCREW_API_KEY ??
+    process.env.WISPCREW_API_KEY
   );
 }
 

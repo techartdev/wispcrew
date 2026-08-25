@@ -1,7 +1,7 @@
 {
-  "name": "@ghostbot/llm",
+  "name": "@wispcrew/llm",
   "version": "0.1.0",
-  "description": "GhostBot LLM provider adapters: DeepSeek, OpenAI, Ollama and other OpenAI-compatible endpoints, plus Anthropic.",
+  "description": "WispCrew LLM provider adapters: DeepSeek, OpenAI, Ollama and other OpenAI-compatible endpoints, plus Anthropic.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,7 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ghostbot/shared": "0.1.0"
+    "@wispcrew/shared": "0.1.0"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

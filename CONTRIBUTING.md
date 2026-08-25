@@ -1,4 +1,4 @@
-# Contributing to GhostBot
+# Contributing to WispCrew
 
 Thanks for considering a contribution. This project exists because AI agents
 should not require a subscription to a single company, and it gets better with
@@ -20,8 +20,8 @@ not a formality — it protects everyone who uses and forks this project.
 You need **Node.js 20+**. There is no other prerequisite.
 
 ```bash
-git clone https://github.com/<your-fork>/ghostbot
-cd ghostbot
+git clone https://github.com/<your-fork>/wispcrew
+cd wispcrew
 npm install
 npm run desktop
 ```
@@ -29,7 +29,7 @@ npm run desktop
 `npm install` uses **npm workspaces** — not pnpm or yarn. Please keep
 `package-lock.json` in the tree.
 
-**Build order matters.** Every package imports `@ghostbot/shared`, and
+**Build order matters.** Every package imports `@wispcrew/shared`, and
 TypeScript resolves it through that package's generated `.d.ts` files. The
 root `typecheck`, `test` and `build` scripts therefore build the packages in
 dependency order first. If you add a package, add it to `build:packages` in
@@ -43,7 +43,7 @@ Run these three. All must pass:
 ```bash
 npm run typecheck
 npm run build
-npm run test --workspace @ghostbot/examples-cli
+npm run test --workspace @wispcrew/examples-cli
 ```
 
 The test suite is fully offline — it needs no API key and makes no external

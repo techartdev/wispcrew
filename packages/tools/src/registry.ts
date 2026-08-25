@@ -1,7 +1,7 @@
 /**
  * Tool registry — maps tool names to implementations.
  */
-import type { Tool, ToolDefinition, ToolContext, ToolResult } from '@ghostbot/shared';
+import type { Tool, ToolDefinition, ToolContext, ToolResult } from '@wispcrew/shared';
 import { shellTool } from './shell.js';
 import { readFileTool, writeFileTool, listDirTool } from './files.js';
 import { webFetchTool, webSearchTool } from './web.js';

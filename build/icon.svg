@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  GhostBot mascot — a Pac-Man-style ghost/squid.
+  WispCrew mark. The artwork still shows the previous mascot and is due a redraw.
 
   Source of truth for every generated icon: run `node scripts/make-icons.mjs`
   to rasterize this into build/icon.png (+ sizes) and to replace the vendored

@@ -11,7 +11,7 @@
  * which is why Telegram exists, but honest and free.
  */
 import { app, BrowserWindow, Notification } from 'electron';
-import { drain, fileLog, type ChannelDeliverer } from '@ghostbot/runtime';
+import { drain, fileLog, type ChannelDeliverer } from '@wispcrew/runtime';
 
 /** How often to look for messages the daemon left for us. */
 const DRAIN_INTERVAL_MS = 20_000;

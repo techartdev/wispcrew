@@ -1,15 +1,15 @@
 # AGENTS.md — Handoff Guide for Coding Agents
 
 Orientation for any AI coding agent (or human) continuing work on
-**GhostBot**. Read `README.md`, `CONTRIBUTING.md`, and `docs/ARCHITECTURE.md`
+**WispCrew**. Read `README.md`, `CONTRIBUTING.md`, and `docs/ARCHITECTURE.md`
 for depth; this file says what the project is, where things live, how to
 verify a change, and what not to break.
 
 ## Mission
 
-GhostBot is a free, MIT-licensed, **local-first** desktop AI agent. The user
+WispCrew is a free, MIT-licensed, **local-first** desktop AI agent. The user
 brings their own model (DeepSeek, OpenAI, Anthropic, Ollama, LM Studio, Groq,
-OpenRouter, or any OpenAI-compatible endpoint). GhostBot itself has no account
+OpenRouter, or any OpenAI-compatible endpoint). WispCrew itself has no account
 and no cloud component: conversations and credentials stay on the user's
 machine.
 
@@ -82,11 +82,11 @@ docs/GROUP-CHAT.md       who speaks when several agents share a chat
 1. `main.ts` installs the Electron host (data dir, keychain crypto), then
    **links to a detached daemon**, spawning one if none is running. The daemon
    owns the engine so routines and agents survive the window closing.
-2. The renderer talks **only** to `window.ghostbot` (typed as `GhostBridge` in
+2. The renderer talks **only** to `window.wispcrew` (typed as `GhostBridge` in
    `packages/shared/src/bridge.ts`), implemented by `bridge-host.ts`. Calls
    about a particular agent are routed to whichever node owns it — the local
    daemon, or a paired machine.
-3. A message goes `sendPrompt` -> `runPrompt` -> `@ghostbot/core` `Agent` ->
+3. A message goes `sendPrompt` -> `runPrompt` -> `@wispcrew/core` `Agent` ->
    provider. Transcript entries are **pushed** back as `gb:event` frames and
    upserted by id, so streaming updates in place.
 4. Tool calls hit the approval policy: `readonly` denies, `auto` allows, `ask`
@@ -106,7 +106,7 @@ when a daemon owns the profile.
 npm install                                     # npm workspaces (NOT pnpm)
 npm run typecheck                               # tsc --noEmit everywhere
 npm run build                                   # packages + desktop bundles
-npm run test --workspace @ghostbot/examples-cli # every offline suite (no key, no network)
+npm run test --workspace @wispcrew/examples-cli # every offline suite (no key, no network)
 npm run desktop                                 # build + launch
 npm run dist:win | dist:mac | dist:linux        # installers
 ```
@@ -121,19 +121,19 @@ the end of a body of work — not after each commit. The exceptions are changes
 CI is uniquely able to judge: anything platform-specific (process handling,
 paths, native APIs) where the local machine cannot speak for macOS or Linux.
 
-Config lives in `<userData>/ghostbot-settings.json`
-(`%APPDATA%\GhostBot` on Windows). Keys live **only** in
-`<userData>/ghostbot-secrets.enc`.
+Config lives in `<userData>/wispcrew-settings.json`
+(`%APPDATA%\WispCrew` on Windows). Keys live **only** in
+`<userData>/wispcrew-secrets.enc`.
 
 ## Debug hooks
 
 | Var | Effect |
 |---|---|
-| `GHOSTBOT_LOG=<file>` | Protocol/bridge log |
-| `GHOSTBOT_CAPTURE=<file.png>` | Screenshot then quit |
-| `GHOSTBOT_CAPTURE_DELAY=<ms>` | Delay before that capture (default 8000) |
-| `GHOSTBOT_AUTOSEND='prompt'` | Drive one real turn headlessly |
-| `GHOSTBOT_PROVIDER/API_KEY/MODEL/BASE_URL` | Provider fallback (env) |
+| `WISPCREW_LOG=<file>` | Protocol/bridge log |
+| `WISPCREW_CAPTURE=<file.png>` | Screenshot then quit |
+| `WISPCREW_CAPTURE_DELAY=<ms>` | Delay before that capture (default 8000) |
+| `WISPCREW_AUTOSEND='prompt'` | Drive one real turn headlessly |
+| `WISPCREW_PROVIDER/API_KEY/MODEL/BASE_URL` | Provider fallback (env) |
 
 ## Hard rules
 
@@ -224,7 +224,7 @@ the window does not paint.
 
 ## Subscription sign-in
 
-GhostBot can use a **Claude Pro/Max** or **ChatGPT** subscription instead of
+WispCrew can use a **Claude Pro/Max** or **ChatGPT** subscription instead of
 an API key, either through a browser OAuth flow or by adopting a sign-in that
 Claude Code / Codex CLI already holds. Read this before changing any of it.
 
@@ -252,20 +252,20 @@ documented for third-party use):
 
 - Refresh is **single-flight per vendor**. Refresh tokens rotate, so two
   concurrent turns racing would persist a token the server already retired —
-  signing the user out of their CLI as well as GhostBot.
+  signing the user out of their CLI as well as WispCrew.
 - A failed refresh **clears** the credential, so the UI says "signed out"
   instead of every turn failing with an auth error.
 - Never invent usage numbers. Anthropic reports no percentage and no reset
   time on this path; the UI says so rather than showing a plausible figure.
-- Adopting a CLI sign-in **reads** its credential file; GhostBot's own
+- Adopting a CLI sign-in **reads** its credential file; WispCrew's own
   credentials live in its encrypted store, never written back to the CLI's.
 - **A borrowed CLI credential is stored without its refresh token, on
   purpose.** The token is readable, but refreshing it would rotate it
   server-side and instantly invalidate the CLI's own copy — signing the user
-  out of a tool they never asked GhostBot to touch, with a bare 401 that
+  out of a tool they never asked WispCrew to touch, with a bare 401 that
   gives no hint why. This happened once during development on a real account.
   A borrowed sign-in is therefore read-only: when it expires it is cleared,
-  and the user re-imports or uses GhostBot's own flow, which owns its
+  and the user re-imports or uses WispCrew's own flow, which owns its
   credential and may rotate freely. `oauth-test.ts` pins this.
 
 **Verified live:** the ChatGPT browser flow end to end (sign-in → token

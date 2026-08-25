@@ -3,13 +3,13 @@
  *
  * This is the only channel that reaches the user when they are nowhere near
  * the machine, which is the point of an agent that works unattended. It is
- * also the first thing in GhostBot that talks to a service outside the
+ * also the first thing in WispCrew that talks to a service outside the
  * user's own computer, so a few things are deliberate:
  *
  *  - **Entirely opt-in.** No token, no channel. Nothing is sent anywhere
  *    unless the user creates a bot and pastes its token.
  *  - **The bot is theirs.** Created through Telegram's @BotFather, owned by
- *    their account. There is no GhostBot service in the middle, nothing to
+ *    their account. There is no WispCrew service in the middle, nothing to
  *    sign up for, and no third party who can read the messages.
  *  - **Only what the agent says.** The summary and body of a message the
  *    user's own agent produced. No transcripts, no telemetry, no keys.
@@ -127,7 +127,7 @@ export async function testTelegram(config: TelegramConfig): Promise<{ ok: boolea
     const ok = await channel.deliver({
       id: 'test',
       agentId: 'test',
-      agentName: 'GhostBot',
+      agentName: 'WispCrew',
       summary: 'Connected. Your agents can reach you here.',
       createdAt: Date.now(),
       pending: ['telegram'],

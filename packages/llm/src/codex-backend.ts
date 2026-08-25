@@ -40,7 +40,7 @@ import type {
   ProviderChunk,
   ProviderConfig,
   ToolCall,
-} from '@ghostbot/shared';
+} from '@wispcrew/shared';
 import { usageFromCodexHeaders, type UsageSnapshot } from './usage-limits.js';
 
 /** The subscription-billed endpoint Codex CLI uses. */

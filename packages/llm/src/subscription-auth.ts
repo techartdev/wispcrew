@@ -3,7 +3,7 @@
  *
  * Claude Code and Codex CLI both let a *subscriber* work without an API key
  * by signing in with their account. Each stores the resulting OAuth tokens in
- * a well-known file. This module reads those files so GhostBot can offer the
+ * a well-known file. This module reads those files so WispCrew can offer the
  * same convenience.
  *
  * ## Read this before using it
@@ -11,7 +11,7 @@
  * **Anthropic prohibits this.** Their Claude Code documentation was updated
  * to forbid using OAuth tokens from Free, Pro or Max subscriptions in
  * third-party products; enforcement can happen without warning, and the
- * account at risk is the user's. GhostBot therefore never enables this
+ * account at risk is the user's. WispCrew therefore never enables this
  * silently — it must be switched on deliberately, and the UI says plainly
  * what is being risked.
  *
@@ -93,13 +93,13 @@ function homeFile(...parts: string[]): string {
  * set.
  *
  * This file belongs to another program. Three precautions, each for a
- * failure that would break the *user's other tools* rather than GhostBot:
+ * failure that would break the *user's other tools* rather than WispCrew:
  *
  *  1. **Merge, never replace.** Unknown fields are carried through verbatim,
  *     so a future CLI version storing extra state does not lose it.
  *  2. **Atomic write.** Temp file plus rename — a crash mid-write must not
  *     truncate the file and log the user out of their CLI.
- *  3. **One-time backup.** The original is copied to `<name>.ghostbot-backup`
+ *  3. **One-time backup.** The original is copied to `<name>.wispcrew-backup`
  *     before the first modification, so there is always a way back.
  */
 function updateCredentialsFile(
@@ -110,7 +110,7 @@ function updateCredentialsFile(
     const current = readJsonSafe(file);
     if (!current) return false;
 
-    const backup = `${file}.ghostbot-backup`;
+    const backup = `${file}.wispcrew-backup`;
     if (!fs.existsSync(backup)) {
       try {
         fs.copyFileSync(file, backup);
@@ -121,7 +121,7 @@ function updateCredentialsFile(
     }
 
     const next = mutate(current);
-    const tmp = `${file}.ghostbot-tmp`;
+    const tmp = `${file}.wispcrew-tmp`;
     fs.writeFileSync(tmp, JSON.stringify(next, null, 2), 'utf8');
     fs.renameSync(tmp, file);
     return true;
@@ -322,7 +322,7 @@ export function needsRefresh(auth: SubscriptionAuth): boolean {
  * Refresh tokens usually rotate: the server issues a new one and invalidates
  * the old. Two concurrent turns refreshing at once would race, and the loser
  * would persist a token the server has already retired — signing the user
- * out of their *CLI* as well as GhostBot. Serialising per vendor makes the
+ * out of their *CLI* as well as WispCrew. Serialising per vendor makes the
  * second caller wait and then re-read the freshly stored credential.
  */
 const refreshChains = new Map<SubscriptionVendor, Promise<SubscriptionAuth | null>>();
@@ -497,7 +497,7 @@ export function describeLookup(l: SubscriptionLookup): string {
  * The warning shown wherever this can be enabled.
  *
  * Deliberately blunt. A user who turns this on should understand that the
- * account they are risking is their own, and that GhostBot cannot protect
+ * account they are risking is their own, and that WispCrew cannot protect
  * them from a vendor policy decision.
  */
 export const SUBSCRIPTION_AUTH_WARNING =

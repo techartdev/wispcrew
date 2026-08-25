@@ -1,5 +1,5 @@
 /**
- * GhostBot — durable domain types.
+ * WispCrew — durable domain types.
  *
  * These describe the things a user creates and keeps: named agents, their
  * conversations, scheduled routines, and reusable skills. They are storage

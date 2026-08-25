@@ -4,8 +4,8 @@
  * The tools know how to ask and what to explain. This knows where routines
  * live and how the scheduler reads them.
  */
-import type { ToolContext } from '@ghostbot/shared';
-import { setScheduler } from '@ghostbot/tools';
+import type { ToolContext } from '@wispcrew/shared';
+import { setScheduler } from '@wispcrew/tools';
 import { describeCron, parseCron } from './cron.js';
 import { fileLog } from './filelog.js';
 import { refreshNextRunTime } from './scheduler.js';

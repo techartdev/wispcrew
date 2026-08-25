@@ -21,7 +21,7 @@ import {
   saveTranscript,
   setHost,
   upsertTranscriptEntry,
-} from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
 
 let failures = 0;
 const check = (label, cond, detail) => {

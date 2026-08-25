@@ -27,7 +27,7 @@ import {
   serveNode,
   setHost,
   codesMatch,
-} from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
 
 let failures = 0;
 const check = (label, cond, detail) => {
@@ -58,7 +58,7 @@ console.log('\n[address parsing]');
 
 console.log('\n[codes]');
 {
-  const { generatePairingCode } = await import('@ghostbot/runtime');
+  const { generatePairingCode } = await import('@wispcrew/runtime');
   const code = generatePairingCode();
   check('code is grouped and readable', /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(code), code);
   check('codes differ', generatePairingCode() !== generatePairingCode());

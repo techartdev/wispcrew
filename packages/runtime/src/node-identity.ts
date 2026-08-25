@@ -83,7 +83,7 @@ export function localAddress(dataDir: string): string {
      * to a daemon, not theorised.
      */
     const digest = createHash('sha256').update(path.resolve(dataDir)).digest('hex').slice(0, 16);
-    return `\\\\.\\pipe\\ghostbot-${digest}`;
+    return `\\\\.\\pipe\\wispcrew-${digest}`;
   }
   return path.join(dataDir, 'node.sock');
 }

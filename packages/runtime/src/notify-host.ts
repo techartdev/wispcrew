@@ -5,8 +5,8 @@
  * needs no store, no settings and no network, and the policy about who may
  * reach the user lives in one readable place.
  */
-import type { AgentRecord, ChannelId, GlobalSettings } from '@ghostbot/shared';
-import { setNotifySender } from '@ghostbot/tools';
+import type { AgentRecord, ChannelId, GlobalSettings } from '@wispcrew/shared';
+import { setNotifySender } from '@wispcrew/tools';
 import { drain, enqueue, type ChannelDeliverer } from './channels.js';
 import { telegramChannel } from './channel-telegram.js';
 import { getSecret } from './secrets-store.js';
@@ -16,7 +16,7 @@ import { host } from './host.js';
 import * as store from './store.js';
 
 /** Where the Telegram bot token lives in the encrypted store. */
-export const TELEGRAM_TOKEN_KEY = 'GHOSTBOT_TELEGRAM_TOKEN';
+export const TELEGRAM_TOKEN_KEY = 'WISPCREW_TELEGRAM_TOKEN';
 
 /**
  * Which channels this agent may use.
@@ -83,7 +83,7 @@ export function installNotifySender(): void {
 
     enqueue(dataDir, {
       agentId: agent?.id ?? 'unknown',
-      agentName: agent?.name ?? 'GhostBot',
+      agentName: agent?.name ?? 'WispCrew',
       summary,
       body,
       channels: external,

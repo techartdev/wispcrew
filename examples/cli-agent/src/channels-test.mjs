@@ -22,7 +22,7 @@ import {
   enqueue,
   history,
   pending,
-} from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
 
 let failures = 0;
 const check = (label, cond, detail) => {

@@ -19,7 +19,7 @@
  * *which channels are enabled*, and that is the user's setting, not the
  * agent's choice.
  */
-import type { Tool, ToolContext, ToolResult } from '@ghostbot/shared';
+import type { Tool, ToolContext, ToolResult } from '@wispcrew/shared';
 
 export interface NotifyArgs {
   summary: string;

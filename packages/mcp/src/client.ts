@@ -3,13 +3,13 @@
  *
  * Speaks the JSON-RPC 2.0 subset used by MCP over a spawned process's
  * stdio (newline-delimited JSON): initialize → notifications/initialized →
- * tools/list → tools/call. Hand-rolled so GhostBot has zero hard
+ * tools/list → tools/call. Hand-rolled so WispCrew has zero hard
  * dependencies for the common stdio case; SSE/HTTP transport is a future
  * addition.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface, type Interface } from 'node:readline';
-import type { Tool, ToolDefinition, ToolContext, ToolResult } from '@ghostbot/shared';
+import type { Tool, ToolDefinition, ToolContext, ToolResult } from '@wispcrew/shared';
 
 export interface McpServerConfig {
   /** Stable identifier (also used as a tool-name prefix). */
@@ -122,7 +122,7 @@ export class McpStdioClient {
     const init = await this.request('initialize', {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
-      clientInfo: { name: 'ghostbot', version: '0.1.0' },
+      clientInfo: { name: 'wispcrew', version: '0.1.0' },
     }, timeoutMs);
     void init;
     this.notify('notifications/initialized', {});
@@ -206,7 +206,7 @@ export class McpStdioClient {
   }
 }
 
-/** Adapt an MCP client's tools to GhostBot Tool implementations. */
+/** Adapt an MCP client's tools to WispCrew Tool implementations. */
 export function mcpToolsToTools(client: McpStdioClient, approval: (toolName: string) => boolean | undefined = () => undefined): Tool[] {
   return client.toolsList().map((def) => ({
     definition: {

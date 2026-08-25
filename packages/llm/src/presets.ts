@@ -1,7 +1,7 @@
 /**
  * Provider presets — one-click configurations for popular LLM backends.
  */
-import type { ProviderConfig } from '@ghostbot/shared';
+import type { ProviderConfig } from '@wispcrew/shared';
 
 export interface ProviderPreset {
   id: string;
@@ -130,7 +130,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
      * Model list is deliberately short and was chosen by testing, not by
      * copying the 100+ entry catalogue.
      *
-     * GhostBot is an agent: a model that cannot call tools is close to
+     * WispCrew is an agent: a model that cannot call tools is close to
      * useless here, and several NVIDIA-hosted models advertise tool support
      * they do not deliver. `llama-3.3-nemotron-super-49b` emitted a raw `<T`
      * into its reply instead of a tool call, and one catalogue entry answered

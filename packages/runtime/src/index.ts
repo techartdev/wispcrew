@@ -1,11 +1,11 @@
 /**
- * @ghostbot/runtime — the headless GhostBot engine.
+ * @wispcrew/runtime — the headless WispCrew engine.
  *
  * Everything durable and everything that acts: the store, the cron
  * scheduler, agent sessions, MCP servers, tool grants, delegation, secrets.
  * No Electron, no window, no assumption that a user is watching.
  *
- * The desktop app is one host for this engine; `ghostbot serve` is another.
+ * The desktop app is one host for this engine; `wispcrew serve` is another.
  * Both call `setHost()` first to say where data lives and how to encrypt
  * secrets, then use the same modules — so a routine behaves identically
  * whether it fires under a GUI or on a headless box at 3am.

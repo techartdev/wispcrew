@@ -5,9 +5,9 @@
  * Run: npm run test:provider
  */
 import http from 'node:http';
-import { createProvider } from '@ghostbot/llm';
-import { Agent } from '@ghostbot/core';
-import type { ChatProvider } from '@ghostbot/shared';
+import { createProvider } from '@wispcrew/llm';
+import { Agent } from '@wispcrew/core';
+import type { ChatProvider } from '@wispcrew/shared';
 
 function sse(chunks: string[]): string {
   return chunks.map((c) => `data: ${c}\n\n`).join('') + 'data: [DONE]\n\n';

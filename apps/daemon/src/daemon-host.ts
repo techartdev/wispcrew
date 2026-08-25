@@ -1,5 +1,5 @@
 /**
- * daemon-host.ts — where a headless GhostBot keeps its data.
+ * daemon-host.ts — where a headless WispCrew keeps its data.
  *
  * The desktop app asks Electron for `userData`. A daemon has no such
  * authority, so it follows platform convention and lets the user override
@@ -12,27 +12,27 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createNodeCrypto, type HostEnvironment } from '@ghostbot/runtime';
+import { createNodeCrypto, type HostEnvironment } from '@wispcrew/runtime';
 
 /**
  * Default data directory, matching where Electron puts `userData` so both
  * hosts share one profile on a single machine.
  *
- *   Windows  %APPDATA%\GhostBot
- *   macOS    ~/Library/Application Support/GhostBot
- *   Linux    $XDG_CONFIG_HOME/GhostBot, else ~/.config/GhostBot
+ *   Windows  %APPDATA%\WispCrew
+ *   macOS    ~/Library/Application Support/WispCrew
+ *   Linux    $XDG_CONFIG_HOME/WispCrew, else ~/.config/WispCrew
  */
 export function defaultDataDir(): string {
-  if (process.env.GHOSTBOT_DATA_DIR) return path.resolve(process.env.GHOSTBOT_DATA_DIR);
+  if (process.env.WISPCREW_DATA_DIR) return path.resolve(process.env.WISPCREW_DATA_DIR);
 
   const home = os.homedir();
   switch (process.platform) {
     case 'win32':
-      return path.join(process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming'), 'GhostBot');
+      return path.join(process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming'), 'WispCrew');
     case 'darwin':
-      return path.join(home, 'Library', 'Application Support', 'GhostBot');
+      return path.join(home, 'Library', 'Application Support', 'WispCrew');
     default:
-      return path.join(process.env.XDG_CONFIG_HOME ?? path.join(home, '.config'), 'GhostBot');
+      return path.join(process.env.XDG_CONFIG_HOME ?? path.join(home, '.config'), 'WispCrew');
   }
 }
 
@@ -62,6 +62,6 @@ export function daemonHost(options: { dataDir?: string; workspace?: string } = {
     // No OS keychain on a headless box; this is honest about that and says
     // so through `available()`, which the UI surfaces verbatim.
     crypto: createNodeCrypto(dataDir),
-    nodeName: process.env.GHOSTBOT_NODE_NAME || os.hostname(),
+    nodeName: process.env.WISPCREW_NODE_NAME || os.hostname(),
   };
 }

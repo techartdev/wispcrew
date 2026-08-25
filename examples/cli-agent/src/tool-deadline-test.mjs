@@ -11,7 +11,7 @@
  *
  * Offline: synthetic tools, no network.
  */
-import { ToolRegistry, DEFAULT_TOOL_DEADLINE_MS } from '@ghostbot/tools';
+import { ToolRegistry, DEFAULT_TOOL_DEADLINE_MS } from '@wispcrew/tools';
 
 let failures = 0;
 const check = (label, cond, detail) => {

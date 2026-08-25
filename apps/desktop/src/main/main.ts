@@ -1,5 +1,5 @@
 /**
- * GhostBot — Electron main process.
+ * WispCrew — Electron main process.
  *
  * Startup:
  *   1. Set the app name (must precede any `getPath('userData')` call).
@@ -16,18 +16,18 @@ import { app, BrowserWindow, Menu, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createProvider, configFromPreset, describeProviderError } from '@ghostbot/llm';
-import { personaById } from '@ghostbot/core';
-import { ToolRegistry } from '@ghostbot/tools';
+import { createProvider, configFromPreset, describeProviderError } from '@wispcrew/llm';
+import { personaById } from '@wispcrew/core';
+import { ToolRegistry } from '@wispcrew/tools';
 import type {
   AgentRecord,
   Attachment,
   GlobalSettings,
   RoutineRecord,
   TranscriptEntry,
-} from '@ghostbot/shared';
-import { attachmentsToPromptText } from '@ghostbot/runtime';
-import { rebuildHistory } from '@ghostbot/runtime';
+} from '@wispcrew/shared';
+import { attachmentsToPromptText } from '@wispcrew/runtime';
+import { rebuildHistory } from '@wispcrew/runtime';
 import {
   defaultSettings,
   createNodeCrypto,
@@ -38,29 +38,29 @@ import {
   runRoutine,
   setApprovalAsker,
   setHost,
-} from '@ghostbot/runtime';
-import { allStatuses, recordUsage, resolveToken, type OAuthVendor } from '@ghostbot/runtime';
-import { migrateLegacyKey, providerSecretKey, setProviderKey } from '@ghostbot/runtime';
-import type { UsageSnapshot } from '@ghostbot/llm';
+} from '@wispcrew/runtime';
+import { allStatuses, recordUsage, resolveToken, type OAuthVendor } from '@wispcrew/runtime';
+import { migrateLegacyKey, providerSecretKey, setProviderKey } from '@wispcrew/runtime';
+import type { UsageSnapshot } from '@wispcrew/llm';
 import {
   isTerminal,
   makeAskAgentTool,
   rootContext,
   TERMINAL_NOTICE,
   type DelegationContext,
-} from '@ghostbot/runtime';
-import { initFileLog, fileLog } from '@ghostbot/runtime';
-import { readSettings, writeSettings } from '@ghostbot/runtime';
-import { getSession, setRunning } from '@ghostbot/runtime';
-import { buildMcpTools, syncMcpServers, closeAllMcp } from '@ghostbot/runtime';
-import { readSecrets, upsertSecrets } from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
+import { initFileLog, fileLog } from '@wispcrew/runtime';
+import { readSettings, writeSettings } from '@wispcrew/runtime';
+import { getSession, setRunning } from '@wispcrew/runtime';
+import { buildMcpTools, syncMcpServers, closeAllMcp } from '@wispcrew/runtime';
+import { readSecrets, upsertSecrets } from '@wispcrew/runtime';
 import { migrateUserData } from './userdata-migration.js';
 import { electronHost } from './electron-host.js';
 import { handoffIsCurrent, writeDaemonSecrets } from './secrets-handoff.js';
 import { linkToDaemon, type DaemonLink } from './daemon-link.js';
 import { startDesktopNotifications } from './desktop-notify.js';
 import { closeNodeLinks, connectKnownNodes, routeForCall } from './node-links.js';
-import * as store from '@ghostbot/runtime';
+import * as store from '@wispcrew/runtime';
 import {
   attachWindowEventSink,
   registerBridge,
@@ -71,18 +71,18 @@ import {
   pushTranscript,
   requestApproval,
 } from './bridge-host.js';
-import { startScheduler, stopScheduler, stopWatches, syncWatches } from '@ghostbot/runtime';
+import { startScheduler, stopScheduler, stopWatches, syncWatches } from '@wispcrew/runtime';
 
 // Must run at module scope, BEFORE anything reads app.getPath('userData').
 // Electron caches the userData path on first access and otherwise derives it
-// from the package name (@ghostbot/desktop → %APPDATA%\@ghostbot\desktop).
-app.setName('GhostBot');
+// from the package name (@wispcrew/desktop → %APPDATA%\@wispcrew\desktop).
+app.setName('WispCrew');
 
 /**
  * The project's home. Single constant so moving the repository is a one-line
  * change rather than a hunt through menus, docs and templates.
  */
-export const PROJECT_URL = 'https://github.com/techartdev/ghostbot';
+export const PROJECT_URL = 'https://github.com/techartdev/wispcrew';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RENDERER_HTML = path.join(__dirname, 'renderer', 'index.html');
@@ -131,9 +131,9 @@ function buildMenu(): void {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       {
-        label: 'GhostBot',
+        label: 'WispCrew',
         submenu: [
-          { role: 'about', label: 'About GhostBot' },
+          { role: 'about', label: 'About WispCrew' },
           { type: 'separator' },
           {
             label: 'Settings…',
@@ -144,7 +144,7 @@ function buildMenu(): void {
           { role: 'reload' },
           { role: 'toggleDevTools' },
           { type: 'separator' },
-          { role: 'quit', label: 'Quit GhostBot' },
+          { role: 'quit', label: 'Quit WispCrew' },
         ],
       },
       { role: 'editMenu' },
@@ -169,7 +169,7 @@ async function createWindow(): Promise<void> {
     height: 820,
     minWidth: 900,
     minHeight: 600,
-    title: 'GhostBot',
+    title: 'WispCrew',
     backgroundColor: '#0f1115',
     icon: ICON_PATH,
     show: false,
@@ -211,9 +211,9 @@ async function createWindow(): Promise<void> {
     mainWindow = null;
   });
 
-  // Debug helper: GHOSTBOT_AUTOSEND='prompt' drives one turn through the
+  // Debug helper: WISPCREW_AUTOSEND='prompt' drives one turn through the
   // real pipeline (bridge → agent → provider) without a human clicking.
-  if (process.env.GHOSTBOT_AUTOSEND) {
+  if (process.env.WISPCREW_AUTOSEND) {
     setTimeout(() => {
       const agentId = store.listAgents()[0]?.id;
       if (!agentId) return;
@@ -221,26 +221,26 @@ async function createWindow(): Promise<void> {
         kind: 'message',
         id: store.newId('usr'),
         role: 'user',
-        content: process.env.GHOSTBOT_AUTOSEND!,
+        content: process.env.WISPCREW_AUTOSEND!,
         createdAt: Date.now(),
       });
-      void runPrompt(agentId, process.env.GHOSTBOT_AUTOSEND!);
+      void runPrompt(agentId, process.env.WISPCREW_AUTOSEND!);
     }, 2500);
   }
 
-  // Debug helper: GHOSTBOT_CAPTURE=<path.png> screenshots then quits.
+  // Debug helper: WISPCREW_CAPTURE=<path.png> screenshots then quits.
   //
   // CI uses this as its "does the app actually render" gate, so a failure
   // must exit non-zero. Quitting 0 after failing to capture would let a
   // broken build pass silently — which is worse than no check at all.
-  if (process.env.GHOSTBOT_CAPTURE) {
+  if (process.env.WISPCREW_CAPTURE) {
     setTimeout(() => {
       void (async () => {
         let ok = false;
         try {
           const img = await mainWindow?.webContents.capturePage();
           if (img && !img.isEmpty()) {
-            fs.writeFileSync(process.env.GHOSTBOT_CAPTURE!, img.toPNG());
+            fs.writeFileSync(process.env.WISPCREW_CAPTURE!, img.toPNG());
             ok = true;
           } else {
             fileLog('[capture] window produced an empty image');
@@ -254,7 +254,7 @@ async function createWindow(): Promise<void> {
            * `quit` waits for outstanding handles, and once the app has
            * spawned a detached daemon it never stops waiting — measured: the
            * app rendered correctly and simply never ended, while the same
-           * build with GHOSTBOT_NO_DAEMON exited in 8.6s.
+           * build with WISPCREW_NO_DAEMON exited in 8.6s.
            *
            * This is a CI gate that has already captured its screenshot and
            * written the file, so there is nothing left to flush. Exiting with
@@ -263,7 +263,7 @@ async function createWindow(): Promise<void> {
           app.exit(ok ? 0 : 1);
         }
       })();
-    }, Number(process.env.GHOSTBOT_CAPTURE_DELAY ?? 8000));
+    }, Number(process.env.WISPCREW_CAPTURE_DELAY ?? 8000));
   }
 }
 
@@ -273,7 +273,7 @@ app.whenReady().then(async () => {
   /*
    * Hand the headless engine its environment before anything touches disk.
    *
-   * `@ghostbot/runtime` refuses to guess a data directory — a wrong guess
+   * `@wispcrew/runtime` refuses to guess a data directory — a wrong guess
    * would put someone's agents and keys somewhere they never chose — so this
    * must run before the first store or secrets access.
    */
@@ -471,7 +471,7 @@ app.on('before-quit', () => {
  *
  * Spawning a detached daemon leaves this process with handles Electron does
  * not consider disposable — measured: with a daemon the app rendered and ran
- * correctly but never exited, while the same build with GHOSTBOT_NO_DAEMON
+ * correctly but never exited, while the same build with WISPCREW_NO_DAEMON
  * exited in 8.6s. Chasing each handle individually is a losing game, and a
  * desktop app that lingers invisibly after the user quits is a bug they will
  * notice long before they notice why.

@@ -63,7 +63,7 @@ jobs:
         # already passed on this commit.
         run: |
           npm run typecheck
-          npm run test --workspace @ghostbot/examples-cli
+          npm run test --workspace @wispcrew/examples-cli
 
       - name: Set version from tag
         # The tag is the source of truth for a tagged release; package.json is
@@ -86,7 +86,7 @@ jobs:
         run: node scripts/make-icons.mjs
 
       - name: Build installer
-        run: npm run ${{ matrix.command }} --workspace @ghostbot/desktop
+        run: npm run ${{ matrix.command }} --workspace @wispcrew/desktop
         env:
           # Without a token electron-builder will not try to publish by
           # itself; the upload step below owns that.
@@ -126,7 +126,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          name: GhostBot ${{ github.ref_name }}
+          name: WispCrew ${{ github.ref_name }}
           files: release/*
           generate_release_notes: true
           body: |
@@ -134,21 +134,21 @@ jobs:
 
             | Platform | File |
             |---|---|
-            | Windows | `GhostBot-*-win-x64.exe` |
-            | macOS | `GhostBot-*-mac-*.dmg` |
-            | Linux | `GhostBot-*-linux-x64.AppImage` |
+            | Windows | `WispCrew-*-win-x64.exe` |
+            | macOS | `WispCrew-*-mac-*.dmg` |
+            | Linux | `WispCrew-*-linux-x64.AppImage` |
 
             ### Installers are unsigned
 
-            GhostBot has no code-signing certificate, so:
+            WispCrew has no code-signing certificate, so:
 
             - **Windows** shows a SmartScreen warning — choose *More info* →
               *Run anyway*.
             - **macOS** refuses to open it directly — right-click the app →
               *Open*, or run
-              `xattr -dr com.apple.quarantine /Applications/GhostBot.app`.
+              `xattr -dr com.apple.quarantine /Applications/WispCrew.app`.
             - **Linux** needs the AppImage marked executable:
-              `chmod +x GhostBot-*.AppImage`.
+              `chmod +x WispCrew-*.AppImage`.
 
             If that is not acceptable, build from source — it is the same
             code, and `npm run dist:win|dist:mac|dist:linux` produces these
@@ -156,7 +156,7 @@ jobs:
 
             ### First run
 
-            GhostBot needs a model provider. Either paste an API key
+            WispCrew needs a model provider. Either paste an API key
             (DeepSeek, OpenAI, Anthropic, Groq, OpenRouter, or any
             OpenAI-compatible endpoint), point it at a local Ollama or
             LM Studio server, or sign in with a Claude/ChatGPT subscription —

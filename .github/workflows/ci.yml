@@ -43,7 +43,7 @@ jobs:
       # Every suite is offline: no API key, no network. That is what makes it
       # safe to run on pull requests from forks.
       - name: Offline tests
-        run: npm run test --workspace @ghostbot/examples-cli
+        run: npm run test --workspace @wispcrew/examples-cli
 
   # The offline suites never launch Electron, so they cannot catch a renderer
   # or main-process failure that only happens off Windows. This job actually
@@ -75,16 +75,16 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: apps/desktop
         env:
-          GHOSTBOT_CAPTURE: ${{ github.workspace }}/boot.png
-          GHOSTBOT_CAPTURE_DELAY: '10000'
+          WISPCREW_CAPTURE: ${{ github.workspace }}/boot.png
+          WISPCREW_CAPTURE_DELAY: '10000'
         run: xvfb-run --auto-servernum npx electron . --no-sandbox
 
       - name: Boot headlessly (macOS/Windows)
         if: runner.os != 'Linux'
         working-directory: apps/desktop
         env:
-          GHOSTBOT_CAPTURE: ${{ github.workspace }}/boot.png
-          GHOSTBOT_CAPTURE_DELAY: '10000'
+          WISPCREW_CAPTURE: ${{ github.workspace }}/boot.png
+          WISPCREW_CAPTURE_DELAY: '10000'
         run: npx electron .
 
       # A window that failed to render is a nearly-uniform image and
@@ -127,7 +127,7 @@ jobs:
       - name: Reject mangled encoding
         run: node scripts/fix-encoding.mjs --check
 
-      # GhostBot is entirely original work. This guards against a vendored
+      # WispCrew is entirely original work. This guards against a vendored
       # third-party application tree reappearing anywhere in the repository —
       # checked at every depth, because a nested copy under apps/ once
       # survived a cleanup that only looked at the repo root.
@@ -136,7 +136,7 @@ jobs:
           found=$(find . -type d -name vendor -not -path './node_modules/*' -not -path '*/node_modules/*' || true)
           if [ -n "$found" ]; then
             echo "::error::vendor/ director(ies) present: $found"
-            echo "GhostBot must not vendor third-party application code."
+            echo "WispCrew must not vendor third-party application code."
             exit 1
           fi
           echo "No vendor/ directory at any depth — OK"

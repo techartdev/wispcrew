@@ -51,7 +51,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: GhostBot version
+      label: WispCrew version
       description: From the app menu, or the commit you built from.
     validations:
       required: false
@@ -61,6 +61,6 @@ body:
     attributes:
       label: Logs or transcript (optional)
       description: |
-        Run with `GHOSTBOT_LOG=path\to\log.txt` for a protocol log.
+        Run with `WISPCREW_LOG=path\to\log.txt` for a protocol log.
         Redact keys and private paths before pasting.
       render: shell

@@ -15,7 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const rt = await import('@ghostbot/runtime');
+const rt = await import('@wispcrew/runtime');
 const key = fs.readFileSync(fileURLToPath(new URL('../../../testkey-nvidia.txt', import.meta.url)), 'utf8').trim();
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gb-live-'));
@@ -48,7 +48,7 @@ console.log('\n[provision] give the NODE its own credentials');
   check('the node has a key of its own', rt.hasProviderKey(dir, 'nvidia'));
 }
 
-console.log('\n[start] ghostbot serve --network --pair');
+console.log('\n[start] wispcrew serve --network --pair');
 const daemon = spawn(
   process.execPath,
   [fileURLToPath(new URL('../../../apps/daemon/dist/cli.js', import.meta.url)), 'serve',

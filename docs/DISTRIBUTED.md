@@ -1,11 +1,11 @@
 # Detaching the engine
 
-A design note. This is the architecture GhostBot is moving to, why, and the
+A design note. This is the architecture WispCrew is moving to, why, and the
 decisions that are expensive to reverse.
 
 ## The problem
 
-Today GhostBot is a desktop app that happens to contain an agent engine.
+Today WispCrew is a desktop app that happens to contain an agent engine.
 Close the window and everything stops: scheduled routines do not fire, MCP
 servers shut down, a long task dies mid-turn. The agent only exists while you
 are looking at it.
@@ -16,7 +16,7 @@ The competing products people compare us to run the agent on a machine that
 is always on, and the user's laptop is merely a window onto it.
 
 We are not going to sell hosted VMs — that contradicts local-first and would
-make GhostBot a service rather than a program you own. But the *capability*
+make WispCrew a service rather than a program you own. But the *capability*
 gap is real, and it is the difference between "another local agent app" and
 something worth choosing.
 
@@ -31,7 +31,7 @@ Split the app in two along a seam that already almost exists:
    └───────────────┬──────────────┘
                    │  GhostBridge (same API as today)
    ┌───────────────▼──────────────┐
-   │   ghostbot serve (a daemon)  │   the engine
+   │   wispcrew serve (a daemon)  │   the engine
    │   store · scheduler · agents │
    │   MCP · grants · secrets     │
    └──────────────────────────────┘
@@ -68,7 +68,7 @@ question with a useful answer.
  daemon   (always on)     (public IP)      (on your LAN)
 ```
 
-A **node** is any machine running `ghostbot serve`. Each agent is assigned to
+A **node** is any machine running `wispcrew serve`. Each agent is assigned to
 one. The default is `local`, so a user who never configures anything gets
 exactly today's behaviour.
 
@@ -80,7 +80,7 @@ What a node owns:
 - its own MCP servers
 
 What crosses the wire: the bridge API, and nothing else. A node is not a
-worker executing instructions from a coordinator; it is a full GhostBot that
+worker executing instructions from a coordinator; it is a full WispCrew that
 happens to be steered from elsewhere.
 
 ### Why keys stay put
@@ -99,12 +99,12 @@ deploy key.
 
 Pairing, not accounts:
 
-1. On the node: `ghostbot serve --pair` prints a short code and a fingerprint.
+1. On the node: `wispcrew serve --pair` prints a short code and a fingerprint.
 2. In the desktop app: add a node, enter host and code.
 3. The two exchange a long-lived per-node token over TLS; the code expires in
    minutes and is single-use.
 
-No GhostBot servers exist in this flow. No account, no relay, nothing to sign
+No WispCrew servers exist in this flow. No account, no relay, nothing to sign
 up for, and it works on a LAN with the internet down. This is the same shape
 as pairing a device you own, and deliberately unlike "log in to our cloud".
 
@@ -137,7 +137,7 @@ Steps 1–4 are done and verified end to end.
 | | Evidence |
 |---|---|
 | Headless runtime | 18 modules, zero Electron imports |
-| `ghostbot serve` | a routine fired with no UI open, against a live model |
+| `wispcrew serve` | a routine fired with no UI open, against a live model |
 | Desktop as a client | app quit, daemon kept serving, transcripts intact |
 | Pairing over TLS | a real `--network --pair` daemon paired and driven |
 
@@ -165,7 +165,7 @@ proven before anything is distributed:
 
 1. **Extract the engine** into a headless package with no Electron imports.
    Nothing user-visible changes.
-2. **`ghostbot serve`** — the daemon, on `127.0.0.1`. The desktop app starts
+2. **`wispcrew serve`** — the daemon, on `127.0.0.1`. The desktop app starts
    one automatically and connects to it. *Now cron survives closing the
    window*, which is the single biggest win and needs no networking.
 3. **Node pairing and remote transport.** Mostly transport work once the

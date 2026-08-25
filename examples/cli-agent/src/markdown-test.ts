@@ -9,7 +9,7 @@
  * It runs the real component through React's static renderer, so what is
  * asserted is the actual DOM the app produces.
  *
- * Run: npm run test:markdown --workspace @ghostbot/examples-cli
+ * Run: npm run test:markdown --workspace @wispcrew/examples-cli
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';

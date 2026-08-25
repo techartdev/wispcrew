@@ -219,7 +219,7 @@ export async function pairWithNode(
     );
 
     socket.write(
-      encodeFrame({ t: 'pair', code, client: options.clientName ?? 'ghostbot' }),
+      encodeFrame({ t: 'pair', code, client: options.clientName ?? 'wispcrew' }),
     );
   });
 }

@@ -32,7 +32,7 @@
  * `chokidar` handles more edge cases, but this app runs shell commands and
  * every dependency is a supply-chain decision. `fs.watch` with recursive
  * mode covers Windows and macOS natively, and Linux since Node 20 — the
- * platforms GhostBot ships on. The gap is that Linux support is newer, so
+ * platforms WispCrew ships on. The gap is that Linux support is newer, so
  * failure there is reported rather than assumed away.
  */
 import fs from 'node:fs';

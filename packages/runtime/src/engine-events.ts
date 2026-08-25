@@ -14,7 +14,7 @@
  * Events are therefore fire-and-forget: a sink that throws is logged and
  * ignored rather than being allowed to fail an agent turn.
  */
-import type { BridgeEvent } from '@ghostbot/shared';
+import type { BridgeEvent } from '@wispcrew/shared';
 import { fileLog } from './filelog.js';
 
 type EventSink = (event: BridgeEvent) => void;

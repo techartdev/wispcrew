@@ -34,7 +34,7 @@ import {
   readEndpoint,
   type NodeClient,
   type NodeEndpoint,
-} from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
 
 /** How long to wait for a freshly spawned daemon to publish its endpoint. */
 const STARTUP_TIMEOUT_MS = 15_000;
@@ -134,8 +134,8 @@ export async function linkToDaemon(
    * app, and as a safety valve for a user whose environment cannot spawn one
    * — a locked-down machine, an antivirus that objects to a detached child.
    */
-  if (process.env.GHOSTBOT_NO_DAEMON) {
-    fileLog('[daemon-link] disabled by GHOSTBOT_NO_DAEMON; running in-process');
+  if (process.env.WISPCREW_NO_DAEMON) {
+    fileLog('[daemon-link] disabled by WISPCREW_NO_DAEMON; running in-process');
     return null;
   }
 
@@ -225,7 +225,7 @@ export async function linkToDaemon(
     const client = await connectNode({
       socket,
       token: endpoint.token,
-      clientName: `ghostbot-desktop/${app.getVersion()}`,
+      clientName: `wispcrew-desktop/${app.getVersion()}`,
       onEvent,
       onClose: (reason) => fileLog('[daemon-link] disconnected:', reason),
     });

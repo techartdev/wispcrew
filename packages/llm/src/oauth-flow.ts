@@ -20,7 +20,7 @@
  * **Anthropic prohibits third-party tools from using subscription OAuth
  * tokens.** Their Claude Code documentation says so explicitly, and
  * enforcement can arrive without warning against the *user's* account.
- * GhostBot therefore never turns this on by itself: it is opt-in, and the UI
+ * WispCrew therefore never turns this on by itself: it is opt-in, and the UI
  * states the risk. An API key remains the supported path.
  *
  * The endpoints and client id below are not guesses — an earlier draft

@@ -3,7 +3,7 @@
  */
 import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
-import type { Tool, ToolContext, ToolResult } from '@ghostbot/shared';
+import type { Tool, ToolContext, ToolResult } from '@wispcrew/shared';
 import { checkWrite, noteObserved } from './observation.js';
 
 const MAX_READ_BYTES = 300_000;

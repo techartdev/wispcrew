@@ -14,10 +14,10 @@
  * Sessions also own the in-flight run so the UI's Stop button
  * (`interruptAgentRun`) can abort a turn via `Agent.abort()`.
  */
-import { Agent } from '@ghostbot/core';
-import type { ChatMessage, ChatProvider } from '@ghostbot/shared';
-import { ToolRegistry } from '@ghostbot/tools';
-import type { ApprovalRequest } from '@ghostbot/shared';
+import { Agent } from '@wispcrew/core';
+import type { ChatMessage, ChatProvider } from '@wispcrew/shared';
+import { ToolRegistry } from '@wispcrew/tools';
+import type { ApprovalRequest } from '@wispcrew/shared';
 
 export interface SessionSeed {
   provider: ChatProvider;

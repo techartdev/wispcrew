@@ -1,8 +1,8 @@
 {
-  "name": "@ghostbot/daemon",
+  "name": "@wispcrew/daemon",
   "version": "0.1.0",
   "private": true,
-  "description": "ghostbot serve — the headless GhostBot engine as a long-running process.",
+  "description": "wispcrew serve — the headless WispCrew engine as a long-running process.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/serve.js",
@@ -22,7 +22,7 @@
     }
   },
   "bin": {
-    "ghostbot": "./dist/cli.js"
+    "wispcrew": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -30,12 +30,12 @@
     "serve": "node dist/cli.js serve"
   },
   "dependencies": {
-    "@ghostbot/shared": "0.1.0",
-    "@ghostbot/runtime": "0.1.0",
-    "@ghostbot/llm": "0.1.0",
-    "@ghostbot/core": "0.1.0",
-    "@ghostbot/tools": "0.1.0",
-    "@ghostbot/mcp": "0.1.0"
+    "@wispcrew/shared": "0.1.0",
+    "@wispcrew/runtime": "0.1.0",
+    "@wispcrew/llm": "0.1.0",
+    "@wispcrew/core": "0.1.0",
+    "@wispcrew/tools": "0.1.0",
+    "@wispcrew/mcp": "0.1.0"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

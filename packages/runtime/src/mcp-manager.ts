@@ -10,8 +10,8 @@
  * the servers, and later prompts reuse them. A server that fails to start is
  * recorded with its error instead of breaking the whole run.
  */
-import { McpStdioClient, mcpToolsToTools, type McpServerConfig } from '@ghostbot/mcp';
-import type { Tool } from '@ghostbot/shared';
+import { McpStdioClient, mcpToolsToTools, type McpServerConfig } from '@wispcrew/mcp';
+import type { Tool } from '@wispcrew/shared';
 import type { AppSettings, McpServerSettings } from './types.js';
 import { fileLog } from './filelog.js';
 
@@ -115,7 +115,7 @@ export function statuses(): McpServerStatus[] {
 }
 
 /**
- * Connect (if needed) and return the GhostBot tools contributed by all
+ * Connect (if needed) and return the WispCrew tools contributed by all
  * enabled MCP servers, prefixed as `<server>__<tool>`.
  */
 export async function buildMcpTools(settings: AppSettings): Promise<Tool[]> {

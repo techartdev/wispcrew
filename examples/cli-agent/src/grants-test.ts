@@ -5,7 +5,7 @@
  * too narrow and users get approval fatigue and start clicking reflexively;
  * too broad and a permission silently applies where it was never intended.
  *
- * Run: npm run test:grants --workspace @ghostbot/examples-cli
+ * Run: npm run test:grants --workspace @wispcrew/examples-cli
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -18,7 +18,7 @@ import {
   revoke,
   revokeAll,
   revokeForAgent,
-} from '@ghostbot/runtime';
+} from '@wispcrew/runtime';
 
 let failures = 0;
 

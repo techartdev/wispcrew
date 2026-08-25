@@ -1,7 +1,7 @@
 {
-  "name": "@ghostbot/core",
+  "name": "@wispcrew/core",
   "version": "0.1.0",
-  "description": "GhostBot agent core: provider-agnostic agent loop with tool execution and approvals.",
+  "description": "WispCrew agent core: provider-agnostic agent loop with tool execution and approvals.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,9 +18,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ghostbot/shared": "0.1.0",
-    "@ghostbot/llm": "0.1.0",
-    "@ghostbot/tools": "0.1.0"
+    "@wispcrew/shared": "0.1.0",
+    "@wispcrew/llm": "0.1.0",
+    "@wispcrew/tools": "0.1.0"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

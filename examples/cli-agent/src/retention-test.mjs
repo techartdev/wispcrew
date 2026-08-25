@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { retainText, shellTool } from '@ghostbot/tools';
+import { retainText, shellTool } from '@wispcrew/tools';
 
 let failures = 0;
 const check = (label, cond, detail) => {

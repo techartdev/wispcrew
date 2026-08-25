@@ -17,7 +17,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { Attachment } from '@ghostbot/shared';
+import type { Attachment } from '@wispcrew/shared';
 
 /** Largest image we will base64 and send. */
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;

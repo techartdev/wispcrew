@@ -8,14 +8,14 @@
  * mid-turn is therefore very easy to get subtly wrong, and the symptom is an
  * opaque HTTP 400 on the user's next message.
  *
- * Run: npm run test:branching --workspace @ghostbot/examples-cli
+ * Run: npm run test:branching --workspace @wispcrew/examples-cli
  */
 import {
   prefixBefore,
   prefixThrough,
   rebuildHistory,
-} from '@ghostbot/runtime';
-import type { ChatMessage, TranscriptEntry } from '@ghostbot/shared';
+} from '@wispcrew/runtime';
+import type { ChatMessage, TranscriptEntry } from '@wispcrew/shared';
 
 let failures = 0;
 

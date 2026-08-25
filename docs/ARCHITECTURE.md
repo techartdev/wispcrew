@@ -1,6 +1,6 @@
 # Architecture
 
-GhostBot is an Electron desktop app with a React renderer, a Node main
+WispCrew is an Electron desktop app with a React renderer, a Node main
 process, and a set of framework-free TypeScript packages that hold the actual
 agent logic. Everything runs on the user's machine; the only outbound traffic
 is the request to whichever LLM provider the user configured.
@@ -16,10 +16,10 @@ is the request to whichever LLM provider the user configured.
 |  |  |- Sidebar (roster)   |          |  |- runPrompt()        |  |
 |  |  |- Chat (transcript)  |          |  |- runRoutine()       |  |
 |  |  +- Panels (settings)  |          |  +- window / menu      |  |
-|  | useGhostbot.ts (state) |          | bridge-host.ts (IPC)   |  |
+|  | useWispcrew.ts (state) |          | bridge-host.ts (IPC)   |  |
 |  +-----------+------------+          | store.ts (persistence) |  |
 |              |                       | scheduler.ts + cron.ts |  |
-|      window.ghostbot                 | agent-sessions.ts      |  |
+|      window.wispcrew                 | agent-sessions.ts      |  |
 |              |                       | mcp-manager.ts         |  |
 |  +-----------v------------+          | secrets-store.ts       |  |
 |  | preload.ts             |<-------->+-----------+------------+  |
@@ -28,11 +28,11 @@ is the request to whichever LLM provider the user configured.
 +---------------------------------------------------+--------------+
                                                     |
                     +-------------------------------v--------------+
-                    | @ghostbot/core   Agent loop                  |
-                    | @ghostbot/llm    provider adapters           |
-                    | @ghostbot/tools  shell/files/edit/grep/web   |
-                    | @ghostbot/mcp    MCP stdio client            |
-                    | @ghostbot/shared types (no dependencies)     |
+                    | @wispcrew/core   Agent loop                  |
+                    | @wispcrew/llm    provider adapters           |
+                    | @wispcrew/tools  shell/files/edit/grep/web   |
+                    | @wispcrew/mcp    MCP stdio client            |
+                    | @wispcrew/shared types (no dependencies)     |
                     +-------------------+--------------------------+
                                         | HTTPS
                                 +-------v--------+
@@ -84,8 +84,8 @@ token speed with no polling interval to tune.
 
 | File | Contents |
 |---|---|
-| `ghostbot-settings.json` | Global settings. **Never** an API key. |
-| `ghostbot-secrets.enc` | API keys, encrypted via Electron `safeStorage`. |
+| `wispcrew-settings.json` | Global settings. **Never** an API key. |
+| `wispcrew-secrets.enc` | API keys, encrypted via Electron `safeStorage`. |
 | `agents.json` | The agent roster. |
 | `transcripts/<agentId>.json` | Per-agent conversation history. |
 | `routines.json` | Scheduled routines and recent run records. |

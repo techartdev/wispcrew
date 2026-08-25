@@ -38,7 +38,7 @@ import type {
   ProviderChunk,
   ProviderConfig,
   ToolCall,
-} from '@ghostbot/shared';
+} from '@wispcrew/shared';
 
 /** One item in the `input` array. */
 type InputItem = Record<string, unknown>;

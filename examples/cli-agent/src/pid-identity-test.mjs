@@ -13,7 +13,7 @@
  * Offline: local processes only.
  */
 import { spawn } from 'node:child_process';
-import { isProcessAlive, isSameProcess, parseElapsed, processStartTime } from '@ghostbot/runtime';
+import { isProcessAlive, isSameProcess, parseElapsed, processStartTime } from '@wispcrew/runtime';
 
 let failures = 0;
 const check = (label, cond, detail) => {

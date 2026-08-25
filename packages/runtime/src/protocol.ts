@@ -1,5 +1,5 @@
 /**
- * protocol.ts — the wire format between a GhostBot client and a node.
+ * protocol.ts — the wire format between a WispCrew client and a node.
  *
  * Deliberately boring: newline-delimited JSON over a stream. Every bridge
  * method becomes a request with an id; every engine event becomes an

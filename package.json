@@ -1,10 +1,10 @@
 {
-  "name": "ghostbot",
+  "name": "wispcrew",
   "version": "0.1.0",
   "private": true,
-  "description": "GhostBot — a free, open-source desktop AI agent. Bring your own LLM (DeepSeek, OpenAI, Anthropic, Ollama, any OpenAI-compatible endpoint).",
+  "description": "WispCrew — a free, open-source desktop AI agent. Bring your own LLM (DeepSeek, OpenAI, Anthropic, Ollama, any OpenAI-compatible endpoint).",
   "license": "MIT",
-  "author": "GhostBot contributors",
+  "author": "WispCrew contributors",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -12,17 +12,17 @@
     "examples/*"
   ],
   "scripts": {
-    "//build": "Packages are built in dependency order. `--workspaces` runs them in an arbitrary order, which breaks a fresh clone: everything imports @ghostbot/shared, and TypeScript resolves it to dist/ that does not exist yet.",
-    "build:packages": "npm run build --workspace @ghostbot/shared && npm run build --workspace @ghostbot/tools && npm run build --workspace @ghostbot/llm && npm run build --workspace @ghostbot/mcp && npm run build --workspace @ghostbot/core && npm run build --workspace @ghostbot/runtime",
+    "//build": "Packages are built in dependency order. `--workspaces` runs them in an arbitrary order, which breaks a fresh clone: everything imports @wispcrew/shared, and TypeScript resolves it to dist/ that does not exist yet.",
+    "build:packages": "npm run build --workspace @wispcrew/shared && npm run build --workspace @wispcrew/tools && npm run build --workspace @wispcrew/llm && npm run build --workspace @wispcrew/mcp && npm run build --workspace @wispcrew/core && npm run build --workspace @wispcrew/runtime",
     "//build-daemon": "The daemon is built alongside the desktop app, not on demand. Tests spawn `apps/daemon/dist/cli.js` as a real process, and on a fresh clone that file did not exist — the spawn failed silently and the suite reported a timeout instead of a missing build.",
-    "build": "npm run build:packages && npm run build --workspace @ghostbot/daemon && npm run build --workspace @ghostbot/desktop",
+    "build": "npm run build:packages && npm run build --workspace @wispcrew/daemon && npm run build --workspace @wispcrew/desktop",
     "//typecheck": "Typechecking also needs the declaration files, so build the packages first. On a fresh clone this is the difference between a clean run and a wall of TS2307.",
     "version:show": "node scripts/set-version.mjs",
     "version:set": "node scripts/set-version.mjs",
     "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
     "test": "npm run build:packages && npm run test --workspaces --if-present",
-    "agent": "npm run agent --workspace @ghostbot/examples-cli",
-    "desktop": "npm run dev --workspace @ghostbot/desktop",
+    "agent": "npm run agent --workspace @wispcrew/examples-cli",
+    "desktop": "npm run dev --workspace @wispcrew/desktop",
     "icons": "electron scripts/make-icons.mjs"
   },
   "engines": {

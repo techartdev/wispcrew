@@ -21,8 +21,8 @@ import {
   installScheduler,
   listRoutines,
   setHost,
-} from '@ghostbot/runtime';
-import { proposeRoutineTool, scheduleFollowUpTool } from '@ghostbot/tools';
+} from '@wispcrew/runtime';
+import { proposeRoutineTool, scheduleFollowUpTool } from '@wispcrew/tools';
 
 let failures = 0;
 const check = (label, cond, detail) => {

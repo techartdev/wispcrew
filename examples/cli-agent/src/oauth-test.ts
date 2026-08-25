@@ -9,7 +9,7 @@
  *
  * Everything here is offline — no network, no credentials.
  *
- * Run: npm run test:oauth --workspace @ghostbot/examples-cli
+ * Run: npm run test:oauth --workspace @wispcrew/examples-cli
  */
 import { createHash } from 'node:crypto';
 import {
@@ -18,7 +18,7 @@ import {
   describeUsage,
   usageFromAnthropicHeaders,
   usageFromCodexHeaders,
-} from '@ghostbot/llm';
+} from '@wispcrew/llm';
 
 let failures = 0;
 
@@ -202,7 +202,7 @@ function main(): void {
      * This guards a real incident. Refresh tokens rotate: exchanging one
      * retires it server-side. During development a refresh was performed on a
      * token borrowed from Claude Code, which instantly invalidated the CLI's
-     * own stored copy and signed the user out of a tool GhostBot was never
+     * own stored copy and signed the user out of a tool WispCrew was never
      * asked to touch — with a bare 401 giving no clue why.
      *
      * The fix is that a borrowed sign-in is stored WITHOUT its refresh token.

@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describeWatch, matchesPattern, watchDirectory } from '@ghostbot/runtime';
+import { describeWatch, matchesPattern, watchDirectory } from '@wispcrew/runtime';
 
 let failures = 0;
 const check = (label, cond, detail) => {

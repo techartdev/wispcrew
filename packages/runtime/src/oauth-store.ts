@@ -26,7 +26,7 @@ import {
   type ChatGptCredential,
   type OAuthCredential,
   type UsageSnapshot,
-} from '@ghostbot/llm';
+} from '@wispcrew/llm';
 import { getSecret, upsertSecrets, removeSecrets } from './secrets-store.js';
 import { fileLog } from './filelog.js';
 
@@ -34,8 +34,8 @@ export type OAuthVendor = 'anthropic' | 'chatgpt';
 
 /** One secrets-store key per vendor. */
 const SECRET_KEYS: Record<OAuthVendor, string> = {
-  anthropic: 'GHOSTBOT_OAUTH_ANTHROPIC',
-  chatgpt: 'GHOSTBOT_OAUTH_CHATGPT',
+  anthropic: 'WISPCREW_OAUTH_ANTHROPIC',
+  chatgpt: 'WISPCREW_OAUTH_CHATGPT',
 };
 
 /** What the UI is allowed to see — never the tokens themselves. */

@@ -1,7 +1,7 @@
 {
-  "name": "@ghostbot/mcp",
+  "name": "@wispcrew/mcp",
   "version": "0.1.0",
-  "description": "GhostBot MCP (Model Context Protocol) client: stdio servers exposed as agent tools.",
+  "description": "WispCrew MCP (Model Context Protocol) client: stdio servers exposed as agent tools.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,7 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ghostbot/shared": "0.1.0"
+    "@wispcrew/shared": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

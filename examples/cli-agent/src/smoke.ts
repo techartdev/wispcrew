@@ -1,9 +1,9 @@
 /**
- * Smoke test for the GhostBot core loop with a mock provider
+ * Smoke test for the WispCrew core loop with a mock provider
  * (no network needed). Run: npm run smoke
  */
-import { Agent } from '@ghostbot/core';
-import type { ChatProvider, ChatRequest, ProviderChunk } from '@ghostbot/shared';
+import { Agent } from '@wispcrew/core';
+import type { ChatProvider, ChatRequest, ProviderChunk } from '@wispcrew/shared';
 
 class MockProvider implements ChatProvider {
   readonly kind = 'openai-compatible' as const;

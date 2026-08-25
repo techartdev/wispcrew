@@ -9,7 +9,7 @@ import type {
   ProviderChunk,
   ProviderConfig,
   ToolDefinition,
-} from '@ghostbot/shared';
+} from '@wispcrew/shared';
 import { endpointAllowsNoKey } from './presets.js';
 import {
   backoffDelay,

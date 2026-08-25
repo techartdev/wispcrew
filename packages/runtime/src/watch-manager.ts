@@ -5,7 +5,7 @@
  * routines through the same runner, so a watch-triggered run records its
  * history and reports failures exactly like a scheduled one.
  */
-import type { RoutineRecord } from '@ghostbot/shared';
+import type { RoutineRecord } from '@wispcrew/shared';
 import { fileLog } from './filelog.js';
 import { listRoutines, newId, recordRoutineRun } from './store.js';
 import { watchDirectory, type Watcher } from './watch.js';

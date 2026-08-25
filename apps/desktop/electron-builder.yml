@@ -1,4 +1,4 @@
-# electron-builder configuration for GhostBot.
+# electron-builder configuration for WispCrew.
 #
 # Notes specific to this project:
 #  * npm workspaces hoist dependencies to the repo root, so
@@ -6,8 +6,8 @@
 #    resolved from the root during packaging.
 #  * The renderer, preload, and main bundle are all produced into `dist/`
 #    before packaging (`npm run build`), so `files` needs nothing else.
-appId: dev.ghostbot.desktop
-productName: GhostBot
+appId: dev.wispcrew.desktop
+productName: WispCrew
 copyright: MIT licensed. Bring your own LLM provider.
 
 # electron-builder requires an exact version (package.json carries a ^range
@@ -53,8 +53,8 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: GhostBot
-  uninstallDisplayName: GhostBot ${version}
+  shortcutName: WispCrew
+  uninstallDisplayName: WispCrew ${version}
 
 mac:
   # electron-builder derives the .icns from this 1024px master.

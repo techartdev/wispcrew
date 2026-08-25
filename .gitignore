@@ -44,6 +44,14 @@ testkey.txt
 *key*.txt
 *.key
 *.pem
+# Current names.
+wispcrew-secrets.json
+wispcrew-secrets.enc
+wispcrew-secrets-node.enc
+wispcrew-settings.json
+
+# Previous names, kept: an existing checkout may still hold these, and
+# dropping the pattern would make committing a real key possible.
 ghostbot-secrets.json
 ghostbot-secrets.enc
 ghostbot-settings.json

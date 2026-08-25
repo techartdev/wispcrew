@@ -4,10 +4,10 @@ import fs from 'node:fs';
 let logPath: string | null = null;
 
 export function initFileLog(): void {
-  logPath = process.env.GHOSTBOT_LOG ?? null;
+  logPath = process.env.WISPCREW_LOG ?? null;
   if (logPath) {
     try {
-      fs.writeFileSync(logPath, `--- ghostbot log ${new Date().toISOString()} ---\n`);
+      fs.writeFileSync(logPath, `--- wispcrew log ${new Date().toISOString()} ---\n`);
     } catch {
       logPath = null;
     }

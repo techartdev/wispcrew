@@ -5,14 +5,14 @@
  * environment: the desktop app uses Electron `safeStorage` (DPAPI, Keychain,
  * libsecret), while a headless daemon on a VPS has no keychain and uses a
  * machine-local key file instead. Ciphertext lives in
- * `<dataDir>/ghostbot-secrets.enc`.
+ * `<dataDir>/wispcrew-secrets.enc`.
  *
  * Whichever backend is in use reports `available()` truthfully, and that is
  * what reaches the UI — a keyless host says so rather than implying the same
  * protection an OS keychain earns.
  *
  * Migration: earlier builds stored secrets as plaintext JSON in
- * `ghostbot-secrets.json`. On first access we transparently import that
+ * `wispcrew-secrets.json`. On first access we transparently import that
  * file, rewrite it encrypted, and delete the plaintext original.
  *
  * Fallback: if encryption is unavailable entirely, we fall back to the
@@ -26,8 +26,8 @@ import { fileLog } from './filelog.js';
 
 export type SecretMap = Record<string, string>;
 
-const ENC_FILE = 'ghostbot-secrets.enc';
-const PLAIN_FILE = 'ghostbot-secrets.json';
+const ENC_FILE = 'wispcrew-secrets.enc';
+const PLAIN_FILE = 'wispcrew-secrets.json';
 /**
  * A copy the desktop app writes for a background daemon.
  *
@@ -36,7 +36,7 @@ const PLAIN_FILE = 'ghostbot-secrets.json';
  * daemon silently see zero providers, the desktop re-encrypts the same
  * secrets with the machine-local key file and leaves them here.
  */
-const NODE_FILE = 'ghostbot-secrets-node.enc';
+const NODE_FILE = 'wispcrew-secrets-node.enc';
 
 function encPath(userDataDir: string): string {
   return path.join(userDataDir, ENC_FILE);

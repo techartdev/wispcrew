@@ -4,13 +4,13 @@
  * The flow, deliberately shaped like pairing a device rather than logging in
  * to a service:
  *
- *   1. On the node:   `ghostbot serve --listen --pair`
+ *   1. On the node:   `wispcrew serve --listen --pair`
  *                     prints a short code and the certificate fingerprint.
  *   2. In the client: add a node, enter host and code.
  *   3. The two exchange the code for a long-lived per-node token over TLS,
  *      and the client pins the fingerprint it saw.
  *
- * No GhostBot server is involved at any point. It works on a LAN with the
+ * No WispCrew server is involved at any point. It works on a LAN with the
  * internet down, and there is nothing to sign up for.
  *
  * ## Why a short code and not the token itself

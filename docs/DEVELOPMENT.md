@@ -1,6 +1,6 @@
 # Development Guide
 
-Everything you need to build, run, test, and extend GhostBot. Windows is the
+Everything you need to build, run, test, and extend WispCrew. Windows is the
 primary development platform so far; macOS and Linux should work but are
 **unverified** — reports welcome.
 
@@ -19,9 +19,9 @@ npm run desktop # build everything and launch
 |---|---|
 | `npm run typecheck` | `tsc --noEmit` across every workspace |
 | `npm run build` | Builds packages (tsc) and desktop bundles (esbuild + Vite) |
-| `npm run test --workspace @ghostbot/examples-cli` | All six offline suites |
+| `npm run test --workspace @wispcrew/examples-cli` | All six offline suites |
 | `npm run desktop` | Build + launch Electron |
-| `npm run agent --workspace @ghostbot/examples-cli -- "…"` | Headless CLI (needs a key) |
+| `npm run agent --workspace @wispcrew/examples-cli -- "…"` | Headless CLI (needs a key) |
 | `npm run dist:win` / `dist:mac` / `dist:linux` | Installers |
 | `npm run icons` | Regenerate app icons from `build/icon.svg` |
 
@@ -54,27 +54,27 @@ Live provider runs need your own key. Pass it by environment variable; never
 put it in a file inside the repo.
 
 ```bash
-GHOSTBOT_PROVIDER=openai GHOSTBOT_API_KEY=sk-... \
-  npm run agent --workspace @ghostbot/examples-cli -- "list the files here"
+WISPCREW_PROVIDER=openai WISPCREW_API_KEY=sk-... \
+  npm run agent --workspace @wispcrew/examples-cli -- "list the files here"
 ```
 
 ## Debug hooks
 
 | Variable | Effect |
 |---|---|
-| `GHOSTBOT_LOG=<file>` | Append a bridge/protocol log |
-| `GHOSTBOT_CAPTURE=<file.png>` | Screenshot the window, then quit |
-| `GHOSTBOT_CAPTURE_DELAY=<ms>` | How long to wait first (default 8000) |
-| `GHOSTBOT_AUTOSEND='prompt'` | Send one prompt through the real pipeline after boot |
-| `GHOSTBOT_PROVIDER` / `_API_KEY` / `_MODEL` / `_BASE_URL` | Provider fallback |
+| `WISPCREW_LOG=<file>` | Append a bridge/protocol log |
+| `WISPCREW_CAPTURE=<file.png>` | Screenshot the window, then quit |
+| `WISPCREW_CAPTURE_DELAY=<ms>` | How long to wait first (default 8000) |
+| `WISPCREW_AUTOSEND='prompt'` | Send one prompt through the real pipeline after boot |
+| `WISPCREW_PROVIDER` / `_API_KEY` / `_MODEL` / `_BASE_URL` | Provider fallback |
 
 A scripted end-to-end check looks like:
 
 ```bash
 cd apps/desktop
-GHOSTBOT_AUTOSEND='Reply with exactly: OK' \
-GHOSTBOT_CAPTURE=../../shot.png \
-GHOSTBOT_CAPTURE_DELAY=14000 \
+WISPCREW_AUTOSEND='Reply with exactly: OK' \
+WISPCREW_CAPTURE=../../shot.png \
+WISPCREW_CAPTURE_DELAY=14000 \
 npx electron .
 ```
 
@@ -82,10 +82,10 @@ Then inspect `<userData>/transcripts/*.json`.
 
 ## Where user data lives
 
-`%APPDATA%\GhostBot` on Windows, `~/Library/Application Support/GhostBot` on
-macOS, `~/.config/GhostBot` on Linux.
+`%APPDATA%\WispCrew` on Windows, `~/Library/Application Support/WispCrew` on
+macOS, `~/.config/WispCrew` on Linux.
 
-`app.setName('GhostBot')` runs at **module scope** in `main.ts` — before
+`app.setName('WispCrew')` runs at **module scope** in `main.ts` — before
 anything reads `getPath('userData')`. Electron caches that path on first
 access, so setting the name later silently puts data in the wrong folder.
 
@@ -118,7 +118,7 @@ TypeScript will tell you if you miss one. Do not add a generic passthrough.
 ### A UI panel
 
 Add it to `Panels.tsx`, wire a `Panel` variant in `App.tsx`, and surface it
-from `Sidebar.tsx`. State belongs in `useGhostbot.ts`, not in the component.
+from `Sidebar.tsx`. State belongs in `useWispcrew.ts`, not in the component.
 
 ## Gotchas
 
@@ -136,7 +136,7 @@ from `Sidebar.tsx`. State belongs in `useGhostbot.ts`, not in the component.
 ## Release checklist
 
 1. `npm run typecheck && npm run build`
-2. `npm run test --workspace @ghostbot/examples-cli`
+2. `npm run test --workspace @wispcrew/examples-cli`
 3. Launch and chat once; confirm tools and approvals still work.
 4. `npm run dist:win` (and the other targets if you can test them).
 5. Confirm the packaged app boots.

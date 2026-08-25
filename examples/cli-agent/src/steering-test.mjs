@@ -23,8 +23,8 @@ import {
   initGrants,
   loadTranscript,
   setHost,
-} from '@ghostbot/runtime';
-import { nodeMethods } from '@ghostbot/daemon/methods';
+} from '@wispcrew/runtime';
+import { nodeMethods } from '@wispcrew/daemon/methods';
 
 let failures = 0;
 const check = (label, cond, detail) => {

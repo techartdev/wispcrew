@@ -1,5 +1,5 @@
 /**
- * GhostBot agent core — the provider-agnostic agent loop.
+ * WispCrew agent core — the provider-agnostic agent loop.
  *
  * Flow per user message:
  *   1. append user message to history
@@ -17,8 +17,8 @@ import {
   type ToolCall,
   type ToolContext,
   type TokenUsage,
-} from '@ghostbot/shared';
-import { ToolRegistry } from '@ghostbot/tools';
+} from '@wispcrew/shared';
+import { ToolRegistry } from '@wispcrew/tools';
 import { defaultSystemPrompt } from './prompt.js';
 
 export interface AgentOptions {

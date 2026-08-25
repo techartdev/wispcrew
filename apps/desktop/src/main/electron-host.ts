@@ -1,17 +1,17 @@
 /**
  * electron-host.ts — wires the headless engine into the desktop app.
  *
- * `@ghostbot/runtime` has no idea it is running inside Electron. This module
+ * `@wispcrew/runtime` has no idea it is running inside Electron. This module
  * is the only place that connects the two: it tells the engine where data
  * lives and hands it the OS keychain to encrypt secrets with.
  *
- * The equivalent file for `ghostbot serve` supplies a config directory and a
+ * The equivalent file for `wispcrew serve` supplies a config directory and a
  * key-file cipher instead. Everything above this line is identical on both,
  * which is the point of the split.
  */
 import { app, safeStorage } from 'electron';
 import os from 'node:os';
-import type { HostEnvironment, SecretCrypto } from '@ghostbot/runtime';
+import type { HostEnvironment, SecretCrypto } from '@wispcrew/runtime';
 
 /**
  * Electron's `safeStorage`, backed by DPAPI on Windows, Keychain on macOS and

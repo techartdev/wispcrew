@@ -1,5 +1,5 @@
 /**
- * serve.ts — the GhostBot engine as a long-running process.
+ * serve.ts — the WispCrew engine as a long-running process.
  *
  * This is the whole point of detaching the engine: routines fire, MCP
  * servers stay connected and long tasks finish whether or not a window is
@@ -42,8 +42,8 @@ import {
   serveNode,
   writeEndpoint,
   type HostEnvironment,
-} from '@ghostbot/runtime';
-import type { BridgeEvent } from '@ghostbot/shared';
+} from '@wispcrew/runtime';
+import type { BridgeEvent } from '@wispcrew/shared';
 import { createServer } from 'node:net';
 import { createServer as createTlsServer } from 'node:tls';
 import { unlinkSync } from 'node:fs';
@@ -107,7 +107,7 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
     const existing = readEndpoint(options.host.dataDir);
     if (existing && existing.pid !== process.pid) {
       throw new Error(
-        `Another GhostBot daemon (pid ${existing.pid}) already uses ${options.host.dataDir}.\n` +
+        `Another WispCrew daemon (pid ${existing.pid}) already uses ${options.host.dataDir}.\n` +
           'Two engines on one profile lose data. Stop that one first, or pass --data-dir.',
       );
     }

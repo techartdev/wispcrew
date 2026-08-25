@@ -17,7 +17,7 @@ inspection, or a passing assertion — not by reading the code.
 | Workspace confinement | Path traversal outside the workspace root rejected |
 | Multi-turn memory | Turn 2 recalled turn 1's tool use; `test:memory` asserts history growth |
 | Interrupt (Stop) | Aborts the turn and leaves a provider-valid history |
-| Encrypted keys | Key present only in `ghostbot-secrets.enc` (DPAPI `v10`), unreadable in ciphertext, absent from settings |
+| Encrypted keys | Key present only in `wispcrew-secrets.enc` (DPAPI `v10`), unreadable in ciphertext, absent from settings |
 | Plaintext migration | A legacy plaintext key is moved into the encrypted store on next boot |
 | Skills | `/canary` expanded in main; model received the body, transcript kept the literal |
 | Cron scheduler | 50+ assertions; cross-checked against a naive scan over 144 cases in 6 timezones |

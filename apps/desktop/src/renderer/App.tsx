@@ -3,10 +3,10 @@
  *
  * Composes the sidebar, the chat view, and the modal panels, and owns the
  * small amount of purely-visual state (which panel is open, theme class).
- * All data lives in `useGhostbot`.
+ * All data lives in `useWispcrew`.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useGhostbot } from './useGhostbot';
+import { useWispcrew } from './useWispcrew';
 import { Sidebar, GhostMark } from './Sidebar';
 import { Chat } from './Chat';
 import {
@@ -19,7 +19,7 @@ import {
   SettingsPanel,
   SkillsPanel,
 } from './Panels';
-import type { AgentRecord, HistoryPoint } from '@ghostbot/shared';
+import type { AgentRecord, HistoryPoint } from '@wispcrew/shared';
 
 type Panel =
   | 'settings'
@@ -33,7 +33,7 @@ type Panel =
   | null;
 
 export function App() {
-  const { state, actions } = useGhostbot();
+  const { state, actions } = useWispcrew();
   const [panel, setPanel] = useState<Panel>(null);
   /*
    * Loaded when the panel opens rather than kept in sync.
@@ -82,7 +82,7 @@ export function App() {
 
   /* Open Settings from the application menu. */
   useEffect(() => {
-    const off = window.ghostbot.onEvent((e) => {
+    const off = window.wispcrew.onEvent((e) => {
       if ((e as { type: string }).type === 'open-settings') setPanel('settings');
     });
     return off;
@@ -139,7 +139,7 @@ export function App() {
     return (
       <div className="boot">
         <GhostMark size={44} />
-        <p className="muted">Starting GhostBot…</p>
+        <p className="muted">Starting WispCrew…</p>
       </div>
     );
   }
@@ -159,7 +159,7 @@ export function App() {
       <main className="main">
         <header className="topbar">
           <div className="topbar-title">
-            <strong>{selected?.name ?? 'GhostBot'}</strong>
+            <strong>{selected?.name ?? 'WispCrew'}</strong>
             {selected && (
               <span className="muted topbar-sub">
                 {selected.model || settings?.model || 'default model'}
@@ -197,7 +197,7 @@ export function App() {
         {needsOnboarding && (
           <div className="onboard-banner">
             <div>
-              <strong>Welcome to GhostBot.</strong> Choose a model provider and paste an API key to
+              <strong>Welcome to WispCrew.</strong> Choose a model provider and paste an API key to
               begin — your key is stored encrypted on this machine and sent only to the provider you
               pick.
               {availableCli && (

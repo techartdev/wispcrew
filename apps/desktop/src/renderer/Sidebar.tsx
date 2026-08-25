@@ -5,7 +5,7 @@
  * app's primary navigation: pinned agents first, then most-recently-updated.
  */
 import { useMemo, useState } from 'react';
-import type { AgentRecord, AgentRunState } from '@ghostbot/shared';
+import type { AgentRecord, AgentRunState } from '@wispcrew/shared';
 
 /** Deterministic accent colour from the agent id, so avatars stay stable. */
 function avatarColor(agent: AgentRecord): string {
@@ -73,7 +73,7 @@ export function Sidebar({
       <div className="sidebar-head">
         <div className="brand">
           <GhostMark size={18} />
-          <span>GhostBot</span>
+          <span>WispCrew</span>
         </div>
         <button type="button" className="icon-btn" title="New agent" onClick={onCreate}>
           +
@@ -154,10 +154,10 @@ export function Sidebar({
   );
 }
 
-/** The GhostBot mascot; kept in sync with `build/icon.svg`. */
+/** The WispCrew mascot; kept in sync with `build/icon.svg`. */
 export function GhostMark({ size = 22 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 256 256" role="img" aria-label="GhostBot">
+    <svg width={size} height={size} viewBox="0 0 256 256" role="img" aria-label="WispCrew">
       <defs>
         <linearGradient id="gb-ghost" x1="0.2" y1="0" x2="0.8" y2="1">
           <stop offset="0%" stopColor="#7ae7ff" />

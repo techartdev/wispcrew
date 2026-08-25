@@ -1,5 +1,5 @@
 /**
- * remote-node-test.mjs — pair with a real `ghostbot serve` and drive it.
+ * remote-node-test.mjs — pair with a real `wispcrew serve` and drive it.
  *
  * The pairing suite covers the protocol in-process. This one runs the actual
  * daemon binary with `--network --pair`, scrapes the code it prints, pairs
@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { connectRemoteNode, pairWithNode } from '@ghostbot/runtime';
+import { connectRemoteNode, pairWithNode } from '@wispcrew/runtime';
 
 let failures = 0;
 const check = (label, cond, detail) => {

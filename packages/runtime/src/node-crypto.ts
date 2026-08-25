@@ -59,7 +59,7 @@ function loadOrCreateKey(dataDir: string): Buffer {
     // than overwrite: regenerating would silently destroy every stored
     // secret, and the user would see "no API key" with no explanation.
     throw new Error(
-      `${file} is not a valid GhostBot node key (${existing.length} bytes). ` +
+      `${file} is not a valid WispCrew node key (${existing.length} bytes). ` +
         'Move it aside if you intend to start fresh — deleting it makes existing secrets unreadable.',
     );
   } catch (err) {

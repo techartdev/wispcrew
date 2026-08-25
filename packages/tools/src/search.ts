@@ -3,7 +3,7 @@
  */
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { Tool, ToolContext, ToolResult } from '@ghostbot/shared';
+import type { Tool, ToolContext, ToolResult } from '@wispcrew/shared';
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', '.venv', '__pycache__']);
 const MAX_FILE_BYTES = 1_000_000;

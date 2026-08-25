@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { AppSettings } from './types.js';
 
 export function settingsPath(userDataDir: string): string {
-  return path.join(userDataDir, 'ghostbot-settings.json');
+  return path.join(userDataDir, 'wispcrew-settings.json');
 }
 
 export function readSettings(userDataDir: string, fallback: AppSettings = {}): AppSettings {

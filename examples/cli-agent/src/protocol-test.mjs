@@ -6,8 +6,8 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import { serveNode, connectNode, generateToken, localAddress } from '@ghostbot/runtime';
-import { addEventSink, emitEngineEvent } from '@ghostbot/runtime';
+import { serveNode, connectNode, generateToken, localAddress } from '@wispcrew/runtime';
+import { addEventSink, emitEngineEvent } from '@wispcrew/runtime';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gb-proto-'));
 const address = localAddress(dir);

@@ -11,10 +11,10 @@
  *      Anthropic reject a conversation with an unanswered tool call, so a
  *      Stop press must not permanently break the chat.
  *
- * Run: npm run test:memory --workspace @ghostbot/examples-cli
+ * Run: npm run test:memory --workspace @wispcrew/examples-cli
  */
-import { Agent } from '@ghostbot/core';
-import type { ChatMessage, ChatProvider, ChatRequest, ProviderChunk } from '@ghostbot/shared';
+import { Agent } from '@wispcrew/core';
+import type { ChatMessage, ChatProvider, ChatRequest, ProviderChunk } from '@wispcrew/shared';
 
 /** Provider that replays a scripted sequence and records what it was sent. */
 class ScriptedProvider implements ChatProvider {

@@ -1,5 +1,5 @@
 /**
- * GhostBot — shared protocol types.
+ * WispCrew — shared protocol types.
  *
  * These types define the contract between the LLM provider layer, the agent
  * core, the tool registry, and the UI. They are intentionally provider-agnostic:

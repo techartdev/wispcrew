@@ -2,7 +2,7 @@
  * store.ts — durable JSON storage for agents, transcripts, routines, skills.
  *
  * Deliberately dependency-free: one small JSON file per collection under
- * `<userData>`, written atomically. At GhostBot's scale (tens of agents,
+ * `<userData>`, written atomically. At WispCrew's scale (tens of agents,
  * thousands of transcript entries) this is faster than it sounds and keeps
  * the data trivially inspectable and backup-friendly — a user can read,
  * diff, or hand-edit their own data, which matters for an open-source tool.
@@ -29,7 +29,7 @@
  * calling `saveTranscript`/`saveAgents` with it later.
  *
  * Consequently a profile has exactly one engine writing to it. The desktop
- * app runs its own engine; `ghostbot serve` is for machines where it is the
+ * app runs its own engine; `wispcrew serve` is for machines where it is the
  * only writer. Pointing both at one profile is a supported *sequence* (start
  * one, stop it, start the other) but never a supported *overlap*.
  */
@@ -40,7 +40,7 @@ import type {
   RoutineRecord,
   SkillRecord,
   TranscriptEntry,
-} from '@ghostbot/shared';
+} from '@wispcrew/shared';
 import { fileLog } from './filelog.js';
 import { writeCheckpoint } from './checkpoints.js';
 

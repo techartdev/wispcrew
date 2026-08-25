@@ -17,8 +17,8 @@ import { fileURLToPath } from 'node:url';
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gb-full-'));
 const key = fs.readFileSync(fileURLToPath(new URL('../../../testkey-nvidia.txt', import.meta.url)), 'utf8').trim();
 
-const rt = await import('@ghostbot/runtime');
-const { daemonHost } = await import('@ghostbot/daemon/host');
+const rt = await import('@wispcrew/runtime');
+const { daemonHost } = await import('@wispcrew/daemon/host');
 
 // Seed the profile the way the desktop would.
 const env = daemonHost({ dataDir: dir });

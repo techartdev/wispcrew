@@ -6,7 +6,7 @@ import type {
   ChatRequest,
   ProviderChunk,
   ProviderConfig,
-} from '@ghostbot/shared';
+} from '@wispcrew/shared';
 import { usageFromAnthropicHeaders, type UsageSnapshot } from './usage-limits.js';
 
 interface AnthropicContentBlock {

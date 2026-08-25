@@ -22,7 +22,7 @@ export * as chatgptOAuth from './chatgpt-oauth.js';
 export type { OAuthCredential } from './oauth-flow.js';
 export type { ChatGptCredential, PendingLogin } from './chatgpt-oauth.js';
 
-import type { ChatProvider, ProviderConfig } from '@ghostbot/shared';
+import type { ChatProvider, ProviderConfig } from '@wispcrew/shared';
 import { OpenAICompatibleProvider, isOpenAiReasoningModel } from './openai-compatible.js';
 import { OpenAIResponsesProvider } from './openai-responses.js';
 import { AnthropicProvider } from './anthropic.js';

@@ -8,7 +8,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { retainText } from './retention.js';
-import type { Tool, ToolContext, ToolResult } from '@ghostbot/shared';
+import type { Tool, ToolContext, ToolResult } from '@wispcrew/shared';
 
 interface ShellArgs {
   command: string;
