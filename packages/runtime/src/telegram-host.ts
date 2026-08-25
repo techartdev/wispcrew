@@ -12,7 +12,12 @@
  */
 import type { ChannelId, ConversationRecord, GlobalSettings } from '@wispcrew/shared';
 import { getConversation, listConversations, LOCAL_HUMAN_ID } from './conversations.js';
-import { runPrompt } from './engine.js';
+import { currentApprovalAsker, runPrompt, setApprovalAsker } from './engine.js';
+import {
+  askViaTelegram,
+  clearTelegramApprovals,
+  resolveTelegramApproval,
+} from './telegram-approval.js';
 import { fileLog } from './filelog.js';
 import { host } from './host.js';
 import { getSecret } from './secrets-store.js';
@@ -134,8 +139,32 @@ export async function handleInbound(
     agentName: record?.name ?? room.title,
   });
 
+  /*
+   * Ask the phone, for this turn only.
+   *
+   * A daemon normally denies approvals because nobody is attached to ask —
+   * right by default, and wrong here, because someone IS there: they just
+   * sent the message. The asker is installed around this turn and removed
+   * afterwards, so an agent waking on a SCHEDULE never gets to prompt the
+   * phone. Otherwise a compromised chat could be presented with a request
+   * at any moment, rather than only in reply to something the user did.
+   */
+  const previousAsker = currentApprovalAsker();
+  setApprovalAsker(async (_agentId, request) =>
+    askViaTelegram(deps.token, deps.chatId, record?.name ?? 'An agent', request),
+  );
+
   try {
-    await (deps.run ?? runPrompt)(agent.id, message.text);
+    /*
+     * Tell the engine which door this came through.
+     *
+     * Without it, an agent set to `auto` would run shell commands for
+     * anyone holding the user's phone — the exact case the per-channel
+     * policy exists to prevent.
+     */
+    await (deps.run
+      ? deps.run(agent.id, message.text)
+      : runPrompt(agent.id, message.text, [], undefined, 'telegram'));
 
     const transcript = store.loadTranscript(room.id);
     const answer = [...transcript]
@@ -150,6 +179,16 @@ export async function handleInbound(
   } catch (err) {
     await progress.fail((err as Error).message);
     fileLog('[telegram] turn failed', (err as Error).message);
+  } finally {
+    /*
+     * Put the previous asker back, always.
+     *
+     * A thrown turn that left this installed would let a later scheduled
+     * run prompt the phone — exactly the window this scoping exists to
+     * close.
+     */
+    setApprovalAsker(previousAsker);
+    clearTelegramApprovals();
   }
 
   return { handled: true, agentId: agent.id };
@@ -189,6 +228,8 @@ export function startTelegram(): void {
     chatId,
     dataDir,
     // The result is for tests; the listener only needs it to settle.
+    // Button presses on approval prompts.
+    onCallback: (data) => resolveTelegramApproval(data),
     onMessage: async (message) => {
       await handleInbound(message, { token, chatId });
     },

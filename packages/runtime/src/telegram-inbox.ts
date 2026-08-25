@@ -52,6 +52,13 @@ export interface InboxOptions {
   chatId: string;
   dataDir: string;
   onMessage: (message: InboundMessage) => void | Promise<void>;
+  /**
+   * A button press on an approval prompt.
+   *
+   * Returns whether it matched something still waiting, so a stale button
+   * can be answered politely rather than ignored.
+   */
+  onCallback?: (data: string, fromId: string) => boolean;
 }
 
 export interface Inbox {
@@ -101,7 +108,7 @@ export function startInbox(options: InboxOptions): Inbox {
       try {
         const url =
           `https://api.telegram.org/bot${options.token}/getUpdates` +
-          `?timeout=${POLL_SECONDS}&offset=${offset}&allowed_updates=["message"]`;
+          `?timeout=${POLL_SECONDS}&offset=${offset}&allowed_updates=["message","callback_query"]`;
 
         const response = await fetch(url, {
           signal: controller.signal,
@@ -139,6 +146,31 @@ export function startInbox(options: InboxOptions): Inbox {
            */
           offset = update.update_id + 1;
           writeOffset(options.dataDir, offset);
+
+          /*
+           * A button press on an approval prompt.
+           *
+           * Answered immediately whether or not it matched: Telegram shows a
+           * spinner on the button until the query is acknowledged, and a
+           * stale prompt that spins forever looks broken.
+           */
+          if (update.callback_query) {
+            const query = update.callback_query;
+            const matched =
+              options.onCallback?.(query.data ?? '', String(query.from?.id ?? '')) ?? false;
+
+            void fetch(`https://api.telegram.org/bot${options.token}/answerCallbackQuery`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                callback_query_id: query.id,
+                text: matched ? 'Recorded.' : 'That request is no longer waiting.',
+              }),
+            }).catch(() => {
+              /* acknowledgement is cosmetic */
+            });
+            continue;
+          }
 
           const message = update.message;
           if (!message?.text) continue;
@@ -201,6 +233,11 @@ function sleep(ms: number): Promise<void> {
 
 interface TelegramUpdate {
   update_id: number;
+  callback_query?: {
+    id: string;
+    data?: string;
+    from?: { id?: number };
+  };
   message?: {
     message_id: number;
     text?: string;

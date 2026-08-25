@@ -17,7 +17,7 @@ import type {
   Attachment,
   GlobalSettings,
   RoutineRecord,
-  TranscriptEntry,
+  TranscriptEntry,  ChannelId,
 } from '@wispcrew/shared';
 import { Agent, personaById } from '@wispcrew/core';
 import {
@@ -31,6 +31,7 @@ import { ToolRegistry } from '@wispcrew/tools';
 
 import * as store from './store.js';
 import { host } from './host.js';
+import { downgradeNotice, resolvePolicy } from './approval-policy.js';
 import { readSettings } from './settings-file.js';
 import { readSecrets } from './secrets-store.js';
 import { providerSecretKey } from './provider-keys.js';
@@ -77,6 +78,19 @@ export type ApprovalAsker = (
 ) => Promise<boolean>;
 
 let askApproval: ApprovalAsker = async () => false;
+
+/**
+ * The asker currently installed.
+ *
+ * Exists so a caller can install one for the duration of a single turn and
+ * restore the previous one afterwards. That is how a turn started from
+ * Telegram gets to ask the phone, while an agent waking on a SCHEDULE does
+ * not — otherwise a compromised chat could be presented with a request at
+ * any moment rather than only in reply to something the user did.
+ */
+export function currentApprovalAsker(): ApprovalAsker {
+  return askApproval;
+}
 
 export function setApprovalAsker(asker: ApprovalAsker): void {
   askApproval = asker;
@@ -305,6 +319,15 @@ export async function runPrompt(
   rawPrompt: string,
   attachments: Attachment[] = [],
   delegation?: DelegationContext,
+  /*
+   * Which door this request arrived through.
+   *
+   * Undefined means the local app, which is the ordinary case. A remote
+   * channel does not inherit `auto`: an agent trusted to run unattended at
+   * the desk is not thereby trusted to run shell commands for anyone
+   * holding the user's phone.
+   */
+  channel?: ChannelId,
 ): Promise<string> {
   const expanded = expandSkill(rawPrompt);
   // Non-image attachments are inlined ahead of the user's own words so the
@@ -416,11 +439,32 @@ export async function runPrompt(
     segmentId = store.newId('asst');
   };
 
+  /*
+   * Resolve the policy for the door this request came through.
+   *
+   * Three levels: the agent's setting for this channel, then the agent's
+   * setting, then the global default. An inherited `auto` is reduced to
+   * `ask` on a remote channel — trusting an agent to act unattended while
+   * you watch it is not the same as trusting anyone holding your phone.
+   */
+  const resolved = resolvePolicy(agent, settings as never, channel);
+
+  if (resolved.downgraded) {
+    // Say so, or "it asked me again" is indistinguishable from a bug.
+    pushTranscript(agentId, {
+      kind: 'notice',
+      id: store.newId('note'),
+      level: 'info',
+      text: downgradeNotice(agent?.name ?? 'This agent', channel!),
+      createdAt: Date.now(),
+    });
+  }
+
   // A delegated run inherits the caller's (possibly narrowed) policy so an
   // agent cannot gain permissions by asking a more privileged agent to act
   // for it. A top-level run starts a fresh delegation chain.
-  const chain = delegation ?? rootContext(cfg.approvalPolicy, agentId);
-  const effectivePolicy = delegation ? delegation.policy : cfg.approvalPolicy;
+  const chain = delegation ?? rootContext(resolved.policy, agentId);
+  const effectivePolicy = delegation ? delegation.policy : resolved.policy;
 
   // Built-in tools plus anything the configured MCP servers expose.
   const tools = new ToolRegistry();

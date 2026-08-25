@@ -81,6 +81,16 @@ export interface AgentRecord {
   workspaceRoot?: string;
   /** Per-agent tool policy; falls back to the global default. */
   approvalPolicy?: ApprovalPolicy;
+  /**
+   * Policy for requests arriving through a particular door.
+   *
+   * A keyboard you are sitting at and a chat reachable by anyone who
+   * compromises your Telegram account are not the same risk, so they need
+   * not share a policy. An inherited `auto` is reduced to `ask` on a remote
+   * channel; an explicit entry here overrides that, which is how a user
+   * grants full remote autonomy deliberately rather than by accident.
+   */
+  channelPolicies?: Partial<Record<ChannelId, ApprovalPolicy>>;
   /** Tool names this agent may not use at all. */
   disabledTools?: string[];
   /** Sort/display state. */
