@@ -22,52 +22,83 @@ this constraint is load-bearing, not decorative.
 
 ## Repository map
 
+The engine lives in `packages/runtime` and is **free of Electron**, so the
+same code runs in the desktop app or in a headless daemon. That split is the
+single most important thing to understand here: `apps/desktop` and
+`apps/daemon` are two hosts for one engine.
+
 ```
-apps/desktop/            Electron app (the deliverable)
-  src/main/              main process
-    main.ts              startup, agent runs, window, menu
-    bridge-host.ts       every IPC handler (the renderer-facing API)
-    store.ts             durable JSON storage (agents/transcripts/routines/skills)
-    scheduler.ts         cron-driven routine execution
-    cron.ts              dependency-free cron parser/evaluator
-    delegation.ts        agent-to-agent `ask_agent` tool + its safety limits
-    attachments.ts       file/image classification for the model
-    branching.ts         rewind/fork + transcript -> model-history rebuild
-    oauth-store.ts       encrypted subscription credentials + refresh
-    agent-sessions.ts    one persistent Agent per agentId (memory + Stop)
-    mcp-manager.ts       MCP server lifecycle
-    secrets-store.ts     safeStorage-encrypted API keys
-    settings-file.ts     plaintext settings JSON (never holds a key)
-    userdata-migration.ts  imports pre-rename profiles
-  src/preload/preload.ts the ONLY renderer<->main surface
-  src/renderer/          React UI
-    App.tsx              shell, panels, shortcuts, theme
-    useGhostbot.ts       all app state; subscribes to pushed events
-    Chat.tsx             transcript, tool cards, approvals, composer
-    Sidebar.tsx          agent roster
-    Panels.tsx           settings / agent / MCP / routines / skills
-    Markdown.tsx         safe Markdown renderer (no HTML, ever)
 packages/
+  runtime/               THE ENGINE — no Electron import anywhere
+    engine.ts            runPrompt / runRoutine / runDelegated
+    store.ts             durable JSON (agents, transcripts, routines, skills)
+    checkpoints.ts       prior transcript versions, for recovery
+    scheduler.ts         cron + one-shot follow-ups
+    watch.ts             filesystem triggers (debounced)
+    watch-manager.ts     keeps watchers in step with routines
+    cron.ts              dependency-free cron parser/evaluator
+    channels.ts          outbound message queue (the delivery seam)
+    channel-telegram.ts  Telegram bot delivery
+    notify-host.ts       resolves which channels an agent may use
+    schedule-host.ts     turns an agent's request into a real routine
+    delegation.ts        agent-to-agent `ask_agent` + its limits
+    branching.ts         rewind/fork + transcript -> model history
+    oauth-store.ts       encrypted subscription credentials + refresh
+    secrets-store.ts     encrypted API keys
+    host.ts              the seam: dataDir, crypto, workspace root
+    protocol.ts          NDJSON frames between client and node
+    node-server.ts       serves the engine over a socket/pipe/TLS
+    node-client.ts       connects to one
+    node-identity.ts     endpoint file, pid identity, build stamp
+    pairing.ts           single-use codes + fingerprint pinning
   shared/                types only, zero deps (index/domain/bridge)
   llm/                   provider adapters + presets
-  core/                  agent loop + personas
-  tools/                 shell, files, edit, search, web + registry
+  core/                  agent loop + personas + system prompts
+  tools/                 shell, files, edit, search, web, notify, schedule
   mcp/                   MCP stdio client
-examples/cli-agent/      headless CLI + thirteen offline test suites
-scripts/make-icons.mjs   build/icon.svg -> app icons
+
+apps/desktop/            Electron app (the deliverable)
+  src/main/
+    main.ts              startup, window, daemon link
+    bridge-host.ts       every IPC handler (the renderer-facing API)
+    daemon-link.ts       spawns/reconnects to the detached daemon
+    desktop-notify.ts    native notifications (only a GUI can raise them)
+    node-links.ts        routes agent-scoped calls to the owning node
+    secrets-handoff.ts   re-encrypts secrets for the daemon
+  src/preload/preload.ts the ONLY renderer<->main surface
+  src/renderer/          React UI (App, Chat, Sidebar, Panels, Markdown)
+
+apps/daemon/             headless host — keeps agents alive with the UI closed
+  src/cli.ts             `serve` / `status`
+  src/methods.ts         the node's method table
+
+examples/cli-agent/      headless CLI + the offline test suites
+docs/CONVERSATIONS.md    where the conversation model is going
+docs/GROUP-CHAT.md       who speaks when several agents share a chat
 ```
 
 ## How it works (30 seconds)
 
-1. `main.ts` sets the app name, migrates userData, opens the store, registers
-   the bridge, connects MCP servers, starts the scheduler, loads the renderer.
+1. `main.ts` installs the Electron host (data dir, keychain crypto), then
+   **links to a detached daemon**, spawning one if none is running. The daemon
+   owns the engine so routines and agents survive the window closing.
 2. The renderer talks **only** to `window.ghostbot` (typed as `GhostBridge` in
-   `packages/shared/src/bridge.ts`), implemented by `bridge-host.ts`.
+   `packages/shared/src/bridge.ts`), implemented by `bridge-host.ts`. Calls
+   about a particular agent are routed to whichever node owns it — the local
+   daemon, or a paired machine.
 3. A message goes `sendPrompt` -> `runPrompt` -> `@ghostbot/core` `Agent` ->
    provider. Transcript entries are **pushed** back as `gb:event` frames and
    upserted by id, so streaming updates in place.
 4. Tool calls hit the approval policy: `readonly` denies, `auto` allows, `ask`
-   raises an approval card and waits for `resolveApproval`.
+   raises an approval card and waits for `resolveApproval`. **A daemon denies**
+   anything needing approval — there is nobody to ask.
+5. An agent can also be woken with nobody watching: a cron routine, a one-shot
+   follow-up it scheduled itself, or a file change under its workspace. It
+   reports back through the channels the user enabled.
+
+**One engine per profile.** Two writers on one JSON store lose updates — this
+was measured, not assumed — so the desktop refuses to run its own scheduler
+when a daemon owns the profile.
 
 ## Commands
 
@@ -75,13 +106,20 @@ scripts/make-icons.mjs   build/icon.svg -> app icons
 npm install                                     # npm workspaces (NOT pnpm)
 npm run typecheck                               # tsc --noEmit everywhere
 npm run build                                   # packages + desktop bundles
-npm run test --workspace @ghostbot/examples-cli # all thirteen offline suites
+npm run test --workspace @ghostbot/examples-cli # every offline suite (no key, no network)
 npm run desktop                                 # build + launch
 npm run dist:win | dist:mac | dist:linux        # installers
 ```
 
 **Always** run typecheck + build + the offline suites before finishing. If you
 touched `apps/desktop`, launch the app once and confirm it boots and chats.
+
+**CI is a final gate, not a test loop.** The offline suites run locally in
+about two minutes and catch nearly everything; a CI round trip takes ten and
+consumes the maintainer's GitHub Actions minutes. Push and watch CI once, at
+the end of a body of work — not after each commit. The exceptions are changes
+CI is uniquely able to judge: anything platform-specific (process handling,
+paths, native APIs) where the local machine cannot speak for macOS or Linux.
 
 Config lives in `<userData>/ghostbot-settings.json`
 (`%APPDATA%\GhostBot` on Windows). Keys live **only** in
@@ -137,6 +175,29 @@ routines (cron); skills; settings UI; **file/image attachments** (vision);
 app restarts**. Confirmed with screenshots and transcript inspection, not
 assumed.
 
+**Also working, added since:**
+
+- **A detached daemon** the desktop spawns and reconnects to, so agents and
+  routines survive the window closing. It restarts itself when the app ships
+  newer engine code (compared by build stamp).
+- **Paired remote nodes** over TLS with per-node tokens and pinned
+  fingerprints. An agent belongs to exactly one node; its conversation, files
+  and keys live there. No central service.
+- **Reaching the user**: an outbound queue with in-app, desktop-notification
+  and Telegram delivery, chosen globally or per agent. Telegram is verified
+  against the real API, including that punctuation-heavy agent output
+  survives MarkdownV2 escaping.
+- **Waking itself**: cron routines, one-shot follow-ups an agent schedules
+  for itself, and debounced filesystem watches. A recurring routine needs the
+  user's approval; a single follow-up does not.
+- **Recovering a conversation**: any write that removes entries keeps the
+  previous version, reachable from a History panel.
+
+**Guards worth knowing about**, each added after something went wrong:
+read-before-overwrite with version checks, bounded tool output with spill
+files rather than silent truncation, a deadline on every tool call, and
+process-identity checks so a recycled pid is never signalled.
+
 **Provider routing:** OpenAI reasoning models (`gpt-5.x`, o-series) go to the
 **Responses API**, because `/v1/chat/completions` refuses function tools for
 them unless `reasoning_effort: "none"` — and that flag genuinely disables the
@@ -145,11 +206,21 @@ OpenAI-compatible endpoint keeps chat-completions. `test:attachments` pins the
 routing, including that a local server borrowing an OpenAI model name is not
 rerouted.
 
-**Test coverage**: thirteen offline suites (`smoke`, `provider`, `mcp`,
-`memory`, `cron`, `markdown`, `attachments`, `delegation`, `sandbox`,
-`branching`, `grants`, `errors`, `oauth`) — no API key, no network. Several
-caught real bugs when written; keep them green. CI additionally boots the app
-headlessly on all three platforms and fails if the window does not paint.
+**Test coverage**: 37 offline suites — no API key, no network.
+Several caught real bugs when written, and a few caught bugs that had already
+shipped; keep them green. Notable ones: `single-writer` (two engines on one
+store), `shell-timeout` (a killed process emits `exit` with no `close` on
+Windows), `pid-identity` (a recycled pid must not be signalled),
+`observation` (no overwriting a file you have not read), `channels` (delivery
+survives the process that queued it), and the `*-ui` suites, which check that
+every CSS class a panel renders actually exists — that one caught a modal
+which typechecked while looking broken.
+
+A few suites need real credentials and are excluded from `npm test`:
+`test:daemon`, `test:detached`, `test:live-remote`, `test:desktop-client`.
+
+CI additionally boots the app headlessly on all three platforms and fails if
+the window does not paint.
 
 ## Subscription sign-in
 
