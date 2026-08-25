@@ -56,6 +56,53 @@ const check = (label, cond, detail) => {
 const noop = () => {};
 const noopAsync = async () => null;
 
+/*
+ * Every class a panel uses must exist in the stylesheet.
+ *
+ * The Machines modal typechecked, rendered, and passed its content
+ * assertions while looking broken on screen: it used `.stack`, `.row` and
+ * `.error-text`, none of which are defined, so labels and inputs collapsed
+ * onto one line. Content assertions cannot see that; comparing against the
+ * stylesheet can.
+ */
+const stylesheet = fs.readFileSync(
+  path.join(repo, 'apps', 'desktop', 'src', 'renderer', 'styles.css'),
+  'utf8',
+);
+
+function undefinedClassesIn(html) {
+  const used = new Set();
+  for (const match of html.matchAll(/class="([^"]+)"/g)) {
+    for (const cls of match[1].split(/\s+/)) if (cls) used.add(cls);
+  }
+  return [...used].filter((cls) => !stylesheet.includes(`.${cls}`));
+}
+
+console.log('\n[styling] every class the panel uses is defined');
+{
+  const populated = renderToStaticMarkup(
+    React.createElement(NodesPanel, {
+      nodes: [
+        {
+          id: 'n1',
+          name: 'homelab',
+          address: '10.0.0.5:8787',
+          fingerprint: 'AA:BB',
+          pairedAt: 1,
+          connected: true,
+        },
+      ],
+      agents: [{ id: 'a1', name: 'X', nodeId: 'n1', createdAt: 1, updatedAt: 1 }],
+      onPair: noopAsync,
+      onForget: async () => true,
+      onRefresh: noop,
+      onClose: noop,
+    }),
+  );
+  const missing = undefinedClassesIn(populated);
+  check('no undefined classes in the node list', missing.length === 0, missing.join(', '));
+}
+
 console.log('\n[empty] the state every user starts in');
 {
   const html = renderToStaticMarkup(

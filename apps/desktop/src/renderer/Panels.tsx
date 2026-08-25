@@ -1056,7 +1056,7 @@ export function NodesPanel({
               <div className="muted tiny node-fingerprint">{node.fingerprint}</div>
               <button
                 type="button"
-                className="danger-button"
+                className="btn btn-danger"
                 onClick={() => {
                   const warning =
                     count > 0
@@ -1075,57 +1075,67 @@ export function NodesPanel({
       </div>
 
       {adding ? (
-        <div className="stack">
+        <div className="node-form">
           <p className="muted small">
             On the other machine run <code>ghostbot serve --listen --network --pair</code>.
             It prints a code and a fingerprint.
           </p>
-          <label>
-            Address
+          {/*
+            `.field` with a nested <span> is the form convention every other
+            panel uses; a bare <label> gets no layout at all, which is how
+            this modal ended up with its labels and inputs on one line.
+          */}
+          <label className="field">
+            <span>Address</span>
             <input
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder="192.168.1.50:8787"
+              spellCheck={false}
               autoFocus
             />
           </label>
-          <label>
-            Pairing code
+          <label className="field">
+            <span>Pairing code</span>
             <input
               value={code}
               onChange={(e) => setCode(e.target.value)}
               placeholder="ABCD-EFGH-JKLM"
+              spellCheck={false}
             />
           </label>
-          <label>
-            Fingerprint (optional, recommended)
+          <label className="field">
+            <span>
+              Fingerprint <em className="muted">— optional, but recommended</em>
+            </span>
             <input
               value={fingerprint}
               onChange={(e) => setFingerprint(e.target.value)}
-              placeholder="Paste the fingerprint the machine printed"
+              placeholder="SHA256:… as printed by the machine"
+              spellCheck={false}
             />
           </label>
           <p className="muted small">
             Checking the fingerprint is what proves you are pairing with your machine and not
             something pretending to be it. The code works once and expires in five minutes.
           </p>
-          {error && <p className="error-text">{error}</p>}
-          <div className="row">
-            <button type="button" onClick={submit} disabled={busy}>
-              {busy ? 'Pairing…' : 'Pair'}
-            </button>
-            <button type="button" className="link-button" onClick={() => setAdding(false)}>
+          {error && <div className="list-error">{error}</div>}
+          <div className="row-actions">
+            <button type="button" className="btn" onClick={() => setAdding(false)}>
               Cancel
+            </button>
+            <button type="button" className="btn btn-primary" onClick={submit} disabled={busy}>
+              {busy ? 'Pairing…' : 'Pair'}
             </button>
           </div>
         </div>
       ) : (
-        <div className="row">
-          <button type="button" onClick={() => setAdding(true)}>
+        <div className="row-actions">
+          <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
             Pair a machine
           </button>
           {nodes.length > 0 && (
-            <button type="button" className="link-button" onClick={onRefresh}>
+            <button type="button" className="btn" onClick={onRefresh}>
               Refresh
             </button>
           )}

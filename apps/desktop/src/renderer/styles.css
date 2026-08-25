@@ -1074,22 +1074,46 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin: 12px 0;
+  margin: 14px 0;
 }
 
+/* Details on the left, the destructive action on the right and out of the
+   reading path — forgetting a machine should take a deliberate reach. */
 .node-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 4px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  background: var(--bg-inset);
+}
+
+.node-row > .node-main {
+  grid-column: 1;
+}
+
+.node-row > .btn {
+  grid-column: 2;
+  grid-row: 1 / span 4;
+  align-self: center;
+}
+
+.node-row > .muted {
+  grid-column: 1;
 }
 
 .node-main {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
+  margin-bottom: 2px;
+}
+
+/* The form is a plain vertical stack; `.field` supplies the rest. */
+.node-form {
+  margin-top: 14px;
 }
 
 .node-state {
@@ -1106,6 +1130,14 @@ body {
 
 .node-state.offline {
   color: var(--text-dim);
+}
+
+/* Secondary text, usually paired with `.muted` for an explanatory line under
+   a control. Used in several panels and never actually defined — it silently
+   did nothing until a class check caught it. */
+.small {
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 /* Long, and only needed when verifying — so it does not compete with the
