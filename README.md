@@ -171,7 +171,7 @@ Found a problem? Please see [SECURITY.md](SECURITY.md).
 ```bash
 npm run typecheck                               # everywhere
 npm run build                                   # all packages + desktop
-npm run test --workspace @wispcrew/examples-cli # six offline suites, no API key needed
+npm run test --workspace @wispcrew/examples-cli # 50 offline suites, no API key needed
 npm run desktop                                 # build + launch
 ```
 

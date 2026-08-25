@@ -39,7 +39,7 @@ import type {
   AgentRecord,
   RoutineRecord,
   SkillRecord,
-  TranscriptEntry,
+  TranscriptEntry,  AgentPatch,
 } from '@wispcrew/shared';
 import { fileLog } from './filelog.js';
 import { writeCheckpoint } from './checkpoints.js';
@@ -170,6 +170,15 @@ export function createAgent(patch: Partial<AgentRecord>): AgentRecord {
     model: patch.model,
     workspaceRoot: patch.workspaceRoot,
     approvalPolicy: patch.approvalPolicy,
+    /*
+     * Listed explicitly, like everything else here.
+     *
+     * A field-by-field build silently drops anything unlisted — that is how
+     * `runAt` was once lost from routines, turning a one-off follow-up into
+     * a recurring one. A dropped permission is the same failure with worse
+     * consequences.
+     */
+    channelPolicies: patch.channelPolicies,
     disabledTools: patch.disabledTools,
     pinned: patch.pinned ?? false,
     archived: false,
@@ -180,7 +189,7 @@ export function createAgent(patch: Partial<AgentRecord>): AgentRecord {
   return record;
 }
 
-export function updateAgent(id: string, patch: Partial<AgentRecord>): AgentRecord {
+export function updateAgent(id: string, patch: AgentPatch): AgentRecord {
   const agents = listAgents();
   const idx = agents.findIndex((a) => a.id === id);
   if (idx === -1) throw new Error(`No such agent: ${id}`);
@@ -192,6 +201,35 @@ export function updateAgent(id: string, patch: Partial<AgentRecord>): AgentRecor
     createdAt: agents[idx]!.createdAt,
     updatedAt: now(),
   };
+
+  /*
+   * Clearing a field has to be said, not implied.
+   *
+   * An explicit `undefined` does not survive IPC — `JSON.stringify` drops
+   * the key — so a spread merge silently keeps the old value. Harmless for
+   * a name; wrong for a permission, because a user who cleared "run without
+   * asking from Telegram" would still have granted it while the interface
+   * showed otherwise. Measured against the real store, not theorised.
+   *
+   * Absence cannot mean deletion: `updateAgent(id, { name })` must leave the
+   * rest of the record alone. So a caller that wants a field GONE names it
+   * in `clear`, which is unambiguous in both directions.
+   */
+  const mutable = next as unknown as Record<string, unknown>;
+  for (const field of patch.clear ?? []) {
+    /*
+     * Identity is not clearable.
+     *
+     * The transcript and the room are keyed by the agent's id, so deleting
+     * it would orphan both — and `clear` arrives over IPC, which makes it
+     * reachable by anything that can send a patch.
+     */
+    if (field === 'id' || field === 'createdAt') continue;
+    delete mutable[field];
+  }
+  // `clear` is an instruction, not a field to store.
+  delete mutable.clear;
+
   agents[idx] = next;
   saveAgents(agents);
   return next;

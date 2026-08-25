@@ -2,8 +2,23 @@
 
 WispCrew is an Electron desktop app with a React renderer, a Node main
 process, and a set of framework-free TypeScript packages that hold the actual
-agent logic. Everything runs on the user's machine; the only outbound traffic
-is the request to whichever LLM provider the user configured.
+agent logic.
+
+There is **no WispCrew service**: no account, no cloud component, nothing
+belonging to this project between the user and their model. What leaves a
+machine leaves it because the user configured it to:
+
+- the request to whichever **LLM provider** they chose;
+- **Telegram**, if they connected a bot, so a conversation is reachable from
+  a phone;
+- a **paired node** they own — another machine of theirs, over TLS with a
+  pinned fingerprint;
+- the **OAuth endpoint** of a subscription they signed into.
+
+Each is opt-in and visible in the interface. This paragraph used to read
+"everything runs on the user's machine", which stopped being a complete
+description once nodes, channels and subscription sign-in existed — worth
+correcting rather than leaving as a comfortable half-truth.
 
 ## Process layout
 

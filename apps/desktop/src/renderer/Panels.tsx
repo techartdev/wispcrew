@@ -987,6 +987,7 @@ export function AgentPanel({
   presets,
   personas,
   nodes,
+  globalPolicy,
   onSave,
   onDelete,
   onDuplicate,
@@ -996,6 +997,8 @@ export function AgentPanel({
   agent: AgentRecord;
   presets: PresetView[];
   personas: PersonaView[];
+  /** The global default, so an inherited policy can be named rather than guessed. */
+  globalPolicy?: ApprovalPolicy;
   /** Paired machines; empty when everything runs locally. */
   nodes: NodeSummary[];
   onSave(patch: Partial<AgentRecord>): void;
@@ -1020,6 +1023,22 @@ export function AgentPanel({
   const [agentChannels, setAgentChannels] = useState<string[] | undefined>(agent.channels);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  /*
+   * What this agent may do when the request arrived from Telegram.
+   *
+   * Empty means "follow the rule": inherit the agent's own policy, except
+   * that `auto` is reduced to `ask`, because a chat anyone could compromise
+   * is not the same as the keyboard in front of you. An explicit value here
+   * overrides that in either direction — which is how a user grants full
+   * remote autonomy deliberately rather than drifting into it.
+   */
+  const [telegramPolicy, setTelegramPolicy] = useState<ApprovalPolicy | ''>(
+    agent.channelPolicies?.telegram ?? '',
+  );
+
+  /** What "same as above" actually resolves to, for honest labelling. */
+  const effectivePolicy = policy || globalPolicy || 'ask';
+
   const preset = presets.find((p) => p.id === presetId);
 
   const save = () => {
@@ -1035,6 +1054,18 @@ export function AgentPanel({
       nodeId: nodeId || undefined,
       workspaceRoot: workspaceRoot || undefined,
       approvalPolicy: (policy || undefined) as ApprovalPolicy | undefined,
+      /*
+       * An explicit `undefined` DELETES the override.
+       *
+       * Storing an empty string would resolve to nothing at read time and
+       * silently pin the agent to a fallback — the bug class the settings
+       * writer already guards against.
+       */
+      // Naming it in `clear` is what actually removes it: an explicit
+      // `undefined` is dropped in transit and the old value survives.
+      ...(telegramPolicy
+        ? { channelPolicies: { telegram: telegramPolicy as ApprovalPolicy } }
+        : { clear: ['channelPolicies'] }),
       channels: agentChannels as never,
     });
     onClose();
@@ -1240,6 +1271,37 @@ export function AgentPanel({
             <option value="readonly">Read-only</option>
           </select>
         </label>
+
+        {/*
+          Telegram is a different risk from the keyboard in front of you.
+
+          Anyone who can reach the chat can instruct this agent, so an
+          inherited `auto` is reduced to `ask` for requests arriving there.
+          Saying so here is what makes the behaviour explicable: otherwise an
+          agent set to run unattended starts asking for approval and nothing
+          in the interface explains why.
+        */}
+        <label className="field">
+          <span>When asked from Telegram</span>
+          <select
+            value={telegramPolicy}
+            onChange={(e) => setTelegramPolicy(e.target.value as ApprovalPolicy | '')}
+          >
+            <option value="">
+              {effectivePolicy === 'auto' ? 'Ask first (safer than here)' : 'Same as above'}
+            </option>
+            <option value="ask">Ask every time</option>
+            <option value="auto">Run without asking</option>
+            <option value="readonly">Read-only</option>
+          </select>
+        </label>
+        <p className={telegramPolicy === 'auto' ? 'warn-inline' : 'muted small'}>
+          {telegramPolicy === 'auto'
+            ? 'Anyone who can message your bot will be able to make this agent run shell commands.'
+            : effectivePolicy === 'auto'
+              ? 'This agent runs unattended at this machine, but a request from your phone still asks first.'
+              : 'A remote request never gets more permission than it would here.'}
+        </p>
       </section>
 
       <footer className="modal-foot modal-foot-split">

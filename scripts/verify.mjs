@@ -102,6 +102,31 @@ const vendored = findVendorDirs(repo);
 check('no vendored trees', vendored.length === 0, vendored.join(', '));
 
 /*
+ * The suite count in the docs matches reality.
+ *
+ * Four documents once claimed six, six, twelve and thirty-eight against an
+ * actual fifty. A number written in prose drifts the moment a suite is
+ * added, and a reader who checks one figure and finds it wrong reasonably
+ * distrusts everything around it — which is a worse loss than the number.
+ */
+{
+  const cliPkg = JSON.parse(
+    fs.readFileSync(path.join(repo, 'examples', 'cli-agent', 'package.json'), 'utf8'),
+  );
+  const actual = cliPkg.scripts.test.split('&&').filter((s) => s.includes('test:')).length;
+
+  const stale = [];
+  for (const file of ['AGENTS.md', 'README.md', 'docs/DEVELOPMENT.md', 'docs/HANDOVER.md']) {
+    const text = fs.readFileSync(path.join(repo, file), 'utf8');
+    for (const match of text.matchAll(/(\d+) offline suites?/g)) {
+      if (Number(match[1]) !== actual) stale.push(`${file}: ${match[1]} (actual ${actual})`);
+    }
+  }
+
+  check('documented suite count is current', stale.length === 0, stale.join('; '));
+}
+
+/*
  * The checks themselves name the patterns they look for, so they must be
  * excluded or every run reports a false positive on its own source. CI has
  * the same shape and the same exclusion.

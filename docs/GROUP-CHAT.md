@@ -64,10 +64,25 @@ Who speaks is decided in this order:
    agent therefore behaves exactly as it does today — you do not tag anybody
    to keep talking to the agent you are already talking to.
 
-4. **An untagged agent may request the floor.** One short line: *"Windows
-   builder wants to add something."* Whoever is present grants it or ignores
-   it. This is how an agent that noticed something relevant gets to say so
-   without every agent piling in.
+4. **An untagged agent may be offered the floor.** One short line naming who
+   could answer — *"@windows, @linux could answer this."* Whoever is present
+   grants it or ignores it.
+
+   **"Listens" means the transcript, not inference.** An agent that was not
+   addressed does not run. Asking every agent "do you want to speak?" after
+   every message would be N model calls to decide who should make one — the
+   same cost as the referee this document rejects two sections down, wearing
+   a different hat. So the offer is made from the room's own state: these
+   agents are present and were not addressed.
+
+   An agent that is *already running* — because it was tagged, delegated to,
+   or woken by a routine — can of course say something unprompted. That
+   costs nothing extra, because the turn was already happening.
+
+   A future *Room intelligence* setting could offer heuristic or
+   coordinator-model selection for people who want it. It must stay opt-in
+   and off by default: silently running N models per message is exactly the
+   behaviour that makes multi-agent tools expensive to leave running.
 
 ## Making requests cheap
 

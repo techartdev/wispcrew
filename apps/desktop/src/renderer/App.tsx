@@ -352,6 +352,7 @@ export function App() {
 
       {panel === 'agent' && selected && (
         <AgentPanel
+          globalPolicy={state.settings?.approvalPolicy}
           agent={selected}
           nodes={state.nodes}
           presets={presets}

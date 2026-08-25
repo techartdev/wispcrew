@@ -30,6 +30,19 @@ import type { ChannelId, RoomEvent } from './conversation.js';
  * a workspace, and its own tool permissions. Unlike a disposable chat, an
  * agent persists across restarts and keeps its history.
  */
+/**
+ * An update to an agent, with the fields it should REMOVE named explicitly.
+ *
+ * An explicit `undefined` is dropped by `JSON.stringify`, so it cannot
+ * survive IPC and a spread merge silently keeps the old value. Harmless for
+ * a name; wrong for a permission, because a user who cleared a remote
+ * override would still have granted it.
+ */
+export interface AgentPatch extends Partial<AgentRecord> {
+  /** Field names to delete from the stored record. */
+  clear?: string[];
+}
+
 export interface AgentRecord {
   id: string;
   /** User-facing name, e.g. "Refactor Bot". */

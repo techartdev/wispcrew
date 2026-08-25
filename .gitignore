@@ -69,3 +69,4 @@ client-persistence.json
 .routines-test.mjs
 .agentch-test.mjs
 .room-test.mjs
+.cp-test.mjs

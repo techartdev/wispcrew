@@ -86,18 +86,23 @@ An agent inviting another is a real grant, so it goes through approval like
 any other consequential act — but as one decision, not one per message. What
 it must not become is an agent quietly assembling a committee.
 
-### Why a channel is a participant, not a delivery target
+### Why a channel belongs to a participant, rather than being one
 
-The current code treats channels as somewhere to *send* — a queue with
-`desktop` and `telegram` as destinations. That is the right transport and it
-stays, but it is the wrong **concept** for two-way conversation, because a
-delivery target has no identity in the discussion. It cannot be addressed, it
-cannot contribute, and nothing about the conversation records that it is
-present.
+The existing code treats channels as somewhere to *send* — a queue with
+`desktop` and `telegram` as destinations. That transport is right and it
+stays. What it lacks is any record that a conversation is **reachable** from
+somewhere, which is what makes two-way work: "make this chat work from my
+phone" should be one action with an obvious inverse.
 
-As a participant, "make this chat work from my phone" is one action with an
-obvious inverse. That is the shape you described, and it is better than what
-I had been sketching.
+An earlier draft of this document solved that by making a channel a
+participant. That was wrong, and the body above now says so — a channel has
+no identity, no memory and no opinions. It is a door. Attaching it to a
+person keeps the attribution honest: a message from your phone is
+**"you, via Telegram"**, not "Telegram said".
+
+This heading survived the correction for a while and contradicted the section
+it sits under, which is a good argument for reading a document end to end
+after changing its central claim.
 
 ## What is actually distinctive
 
@@ -140,6 +145,78 @@ chats". The honest one-line version:
 
 > Open-source AI teammates you can reach from anywhere. One conversation —
 > humans and agents, desktop and phone.
+
+## Open problems, and what an outside review found
+
+A review of these documents raised several points that were right and are
+recorded here rather than quietly absorbed.
+
+### A turn should be a durable record, before cross-node work starts
+
+Today "who is running" is an in-memory `Map` in `agent-sessions.ts`, keyed by
+agent. That is enough for one machine with a window open, and it cannot
+answer the question a distributed room asks constantly: *is this message
+already being worked on?*
+
+Consider a node that receives `@windows run the tests`, starts, loses its
+connection, reconnects, and sees the same replicated message. Stable entry
+ids stop the transcript being duplicated. They do **not** stop the tests
+being run twice — and once these are deployments or `git push`, that
+distinction is expensive.
+
+So a turn wants to be a thing with an identity:
+
+```
+Message  m_123
+   └── Turn t_981   agent=@windows  node=vps
+         state: claimed → running → awaiting_approval → completed
+```
+
+A great deal then has an obvious home rather than being scattered across
+runtime state, transcript entries and transport behaviour: reconnection,
+duplicate suppression, Stop, approval waits, Telegram progress, the
+consecutive-turn budget, and "who is speaking right now".
+
+**Not yet built.** It is the right next structural change, and it should
+land before cross-node rooms rather than after.
+
+### Ordering needs causality, not just timestamps
+
+The merge rule here is union by id, ties broken by `(createdAt, authorId)`.
+That is deterministic, and determinism is not the same as being correct.
+
+With clocks a few seconds apart, an answer can sort *before* the question it
+answers — every reader then sees a room where an agent replied to something
+nobody had said yet. A monotonic per-author sequence number, or a
+`parentId` naming the entry a reply was caused by, fixes it without adopting
+a full CRDT.
+
+### Who carries a cross-node conversation when nobody is watching
+
+`docs/DISTRIBUTED.md` is explicit that nodes do not know about each other and
+there is no coordinator; only the client knows the nodes. This document
+describes a conversation replicated across every participating node. Both can
+be true, but something has to move the bytes.
+
+Three options, and honesty about which is real:
+
+- **Client-relayed.** The desktop carries room traffic. Simple, and
+  multi-node rooms pause when it is closed.
+- **A room host.** One node sequences for the room, with failover.
+- **Peer replication.** Nodes connect directly. Genuinely distributed, and
+  considerably more to get wrong.
+
+The local-first choice is the first one, said plainly in the interface —
+*cross-node collaboration needs a connected client; single-node agents and
+routines keep running regardless.* Anything else is a claim this project has
+not earned yet.
+
+### A guest must not borrow the authority of whoever invited it
+
+Delegation already narrows privilege: a delegate never exceeds its caller.
+The same rule has to apply to an invited agent. Bringing a more privileged
+agent into a room must not lend it the inviter's authority, or "invite" turns
+into a privilege-escalation path.
 
 ## What this does *not* mean
 
