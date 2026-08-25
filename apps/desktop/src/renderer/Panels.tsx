@@ -969,6 +969,18 @@ export function SettingsPanel({
 /* Agent configuration                                                 */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Channels a user can choose per agent.
+ *
+ * The conversation is deliberately absent: it is always on and needs no
+ * permission, so offering it as a checkbox would imply it can be switched
+ * off.
+ */
+const CHANNEL_CHOICES = [
+  { id: 'desktop', label: 'Desktop notification' },
+  { id: 'telegram', label: 'Telegram' },
+] as const;
+
 export function AgentPanel({
   agent,
   presets,
@@ -1000,6 +1012,11 @@ export function AgentPanel({
   const [nodeId, setNodeId] = useState(agent.nodeId ?? '');
   const [workspaceRoot, setWorkspaceRoot] = useState(agent.workspaceRoot ?? '');
   const [policy, setPolicy] = useState<ApprovalPolicy | ''>(agent.approvalPolicy ?? '');
+  /*
+   * undefined means "follow the global setting"; an array overrides it,
+   * including an empty one, which is how an agent is told to stay silent.
+   */
+  const [agentChannels, setAgentChannels] = useState<string[] | undefined>(agent.channels);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const preset = presets.find((p) => p.id === presetId);
@@ -1017,6 +1034,7 @@ export function AgentPanel({
       nodeId: nodeId || undefined,
       workspaceRoot: workspaceRoot || undefined,
       approvalPolicy: (policy || undefined) as ApprovalPolicy | undefined,
+      channels: agentChannels as never,
     });
     onClose();
   };
@@ -1142,6 +1160,52 @@ export function AgentPanel({
               on. Changing it starts fresh there rather than moving anything across.
             </span>
           </label>
+        )}
+
+        {/*
+          An agent may warrant more or less noise than the default: a
+          monitoring agent might deserve a message on your phone, while a
+          scratch agent should stay in the app.
+
+          Three states, not two, so this cannot be a plain checkbox list —
+          "follow the global setting" is different from "no channels", and
+          the latter is a real choice for an agent that should stay quiet.
+        */}
+        <label className="field">
+          <span>
+            Notifications <em className="muted">— where this agent may reach you</em>
+          </span>
+          <select
+            value={agentChannels === undefined ? 'default' : 'custom'}
+            onChange={(e) => setAgentChannels(e.target.value === 'default' ? undefined : [])}
+          >
+            <option value="">Use the global setting</option>
+            <option value="custom">Choose for this agent</option>
+          </select>
+        </label>
+
+        {agentChannels !== undefined && (
+          <>
+            {CHANNEL_CHOICES.map((choice) => (
+              <label key={choice.id} className="field checkbox-field">
+                <input
+                  type="checkbox"
+                  checked={agentChannels.includes(choice.id)}
+                  onChange={() =>
+                    setAgentChannels(
+                      agentChannels.includes(choice.id)
+                        ? agentChannels.filter((c) => c !== choice.id)
+                        : [...agentChannels, choice.id],
+                    )
+                  }
+                />
+                <span>{choice.label}</span>
+              </label>
+            ))}
+            {agentChannels.length === 0 && (
+              <p className="muted small">This agent will only write to the conversation.</p>
+            )}
+          </>
         )}
 
         <label className="field">
