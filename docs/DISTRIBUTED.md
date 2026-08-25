@@ -29,7 +29,7 @@ Split the app in two along a seam that already almost exists:
    │   Desktop app (a client)     │   the window
    │   React UI, panels, chat     │
    └───────────────┬──────────────┘
-                   │  GhostBridge (same API as today)
+                   │  WispBridge (same API as today)
    ┌───────────────▼──────────────┐
    │   wispcrew serve (a daemon)  │   the engine
    │   store · scheduler · agents │

@@ -6,7 +6,7 @@
  *
  * Design rules, learned the hard way:
  *  1. **One typed interface, no string channels in UI code.** The preload
- *     exposes exactly `GhostBridge`; the renderer never calls `ipcRenderer`
+ *     exposes exactly `WispBridge`; the renderer never calls `ipcRenderer`
  *     directly, so contextIsolation can stay on and the attack surface is
  *     enumerable in this file.
  *  2. **Requests return plain values, not envelopes.** Errors reject. The old
@@ -161,7 +161,7 @@ export interface DetectedSignIn {
  * The API exposed on `window.wispcrew`. Every method is asynchronous and
  * rejects with a plain `Error` on failure.
  */
-export interface GhostBridge {
+export interface WispBridge {
   /* -- lifecycle ------------------------------------------------- */
 
   /**
@@ -357,6 +357,6 @@ export interface NodeSummary {
 
 declare global {
   interface Window {
-    wispcrew: GhostBridge;
+    wispcrew: WispBridge;
   }
 }

@@ -23,7 +23,8 @@
     "test": "npm run build:packages && npm run test --workspaces --if-present",
     "agent": "npm run agent --workspace @wispcrew/examples-cli",
     "desktop": "npm run dev --workspace @wispcrew/desktop",
-    "icons": "electron scripts/make-icons.mjs"
+    "icons": "electron scripts/make-icons.mjs",
+    "verify": "node scripts/verify.mjs"
   },
   "engines": {
     "node": ">=20"

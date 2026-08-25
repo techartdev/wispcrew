@@ -109,7 +109,7 @@ or executes must call `ctx.requestApproval`. Keep filesystem access inside
 
 Three places, in order:
 
-1. `packages/shared/src/bridge.ts` — add it to `GhostBridge`.
+1. `packages/shared/src/bridge.ts` — add it to `WispBridge`.
 2. `apps/desktop/src/main/bridge-host.ts` — implement `handle('name', …)`.
 3. `apps/desktop/src/preload/preload.ts` — add the matching `invoke`.
 

@@ -42,7 +42,7 @@ is the request to whichever LLM provider the user configured.
 
 ## The IPC contract
 
-`packages/shared/src/bridge.ts` defines `GhostBridge` — the complete set of
+`packages/shared/src/bridge.ts` defines `WispBridge` — the complete set of
 methods the renderer may call, and the `BridgeEvent` union main may push. It
 is a single typed interface rather than loose channel strings, which means:
 

@@ -82,12 +82,12 @@ docs/GROUP-CHAT.md       who speaks when several agents share a chat
 1. `main.ts` installs the Electron host (data dir, keychain crypto), then
    **links to a detached daemon**, spawning one if none is running. The daemon
    owns the engine so routines and agents survive the window closing.
-2. The renderer talks **only** to `window.wispcrew` (typed as `GhostBridge` in
+2. The renderer talks **only** to `window.wispcrew` (typed as `WispBridge` in
    `packages/shared/src/bridge.ts`), implemented by `bridge-host.ts`. Calls
    about a particular agent are routed to whichever node owns it — the local
    daemon, or a paired machine.
 3. A message goes `sendPrompt` -> `runPrompt` -> `@wispcrew/core` `Agent` ->
-   provider. Transcript entries are **pushed** back as `gb:event` frames and
+   provider. Transcript entries are **pushed** back as `wc:event` frames and
    upserted by id, so streaming updates in place.
 4. Tool calls hit the approval policy: `readonly` denies, `auto` allows, `ask`
    raises an approval card and waits for `resolveApproval`. **A daemon denies**
@@ -111,15 +111,22 @@ npm run desktop                                 # build + launch
 npm run dist:win | dist:mac | dist:linux        # installers
 ```
 
-**Always** run typecheck + build + the offline suites before finishing. If you
-touched `apps/desktop`, launch the app once and confirm it boots and chats.
+**Run `npm run verify` before finishing.** It performs every check CI does
+that a local machine can: typecheck, build, all offline suites, encoding, and
+the provenance and credential guards. About two minutes, and it costs
+nothing. If you touched `apps/desktop`, also launch the app once and confirm
+it boots and chats.
 
-**CI is a final gate, not a test loop.** The offline suites run locally in
-about two minutes and catch nearly everything; a CI round trip takes ten and
-consumes the maintainer's GitHub Actions minutes. Push and watch CI once, at
-the end of a body of work — not after each commit. The exceptions are changes
-CI is uniquely able to judge: anything platform-specific (process handling,
-paths, native APIs) where the local machine cannot speak for macOS or Linux.
+**CI is a final gate, not a test loop.** A round trip takes ten minutes and
+spends GitHub Actions minutes, which are a hard monthly allowance on a free
+account. Exhausting them stops *all* CI until the quota resets — which
+happened during development, from running CI after individual commits when
+`npm run verify` would have caught the same things.
+
+So: push and watch CI **once**, at the end of a body of work. The only thing
+it judges that this machine cannot is **macOS and Linux** — window painting,
+native dialogs, platform process behaviour. If a change does not touch that,
+local verification is the whole story.
 
 Config lives in `<userData>/wispcrew-settings.json`
 (`%APPDATA%\WispCrew` on Windows). Keys live **only** in
@@ -206,7 +213,7 @@ OpenAI-compatible endpoint keeps chat-completions. `test:attachments` pins the
 routing, including that a local server borrowing an OpenAI model name is not
 rerouted.
 
-**Test coverage**: 37 offline suites — no API key, no network.
+**Test coverage**: 38 offline suites — no API key, no network.
 Several caught real bugs when written, and a few caught bugs that had already
 shipped; keep them green. Notable ones: `single-writer` (two engines on one
 store), `shell-timeout` (a killed process emits `exit` with no `close` on

@@ -12,9 +12,9 @@
  * is the security boundary.
  */
 import { contextBridge, ipcRenderer } from 'electron';
-import type { BridgeEvent, GhostBridge } from '@wispcrew/shared';
+import type { BridgeEvent, WispBridge } from '@wispcrew/shared';
 
-const bridge: GhostBridge = {
+const bridge: WispBridge = {
   onEvent(listener: (event: BridgeEvent) => void): () => void {
     const handler = (_e: Electron.IpcRendererEvent, event: BridgeEvent) => listener(event);
     ipcRenderer.on('wc:event', handler);

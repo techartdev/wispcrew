@@ -1,5 +1,5 @@
 /**
- * bridge-host.ts — main-process implementation of the `GhostBridge` contract.
+ * bridge-host.ts — main-process implementation of the `WispBridge` contract.
  *
  * This is the entire renderer-facing surface of the app. It replaces the
  * reverse-engineered protocol shim with ~30 explicit, typed handlers we own.
