@@ -19,7 +19,13 @@ import {
   clearTelegramApprovals,
   resolveTelegramApproval,
 } from './telegram-approval.js';
-import { conversationFor } from './channel-bindings.js';
+import {
+  bindEndpoint,
+  conversationFor,
+  endpointsFor,
+  sharingWarning,
+  unbindEndpoint,
+} from './channel-bindings.js';
 import { authorOfTelegramMessage, recordTelegramAuthor } from './telegram-authors.js';
 import { fileLog } from './filelog.js';
 import { host } from './host.js';
@@ -100,6 +106,85 @@ export async function handleInbound(
     run?: (agentId: string, prompt: string) => Promise<void>;
   },
 ): Promise<{ handled: boolean; reply?: string; agentId?: string }> {
+  /*
+   * Connecting happens from inside the chat.
+   *
+   * The endpoint is wherever this message was typed, so there is nothing for
+   * the user to identify by hand — and it works in a topic, which is the
+   * case a settings form makes awkward.
+   */
+  const command = /^\/(connect|disconnect|here)\b\s*(.*)$/i.exec(message.text.trim());
+  if (command) {
+    const verb = command[1]!.toLowerCase();
+    const argument = command[2]!.trim();
+    const endpoint = { chatId: message.chatId, threadId: message.threadId };
+
+    if (verb === 'disconnect') {
+      unbindEndpoint(endpoint);
+      await sendPlain(deps.token, message.chatId, 'Disconnected. Nothing here reaches WispCrew now.', message.threadId);
+      return { handled: true };
+    }
+
+    if (verb === 'here') {
+      const current = conversationFor(endpoint);
+      const conversation = current ? getConversation(current) : undefined;
+      await sendPlain(
+        deps.token,
+        message.chatId,
+        conversation
+          ? `This is "${conversation.title}".`
+          : 'Not connected. Use /connect <name> to attach a conversation.',
+        message.threadId,
+      );
+      return { handled: true };
+    }
+
+    const rooms = listConversations();
+    const wanted = argument.toLowerCase();
+    const match = wanted
+      ? rooms.find((r) => r.title.toLowerCase().includes(wanted))
+      : undefined;
+
+    if (!wanted) {
+      await sendPlain(
+        deps.token,
+        message.chatId,
+        `Which conversation? ${rooms.map((r) => r.title).join(', ')}`,
+        message.threadId,
+      );
+      return { handled: true };
+    }
+
+    if (!match) {
+      await sendPlain(
+        deps.token,
+        message.chatId,
+        `No conversation matches "${argument}". Available: ${rooms.map((r) => r.title).join(', ')}`,
+        message.threadId,
+      );
+      return { handled: true };
+    }
+
+    /*
+     * Say when this makes an existing room reachable from somewhere new.
+     *
+     * Correct per the conversation model and surprising enough to matter: a
+     * message typed in a private topic becomes visible in a company group.
+     */
+    const warning = sharingWarning(match, endpointsFor(match.id));
+    bindEndpoint({ conversationId: match.id, endpoint, label: argument });
+
+    await sendPlain(
+      deps.token,
+      message.chatId,
+      warning
+        ? `Connected to "${match.title}". ${warning}`
+        : `Connected to "${match.title}".`,
+      message.threadId,
+    );
+    return { handled: true };
+  }
+
   const room = roomFor(message);
 
   if (!room) {
@@ -110,8 +195,9 @@ export async function handleInbound(
      */
     await sendPlain(
       deps.token,
-      deps.chatId,
-      'This chat is not connected to a WispCrew conversation yet.',
+      message.chatId,
+      'This chat is not connected to a WispCrew conversation yet. Use /connect <name>.',
+      message.threadId,
     );
     return { handled: true };
   }
@@ -237,14 +323,44 @@ export async function handleInbound(
   return { handled: true, agentId: agent.id };
 }
 
-async function sendPlain(token: string, chatId: string, text: string): Promise<void> {
+async function sendPlain(
+  token: string,
+  chatId: string,
+  text: string,
+  threadId?: number,
+): Promise<void> {
   try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text }),
-      signal: AbortSignal.timeout(15_000),
-    });
+    const send = async (withThread: boolean) => {
+      const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          ...(withThread && threadId !== undefined ? { message_thread_id: threadId } : {}),
+          text,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      return (await response.json()) as { ok: boolean; description?: string };
+    };
+
+    const first = await send(true);
+
+    /*
+     * The topic is gone.
+     *
+     * A binding outlives the topic it names — someone deletes it, or the
+     * chat leaves topic mode — and every message would then fail silently.
+     * The main view is visible and recoverable; silence is not.
+     *
+     * Only this error retries. Blanket fallback would silently redirect
+     * topic messages into the main chat whenever anything went wrong, which
+     * is the documented Bot API 10 trap.
+     */
+    if (!first.ok && /message thread not found/i.test(first.description ?? '')) {
+      fileLog('[telegram] topic missing, replying in the main chat instead');
+      await send(false);
+    }
   } catch (err) {
     fileLog('[telegram] reply failed', (err as Error).message);
   }
@@ -270,6 +386,20 @@ export function startTelegram(): void {
     token,
     chatId,
     dataDir,
+    /*
+     * Anything bound, plus the chat the user configured.
+     *
+     * The configured chat is accepted even with nothing bound to it, or
+     * `/connect` could never arrive: the command that creates a binding
+     * would be refused for want of one.
+     *
+     * A bot token is a bearer credential, so this is the gate that matters —
+     * a stranger who finds the bot gets silence rather than a turn in
+     * somebody else's conversation.
+     */
+    accepts: (incomingChat, threadId) =>
+      incomingChat === chatId ||
+      conversationFor({ chatId: incomingChat, threadId }) !== undefined,
     // The result is for tests; the listener only needs it to settle.
     // Button presses on approval prompts.
     onCallback: (data) => resolveTelegramApproval(data),

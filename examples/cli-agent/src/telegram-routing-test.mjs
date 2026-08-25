@@ -167,6 +167,135 @@ console.log('\n[sharing] a second door is called out');
   check('naming where it is already reachable', /#backend/.test(warning ?? ''), warning);
 }
 
+console.log('\n[connecting] a user can bind from inside the chat');
+{
+  /*
+   * I replaced `/room` with a binding table and gave nobody a way to write
+   * to it, so a topic could never be connected at all. Binding from inside
+   * the chat is also better than a settings form: the endpoint is wherever
+   * the message was typed, so there is nothing to identify by hand.
+   */
+  sent.length = 0;
+  const fresh = { chatId: '-100888', threadId: 42 };
+  check('the new topic starts unbound', conversationFor(fresh) === undefined);
+
+  await handleInbound(
+    { messageId: 10, chatId: '-100888', threadId: 42, text: '/connect Release', fromId: '5', date: 1 },
+    { token: 'tok', chatId: '-100888' },
+  );
+
+  check('it is now bound', conversationFor(fresh) === release.id, conversationFor(fresh));
+  check('and the user is told', /Connected to "Release"/.test(sent.at(-1)?.text ?? ''), sent.at(-1)?.text);
+  // A reply must land in the topic it was asked in, not the main view.
+  check('answering inside the topic', sent.at(-1)?.message_thread_id === 42);
+
+  // Now real messages route there.
+  const ran = [];
+  await handleInbound(
+    { messageId: 11, chatId: '-100888', threadId: 42, text: 'when do we ship?', fromId: '5', date: 1 },
+    { token: 'tok', chatId: '-100888', run: async (id) => ran.push(id) },
+  );
+  check('and messages reach that room', ran[0] === release.id, ran[0]);
+}
+
+console.log('\n[connect] a bad name lists the alternatives');
+{
+  sent.length = 0;
+  await handleInbound(
+    { messageId: 12, chatId: '-100888', threadId: 43, text: '/connect nonsense', fromId: '5', date: 1 },
+    { token: 'tok', chatId: '-100888' },
+  );
+  check('it says no match', /No conversation matches/.test(sent.at(-1)?.text ?? ''), sent.at(-1)?.text);
+  check('and offers real ones', /Backend|Release/.test(sent.at(-1)?.text ?? ''));
+  check('without binding anything', conversationFor({ chatId: '-100888', threadId: 43 }) === undefined);
+}
+
+console.log('\n[here] a chat can say what it is connected to');
+{
+  sent.length = 0;
+  await handleInbound(
+    { messageId: 13, chatId: '-100888', threadId: 42, text: '/here', fromId: '5', date: 1 },
+    { token: 'tok', chatId: '-100888' },
+  );
+  check('it names the room', /This is "Release"/.test(sent.at(-1)?.text ?? ''), sent.at(-1)?.text);
+
+  sent.length = 0;
+  await handleInbound(
+    { messageId: 14, chatId: '-100888', threadId: 44, text: '/here', fromId: '5', date: 1 },
+    { token: 'tok', chatId: '-100888' },
+  );
+  check('and says when it is not connected', /Not connected/.test(sent.at(-1)?.text ?? ''));
+}
+
+console.log('\n[disconnect] a door can be removed from the chat');
+{
+  await handleInbound(
+    { messageId: 15, chatId: '-100888', threadId: 42, text: '/disconnect', fromId: '5', date: 1 },
+    { token: 'tok', chatId: '-100888' },
+  );
+  check('the binding is gone', conversationFor({ chatId: '-100888', threadId: 42 }) === undefined);
+}
+
+console.log('\n[missing topic] a deleted topic falls back to the main chat');
+{
+  /*
+   * Measured against the real API: sending `message_thread_id` for a topic
+   * that does not exist returns `Bad Request: message thread not found`.
+   *
+   * A binding outlives the topic it names — someone deletes it, or the chat
+   * leaves topic mode — and without this every message in that room would
+   * fail silently. The main view is visible and recoverable.
+   */
+  const attempts = [];
+  const saved = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const body = init?.body ? JSON.parse(init.body) : {};
+    attempts.push(body);
+
+    if (body.message_thread_id !== undefined) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: false, description: 'Bad Request: message thread not found' }),
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 1 } }) };
+  };
+
+  await handleInbound(
+    { messageId: 20, chatId: '-100888', threadId: 777, text: '/here', fromId: '5', date: 1 },
+    { token: 'tok', chatId: '-100888' },
+  );
+
+  check('it tried the topic first', attempts[0]?.message_thread_id === 777);
+  // Retrying without the field is what keeps the conversation usable.
+  check('then retried without it', attempts.length === 2 && attempts[1]?.message_thread_id === undefined,
+    JSON.stringify(attempts.map((a) => a.message_thread_id)));
+
+  /*
+   * And only for THAT error. A blanket fallback would silently redirect
+   * topic messages into the main chat whenever anything went wrong, which
+   * is the documented Bot API 10 trap.
+   */
+  attempts.length = 0;
+  globalThis.fetch = async (url, init) => {
+    attempts.push(init?.body ? JSON.parse(init.body) : {});
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: false, description: 'Bad Request: chat not found' }),
+    };
+  };
+
+  await handleInbound(
+    { messageId: 21, chatId: '-100888', threadId: 777, text: '/here', fromId: '5', date: 1 },
+    { token: 'tok', chatId: '-100888' },
+  );
+  check('a different error does not retry', attempts.length === 1, String(attempts.length));
+
+  globalThis.fetch = saved;
+}
+
 console.log('\n[unbinding] removing a door leaves the room alone');
 {
   unbindEndpoint({ chatId: '555', threadId: 13 });

@@ -91,14 +91,35 @@ export function startProgress(options: ProgressOptions): Progress {
 
   sending = (async () => {
     try {
-      const result = (await call(options.token, 'sendMessage', {
-        chat_id: options.chatId,
-        ...(options.threadId !== undefined ? { message_thread_id: options.threadId } : {}),
-        text: `${header}\n_Working…_`,
-        parse_mode: 'MarkdownV2',
-        // The placeholder should not buzz a phone; the answer will.
-        disable_notification: true,
-      })) as { result?: { message_id?: number } };
+      const placeholder = (withThread: boolean) =>
+        call(options.token, 'sendMessage', {
+          chat_id: options.chatId,
+          ...(withThread && options.threadId !== undefined
+            ? { message_thread_id: options.threadId }
+            : {}),
+          text: `${header}\n_Working…_`,
+          parse_mode: 'MarkdownV2',
+          // The placeholder should not buzz a phone; the answer will.
+          disable_notification: true,
+        }) as Promise<{ result?: { message_id?: number } }>;
+
+      /*
+       * A topic that no longer exists returns 400.
+       *
+       * Measured against the real API. A binding outlives the topic it
+       * names, and without this every message in that room would fail
+       * silently. Only this case retries — a blanket fallback would
+       * redirect topic messages into the main chat whenever anything went
+       * wrong.
+       */
+      let result: { result?: { message_id?: number } };
+      try {
+        result = await placeholder(true);
+      } catch (err) {
+        if (options.threadId === undefined || !/400/.test((err as Error).message)) throw err;
+        fileLog('[telegram] topic missing, posting in the main chat instead');
+        result = await placeholder(false);
+      }
       messageId = result.result?.message_id ?? null;
 
       /*
