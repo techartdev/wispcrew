@@ -526,36 +526,27 @@ export function registerBridge(context: BridgeContext): void {
 
     const attachments = paths.length ? await loadAttachments(paths) : [];
 
-    pushTranscript(agentId, {
-      kind: 'message',
-      id: store.newId('usr'),
-      role: 'user',
-      content: text,
-      createdAt: Date.now(),
-      // Store metadata only: base64 image data would bloat the transcript
-      // file by megabytes per message and is never re-sent from history.
-      ...(attachments.length
-        ? {
-            attachments: attachments.map((a) => ({
-              name: a.name,
-              mimeType: a.mimeType,
-              size: a.size,
-              kind: a.kind,
-            })),
-          }
-        : {}),
-    });
-
     /*
-     * Deliberately not awaited: the call returns as soon as the prompt is
-     * accepted, so the user can keep typing, and results stream back as
-     * events.
+     * Through the room, so this shares one path with `sendToRoom`.
      *
-     * That makes this the last place a failure can be handled. Left
-     * uncaught it is an unhandled rejection, and the user sees a turn that
-     * simply never finishes with nothing to explain why.
+     * Two paths were doing the same job differently: this one wrote the
+     * entry and ran the agent, while the room path also CLAIMED a turn. Only
+     * the second was protected against running the same message twice, which
+     * meant the protection was real for a message from the room and absent
+     * for the identical message from the composer.
+     *
+     * Deliberately not awaited: the call returns as soon as the prompt is
+     * accepted, so the user can keep typing and results stream back as
+     * events. That makes this the last place a failure can be handled —
+     * uncaught, it is an unhandled rejection and the user sees a turn that
+     * never finishes with nothing to explain why.
      */
-    void ctx.runPrompt(agentId, text, attachments).catch((err: Error) => {
+    void runRoomTurn({
+      conversationId: agentId,
+      text,
+      speakerId: LOCAL_HUMAN_ID,
+      attachments,
+    }).catch((err: Error) => {
       fileLog('[bridge] turn failed', agentId, err?.message ?? String(err));
       emitEvent({
         type: 'notice',

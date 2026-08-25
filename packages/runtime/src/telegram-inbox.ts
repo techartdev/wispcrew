@@ -40,6 +40,21 @@ export interface InboundMessage {
   /** Telegram's own message id, for editing a placeholder later. */
   messageId: number;
   chatId: string;
+  /**
+   * The forum topic this arrived in, when there is one.
+   *
+   * Present for a forum supergroup and for a private chat in topic mode.
+   * Together with the chat id it *is* the address of a conversation, which
+   * is what removes the need for any remembered "current room".
+   */
+  threadId?: number;
+  /**
+   * The message this replies to, when the user used Telegram's own Reply.
+   *
+   * A strong statement of intent: replying to an agent's message addresses
+   * that agent, with no @mention and no menu.
+   */
+  replyToMessageId?: number;
   text: string;
   /** Sender's Telegram user id, checked against the configured chat. */
   fromId: string;
@@ -48,8 +63,21 @@ export interface InboundMessage {
 
 export interface InboxOptions {
   token: string;
-  /** Only this chat is accepted. */
+  /**
+   * The chat a single-room setup uses.
+   *
+   * Kept for the simple case. When `accepts` is provided it decides
+   * instead, so several chats and topics can share one bot.
+   */
   chatId: string;
+  /**
+   * Whether a chat is one this installation knows about.
+   *
+   * A bot token is a bearer credential: anyone who learns the bot's name can
+   * message it. Without a check, a stranger's message would become the
+   * user's own turn, able to instruct their agents.
+   */
+  accepts?: (chatId: string, threadId?: number) => boolean;
   dataDir: string;
   onMessage: (message: InboundMessage) => void | Promise<void>;
   /**
@@ -185,8 +213,12 @@ export function startInbox(options: InboxOptions): Inbox {
            * would become the user's own turn in their room — able to
            * instruct their agents.
            */
-          if (chatId !== options.chatId) {
-            fileLog('[telegram] ignoring a message from an unexpected chat');
+          const known = options.accepts
+            ? options.accepts(chatId, message.message_thread_id)
+            : chatId === options.chatId;
+
+          if (!known) {
+            fileLog('[telegram] ignoring a message from an unrecognised chat');
             continue;
           }
 
@@ -194,6 +226,8 @@ export function startInbox(options: InboxOptions): Inbox {
             await options.onMessage({
               messageId: message.message_id,
               chatId,
+              threadId: message.message_thread_id,
+              replyToMessageId: message.reply_to_message?.message_id,
               text: message.text,
               fromId: String(message.from?.id ?? ''),
               date: message.date ?? Math.floor(Date.now() / 1000),
@@ -240,6 +274,8 @@ interface TelegramUpdate {
   };
   message?: {
     message_id: number;
+    message_thread_id?: number;
+    reply_to_message?: { message_id: number };
     text?: string;
     date?: number;
     chat?: { id?: number };

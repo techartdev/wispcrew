@@ -203,24 +203,26 @@ export function nodeMethods(): MethodTable {
       const text = String(prompt ?? '').trim();
       if (!text) return;
 
-      pushTranscript(agentId, {
-        kind: 'message',
-        id: newId('usr'),
-        role: 'user',
-        content: text,
-        createdAt: Date.now(),
-      });
-
       /*
-       * Not awaited, and its failures are caught here.
+       * Through the room, which writes the entry and claims the turn.
        *
-       * Fire-and-forget is what lets a client keep talking while the agent
-       * works — but it also makes this the last place a rejection can be
-       * handled. Without the catch it becomes an unhandled rejection, and on
-       * a daemon that means the process dies: every other agent stops and
-       * every scheduled routine with it, because one turn failed.
+       * This used to write the entry itself and call `runPrompt`, so a
+       * message arriving twice ran twice — while the identical message sent
+       * to a room ran once. A protection that covers some ways of sending
+       * the same message is worse than none, because it looks complete.
+       *
+       * Not awaited, and its failures are caught here. Fire-and-forget is
+       * what lets a client keep talking while the agent works — but it also
+       * makes this the last place a rejection can be handled. Without the
+       * catch it becomes an unhandled rejection, and on a daemon that means
+       * the process dies: every other agent stops and every scheduled
+       * routine with it, because one turn failed.
        */
-      void runPrompt(agentId, text).catch((err: Error) => {
+      void runRoomTurn({
+        conversationId: agentId,
+        text,
+        speakerId: LOCAL_HUMAN_ID,
+      }).catch((err: Error) => {
         fileLog('[node] turn failed', agentId, err?.message ?? String(err));
         emitEngineEvent({
           type: 'notice',

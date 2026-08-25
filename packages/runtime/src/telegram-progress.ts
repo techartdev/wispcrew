@@ -20,6 +20,7 @@
  * finished.
  */
 import { fileLog } from './filelog.js';
+import { recordTelegramAuthor } from './telegram-authors.js';
 
 /** Minimum gap between edits to one message. */
 const EDIT_INTERVAL_MS = 3_000;
@@ -29,6 +30,15 @@ export interface ProgressOptions {
   chatId: string;
   /** Name shown above the work, so a room with several agents is readable. */
   agentName: string;
+  /**
+   * Which agent this is, so replying to the message addresses it.
+   *
+   * Telegram's Reply carries only a message id, so the pairing has to be
+   * remembered somewhere for "reply to Coder" to mean anything.
+   */
+  agentId?: string;
+  /** The topic to post into, when the conversation has one. */
+  threadId?: number;
 }
 
 export interface Progress {
@@ -83,12 +93,28 @@ export function startProgress(options: ProgressOptions): Progress {
     try {
       const result = (await call(options.token, 'sendMessage', {
         chat_id: options.chatId,
+        ...(options.threadId !== undefined ? { message_thread_id: options.threadId } : {}),
         text: `${header}\n_Working…_`,
         parse_mode: 'MarkdownV2',
         // The placeholder should not buzz a phone; the answer will.
         disable_notification: true,
       })) as { result?: { message_id?: number } };
       messageId = result.result?.message_id ?? null;
+
+      /*
+       * Remember who owns this message.
+       *
+       * Recorded on the PLACEHOLDER rather than the final answer, because
+       * the id is the same one the answer edits — and recording it early
+       * means a reply works even if the turn later fails.
+       */
+      if (messageId !== null && options.agentId) {
+        recordTelegramAuthor({
+          messageId,
+          chatId: options.chatId,
+          agentId: options.agentId,
+        });
+      }
     } catch (err) {
       // No placeholder is a cosmetic loss, not a failed turn.
       fileLog('[telegram] placeholder failed', (err as Error).message);

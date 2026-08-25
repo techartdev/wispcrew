@@ -12,12 +12,15 @@
  */
 import type { ChannelId, ConversationRecord, GlobalSettings } from '@wispcrew/shared';
 import { getConversation, listConversations, LOCAL_HUMAN_ID } from './conversations.js';
-import { currentApprovalAsker, runPrompt, setApprovalAsker } from './engine.js';
+import { currentApprovalAsker, setApprovalAsker } from './engine.js';
+import { runRoomTurn } from './room-turn.js';
 import {
   askViaTelegram,
   clearTelegramApprovals,
   resolveTelegramApproval,
 } from './telegram-approval.js';
+import { conversationFor } from './channel-bindings.js';
+import { authorOfTelegramMessage, recordTelegramAuthor } from './telegram-authors.js';
 import { fileLog } from './filelog.js';
 import { host } from './host.js';
 import { getSecret } from './secrets-store.js';
@@ -30,56 +33,57 @@ import { TELEGRAM_TOKEN_KEY } from './notify-host.js';
 let inbox: Inbox | null = null;
 
 /**
- * Which room a message from the phone belongs to.
+ * Which room a message belongs to.
  *
- * With one room the answer is obvious. With several it is genuinely
- * ambiguous, and guessing wrong sends work to the wrong agent — so the
- * choice is explicit and remembered: `/room <name>` switches, and the last
- * choice persists.
+ * The endpoint IS the address. An earlier version kept a `telegramRoom`
+ * setting — the last room somebody chose with `/room` — which works with one
+ * conversation and misroutes with several: a reply typed into what the user
+ * believes is the release discussion lands wherever the pointer was last
+ * moved, silently.
  *
- * Falling back to the most recently updated room is the least surprising
- * default: it is the conversation the user was last actually having.
+ * Every update already says where it came from, so nothing needs
+ * remembering. A private chat with topics and a forum supergroup address
+ * identically, and hundreds of rooms need no selection mechanism: the user
+ * taps the topic.
  */
-function targetRoom(text: string): { room?: ConversationRecord; reply?: string } {
+function roomFor(message: InboundMessage): ConversationRecord | undefined {
+  const bound = conversationFor({ chatId: message.chatId, threadId: message.threadId });
+  if (bound) return getConversation(bound);
+
+  /*
+   * Nothing bound, and no topic: the ordinary single-room case.
+   *
+   * Falling back to the only conversation keeps a simple setup working
+   * without ceremony. With a topic present the silence is deliberate —
+   * guessing which room a named topic meant is exactly the misrouting this
+   * function exists to prevent.
+   */
+  if (message.threadId !== undefined) return undefined;
+
   const rooms = listConversations();
-  if (rooms.length === 0) return { reply: 'There are no conversations yet.' };
-
-  const command = /^\/room\s+(.+)$/i.exec(text.trim());
-  if (command) {
-    const wanted = command[1]!.trim().toLowerCase();
-    const found = rooms.find((r) => r.title.toLowerCase().includes(wanted));
-    if (!found) {
-      return {
-        reply: `No conversation matches "${command[1]}". Available: ${rooms
-          .map((r) => r.title)
-          .join(', ')}`,
-      };
-    }
-    setPreferredRoom(found.id);
-    return { room: found, reply: `Now talking in "${found.title}".` };
-  }
-
-  if (text.trim().toLowerCase() === '/rooms') {
-    return { reply: `Conversations: ${rooms.map((r) => r.title).join(', ')}` };
-  }
-
-  const preferred = preferredRoom();
-  const room = (preferred && getConversation(preferred)) || rooms[0];
-  return { room };
+  return rooms.length === 1 ? rooms[0] : undefined;
 }
 
-/** The room the phone is currently pointed at. */
-function preferredRoom(): string | undefined {
-  const settings = readSettings(host().dataDir, {}) as GlobalSettings & {
-    telegramRoom?: string;
-  };
-  return settings.telegramRoom;
-}
+/**
+ * Which agent a reply is addressed to.
+ *
+ * Pressing Telegram's own Reply on an agent's message is a strong statement
+ * of intent — stronger than "whoever spoke last" — so it outranks the
+ * remembered addressee. No @mention, no menu.
+ */
+function repliedAgent(
+  conversation: ConversationRecord,
+  replyToMessageId: number | undefined,
+): string | undefined {
+  if (replyToMessageId === undefined) return undefined;
 
-function setPreferredRoom(id: string): void {
-  // `writeSettings` merges rather than replaces, so this cannot clobber
-  // provider or channel settings written by another process.
-  writeSettings(host().dataDir, { telegramRoom: id } as never);
+  const authorId = authorOfTelegramMessage(replyToMessageId);
+  if (!authorId) return undefined;
+
+  const participant = conversation.participants.find(
+    (p) => p.kind === 'agent' && p.id === authorId,
+  );
+  return participant?.kind === 'agent' ? participant.handle : undefined;
 }
 
 /**
@@ -96,14 +100,21 @@ export async function handleInbound(
     run?: (agentId: string, prompt: string) => Promise<void>;
   },
 ): Promise<{ handled: boolean; reply?: string; agentId?: string }> {
-  const { room, reply } = targetRoom(message.text);
+  const room = roomFor(message);
 
-  if (reply && !room) {
-    await sendPlain(deps.token, deps.chatId, reply);
-    return { handled: true, reply };
+  if (!room) {
+    /*
+     * Nothing is bound here. Say so rather than answering into some other
+     * conversation — a message that goes to the wrong room is worse than
+     * one that goes nowhere.
+     */
+    await sendPlain(
+      deps.token,
+      deps.chatId,
+      'This chat is not connected to a WispCrew conversation yet.',
+    );
+    return { handled: true };
   }
-  if (!room) return { handled: false };
-  if (reply) await sendPlain(deps.token, deps.chatId, reply);
 
   const agent = room.participants.find((p) => p.kind === 'agent');
   if (!agent) {
@@ -111,8 +122,18 @@ export async function handleInbound(
     return { handled: true };
   }
 
-  // A `/room` switch is a command, not something to answer.
-  if (/^\/(room|rooms)\b/i.test(message.text.trim())) return { handled: true };
+  /*
+   * A reply outranks everything except an explicit mention.
+   *
+   * Prefixing the handle rather than passing it separately keeps one
+   * addressing mechanism: the floor rules already know what `@handle` means,
+   * and a second path into them would be a second thing to keep correct.
+   */
+  const replied = repliedAgent(room, message.replyToMessageId);
+  const prompt =
+    replied && !/(?:^|\s)@[a-z0-9]/i.test(message.text)
+      ? `@${replied} ${message.text}`
+      : message.text;
 
   /*
    * Record the user's message as their own turn, attributed to the door it
@@ -122,21 +143,16 @@ export async function handleInbound(
    * message from a bot, and what lets the agent see one continuous
    * conversation.
    */
-  store.upsertTranscriptEntry(room.id, {
-    kind: 'message',
-    id: store.newId('usr'),
-    role: 'user',
-    content: message.text,
-    authorId: LOCAL_HUMAN_ID,
-    via: 'telegram' as ChannelId,
-    createdAt: Date.now(),
-  });
+
 
   const record = store.listAgents().find((a) => a.id === agent.id);
   const progress = startProgress({
     token: deps.token,
-    chatId: deps.chatId,
+    chatId: message.chatId,
+    threadId: message.threadId,
     agentName: record?.name ?? room.title,
+    // So replying to this message addresses this agent.
+    agentId: agent.id,
   });
 
   /*
@@ -162,9 +178,36 @@ export async function handleInbound(
      * anyone holding the user's phone — the exact case the per-channel
      * policy exists to prevent.
      */
-    await (deps.run
-      ? deps.run(agent.id, message.text)
-      : runPrompt(agent.id, message.text, [], undefined, 'telegram'));
+    /*
+     * Through the room, with the Telegram message id as the entry id.
+     *
+     * The inbox replays anything it has not acknowledged, so the same
+     * message genuinely can arrive twice — this is the path where duplicate
+     * suppression matters most, and it was the one without it.
+     */
+    const result = await runRoomTurn({
+      conversationId: room.id,
+      text: prompt,
+      speakerId: LOCAL_HUMAN_ID,
+      channel: 'telegram',
+      entryId: `tg_${message.chatId}_${message.messageId}`,
+      // The test seam only cares about (agentId, prompt); the rest of the
+      // real signature is accepted and ignored.
+      run: deps.run as Parameters<typeof runRoomTurn>[0]['run'],
+    });
+
+    /*
+     * A failure is reported as a failure.
+     *
+     * The room catches a throwing agent so it cannot take down the others,
+     * which meant this path saw a "successful" turn with no answer and said
+     * "Done, with nothing to report" — confidently wrong, and worse than
+     * saying nothing.
+     */
+    if (result.failures?.length) {
+      await progress.fail(result.failures.map((f) => f.error).join('; '));
+      return { handled: true, agentId: agent.id };
+    }
 
     const transcript = store.loadTranscript(room.id);
     const answer = [...transcript]

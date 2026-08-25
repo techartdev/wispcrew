@@ -17,7 +17,7 @@
  * upserted by entry id, so interleaved streaming is already handled.
  */
 import type { ChannelId, ConversationRecord } from '@wispcrew/shared';
-import { getConversation, recordRoomEvent, updateConversation } from './conversations.js';
+import { createConversation, getConversation, recordRoomEvent, updateConversation } from './conversations.js';
 import { runPrompt } from './engine.js';
 import { fileLog } from './filelog.js';
 import { rememberAddressee, routeHumanMessage } from './floor.js';
@@ -49,6 +49,15 @@ export interface RoomTurnResult {
   ran: string[];
   /** Present when nobody acted, explaining why. */
   notice?: string;
+  /**
+   * Agents that started and did not finish.
+   *
+   * A failing agent is caught so it cannot take down the others, which left
+   * the caller unable to tell success from failure — Telegram reported
+   * "Done, with nothing to report" for a turn that had thrown. Worse than
+   * silence, because it is confidently wrong.
+   */
+  failures?: { agentId: string; handle: string; error: string }[];
 }
 
 /**
@@ -77,7 +86,29 @@ function agentTurnsSinceHuman(conversationId: string): number {
  * because nobody was addressed would be baffling.
  */
 export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult> {
-  const conversation = getConversation(input.conversationId);
+  let conversation = getConversation(input.conversationId);
+
+  /*
+   * An agent without a room gets one, here.
+   *
+   * Every send path now goes through this function, so "no room" means a
+   * silently dead conversation: the message is accepted and nothing ever
+   * happens. A suite caught exactly that — an agent created straight through
+   * the store had no room, and its transcript stayed empty.
+   *
+   * `createAgentWithRoom` covers the paths a user takes, but the store's own
+   * `createAgent` is used by tests, by migrations, and by any future caller
+   * who has not read this file. Healing here is cheap and removes a whole
+   * class of "why is nothing happening".
+   */
+  if (!conversation) {
+    const agent = store.listAgents().find((a) => a.id === input.conversationId);
+    if (agent) {
+      conversation = createConversation({ agentId: agent.id, agentName: agent.name });
+      fileLog('[room] created a missing room for', agent.name);
+    }
+  }
+
   if (!conversation) {
     return { ran: [], notice: 'That conversation no longer exists.' };
   }
@@ -102,6 +133,24 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
     authorId: input.speakerId,
     via: input.channel && input.channel !== 'app' ? input.channel : undefined,
     createdAt: Date.now(),
+    /*
+     * Metadata only.
+     *
+     * Base64 image data would add megabytes per message to the transcript
+     * file and is never re-sent from history — but the record that a file
+     * WAS attached belongs in the conversation, or a reader sees a question
+     * about an image that is not there.
+     */
+    ...((input.attachments ?? []).length
+      ? {
+          attachments: (input.attachments ?? []).map((a) => ({
+            name: a.name,
+            mimeType: a.mimeType,
+            size: a.size,
+            kind: a.kind,
+          })),
+        }
+      : {}),
   });
 
   const routing = routeHumanMessage({
@@ -151,6 +200,7 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
    * doing unrelated work.
    */
   const started: string[] = [];
+  const failures: NonNullable<RoomTurnResult['failures']> = [];
 
   await Promise.all(
     routing.speakers.map(async (agent) => {
@@ -205,6 +255,7 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
         // One agent failing must not take down the others.
         const message = (err as Error).message;
         updateTurn(turn.id, { state: 'failed', detail: message });
+        failures.push({ agentId: agent.id, handle: agent.handle, error: message });
         fileLog('[room] turn failed for', agent.handle, message);
 
         store.upsertTranscriptEntry(conversation.id, {
@@ -218,7 +269,7 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
     }),
   );
 
-  return { ran: started };
+  return { ran: started, ...(failures.length ? { failures } : {}) };
 }
 
 /**

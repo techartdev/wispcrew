@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  bindEndpoint,
   createAgent,
   createNodeCrypto,
   handleInbound,
@@ -56,8 +57,19 @@ globalThis.fetch = async (url, init) => {
   };
 };
 
+/*
+ * Each message gets a distinct id, as Telegram gives them.
+ *
+ * This fixture used to hardcode `messageId: 1`. That was harmless until
+ * turns became durable: the entry id is derived from the chat and message
+ * id, so every message in the suite claimed the same turn and everything
+ * after the first was correctly refused as a replay. The behaviour was
+ * right and the fixture was lying — a real Telegram message id increments.
+ */
+let nextMessageId = 1;
+
 const inbound = (text, extra = {}) => ({
-  messageId: 1,
+  messageId: nextMessageId++,
   chatId: '123',
   text,
   fromId: '456',
@@ -68,6 +80,11 @@ const inbound = (text, extra = {}) => ({
 const agent = createAgent({ name: 'Assistant' });
 migrateAgentsToConversations();
 const room = listConversations()[0];
+
+// The chat is a door onto this room. Without a binding an unbound chat is
+// correctly told it is not connected, rather than answered into whichever
+// room happened to be last.
+bindEndpoint({ conversationId: room.id, endpoint: { chatId: '123' }, label: 'test chat' });
 
 console.log('\n[a message becomes the user\'s own turn]');
 {
@@ -108,49 +125,14 @@ console.log('\n[progress] work is visible in a medium with no streaming');
   check('the answer edits the placeholder', Boolean(edit));
 }
 
-console.log('\n[rooms] the phone can be pointed at a conversation');
-{
-  const second = createAgent({ name: 'Local Infrastructure Eye' });
-  migrateAgentsToConversations();
-
-  sent.length = 0;
-  const listed = await handleInbound(inbound('/rooms'), { token: 'tok', chatId: '123' });
-  check('/rooms is answered', listed.handled === true);
-  const reply = sent.find((s) => s.method === 'sendMessage');
-  check('naming both rooms',
-    /Assistant/.test(reply?.text ?? '') && /Infrastructure/.test(reply?.text ?? ''),
-    reply?.text);
-
-  sent.length = 0;
-  let ran = null;
-  await handleInbound(inbound('/room Infrastructure'), {
-    token: 'tok',
-    chatId: '123',
-    run: async (agentId) => { ran = agentId; },
-  });
-  check('/room switches', sent.some((s) => /Now talking in/.test(s.text ?? '')),
-    JSON.stringify(sent.map((s) => s.text).slice(0, 2)));
-  // A switch is a command, not something to answer.
-  check('and does not run a turn', ran === null, String(ran));
-
-  // The choice persists, so the next message goes to the new room.
-  ran = null;
-  await handleInbound(inbound('what is up'), {
-    token: 'tok',
-    chatId: '123',
-    run: async (agentId) => { ran = agentId; },
-  });
-  check('the next message goes there', ran === second.id, `${ran} vs ${second.id}`);
-}
-
-console.log('\n[unknown room] a bad name lists the real ones');
-{
-  sent.length = 0;
-  await handleInbound(inbound('/room nonsense'), { token: 'tok', chatId: '123' });
-  const reply = sent.find((s) => s.method === 'sendMessage');
-  check('it says no match', /No conversation matches/.test(reply?.text ?? ''), reply?.text);
-  check('and offers the alternatives', /Assistant/.test(reply?.text ?? ''));
-}
+/*
+ * `/rooms` and `/room` are gone.
+ *
+ * Routing is a lookup on (chat, thread) — see telegram-routing-test.mjs,
+ * which also pins the misrouting the old selection mechanism guaranteed:
+ * two topics in one group are two rooms, with nothing remembered between
+ * messages.
+ */
 
 console.log('\n[failure] a turn that throws still reports back');
 {
@@ -167,6 +149,36 @@ console.log('\n[failure] a turn that throws still reports back');
   const told = sent.some((s) => /Could not finish/.test(s.text ?? ''));
   check('the user is told', told, JSON.stringify(sent.map((s) => s.text).slice(0, 3)));
   check('with the reason', sent.some((s) => /provider unreachable/.test(s.text ?? '')));
+}
+
+console.log('\n[replay] the same Telegram message is not acted on twice');
+{
+  /*
+   * The inbox redelivers anything it has not acknowledged, so the same
+   * message genuinely arrives again after a reconnect. Stable entry ids keep
+   * the transcript clean; the turn claim is what stops the WORK repeating —
+   * and on this path that could be a deploy.
+   */
+  const message = inbound('run the deploy');
+
+  let runs = 0;
+  const deps = {
+    token: 'tok',
+    chatId: '123',
+    run: async () => {
+      runs++;
+    },
+  };
+
+  await handleInbound(message, deps);
+  await handleInbound(message, deps);
+
+  check('the agent ran once', runs === 1, String(runs));
+
+  // A different message with the same text is a new instruction, not a
+  // replay, and must run.
+  await handleInbound(inbound('run the deploy'), deps);
+  check('but a genuinely new message still runs', runs === 2, String(runs));
 }
 
 globalThis.fetch = realFetch;
