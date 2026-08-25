@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWispcrew } from './useWispcrew';
-import { Sidebar, GhostMark } from './Sidebar';
+import { Sidebar, WispMark } from './Sidebar';
 import { Chat } from './Chat';
 import {
   AgentPanel,
@@ -138,7 +138,7 @@ export function App() {
   if (!ready) {
     return (
       <div className="boot">
-        <GhostMark size={44} />
+        <WispMark size={44} />
         <p className="muted">Starting WispCrew…</p>
       </div>
     );

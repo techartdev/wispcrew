@@ -1,51 +1,109 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  WispCrew mark. The artwork still shows the previous mascot and is due a redraw.
+  WispCrew mark.
+
+  Three wisps — a small crew — rising together. A will-o'-the-wisp is a light
+  that moves on its own in the dark, which is what this application actually
+  does: agents working unattended, on machines nobody is watching. Three
+  rather than one, because the name says crew and because the product is
+  moving toward rooms with several agents in them.
+
+  Design constraints, in the order they mattered:
+
+   * It must read at 16px. That rules out faces, thin outlines and interior
+     detail — at taskbar size those collapse into mud. Three filled shapes at
+     different heights survive because the SILHOUETTE carries the idea.
+   * It must not look like a ghost. The previous mascot was a Pac-Man-style
+     ghost with eyes, which is another product's visual language and was
+     never ours to borrow.
+   * It must work on light and dark desktops alike, so the shapes sit on
+     their own dark tile rather than relying on the OS background.
 
   Source of truth for every generated icon: run `node scripts/make-icons.mjs`
-  to rasterize this into build/icon.png (+ sizes) and to replace the vendored
-  app icon. Do not hand-edit the generated PNGs.
+  to rasterize this into build/icon.png (+ sizes). Do not hand-edit the
+  generated PNGs.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
   <defs>
+    <!-- The same near-black as the app chrome, so the icon belongs to it. -->
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#2b3140"/>
-      <stop offset="100%" stop-color="#141821"/>
+      <stop offset="0%" stop-color="#1c2330"/>
+      <stop offset="100%" stop-color="#0e1218"/>
     </linearGradient>
-    <linearGradient id="body" x1="0.2" y1="0" x2="0.8" y2="1">
-      <stop offset="0%" stop-color="#7ae7ff"/>
-      <stop offset="55%" stop-color="#39c2f0"/>
-      <stop offset="100%" stop-color="#1b8fd4"/>
+
+    <!--
+      Each wisp fades from bright at the head to transparent at the tail, so
+      it reads as something rising and dissipating rather than a solid blob.
+      The tail is what makes it a wisp rather than a flame.
+    -->
+    <linearGradient id="wisp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7fd8ff" stop-opacity="1"/>
+      <stop offset="55%" stop-color="#4aa8f0" stop-opacity="0.92"/>
+      <stop offset="100%" stop-color="#2b6fd0" stop-opacity="0"/>
     </linearGradient>
+
+    <linearGradient id="wispLead" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#eaf9ff" stop-opacity="1"/>
+      <stop offset="45%" stop-color="#7fd8ff" stop-opacity="0.96"/>
+      <stop offset="100%" stop-color="#3d8ae0" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- A soft halo, so the lights look emitted rather than painted on. -->
+    <radialGradient id="glow" cx="50%" cy="42%" r="52%">
+      <stop offset="0%" stop-color="#5fc8ff" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#5fc8ff" stop-opacity="0"/>
+    </radialGradient>
   </defs>
 
-  <!-- rounded-square app tile -->
   <rect x="0" y="0" width="256" height="256" rx="56" ry="56" fill="url(#bg)"/>
+  <circle cx="128" cy="120" r="96" fill="url(#glow)"/>
 
   <!--
-    Ghost body: domed head, straight sides, four tentacle scallops along the
-    bottom. Drawn as one path so it scales cleanly at 16px.
+    Three teardrops at different heights: a crew, not a formation. The tallest
+    leads slightly left of centre, because perfect symmetry looks static and
+    these are meant to be moving.
+
+    Each is drawn as two mirrored curves — rounded head, tapering tail — so
+    the outline stays smooth when scaled down.
   -->
-  <path fill="url(#body)" d="
-    M 48 196
-    L 48 122
-    a 80 80 0 0 1 160 0
-    L 208 196
-    q -10 14 -20 0
-    q -10 -14 -20 0
-    q -10 14 -20 0
-    q -10 -14 -20 0
-    q -10 14 -20 0
-    q -10 -14 -20 0
-    q -10 14 -20 0
+
+  <!--
+    Each wisp starts at its tail (bottom point) and opens into a ROUNDED
+    head, then closes back down. The first draft tapered at both ends, which
+    made them read as leaves; a wisp is a light with a trail behind it, so
+    the head has to be blunt and the tail sharp.
+  -->
+
+  <!-- Trailing wisp, left, smallest. -->
+  <path fill="url(#wisp)" d="
+    M 74 178
+    C 62 158, 58 140, 62 130
+    A 13 13 0 0 1 86 130
+    C 90 140, 86 158, 74 178
     Z"/>
 
-  <!-- eyes: white sclera + dark pupils looking slightly right -->
-  <ellipse cx="103" cy="120" rx="20" ry="24" fill="#ffffff"/>
-  <ellipse cx="157" cy="120" rx="20" ry="24" fill="#ffffff"/>
-  <ellipse cx="110" cy="125" rx="9.5" ry="11" fill="#16202c"/>
-  <ellipse cx="164" cy="125" rx="9.5" ry="11" fill="#16202c"/>
-  <!-- catchlights -->
-  <circle cx="105.5" cy="117" r="3.2" fill="#ffffff" opacity="0.95"/>
-  <circle cx="159.5" cy="117" r="3.2" fill="#ffffff" opacity="0.95"/>
+  <!-- Lead wisp, centre, tallest and brightest. -->
+  <path fill="url(#wispLead)" d="
+    M 124 200
+    C 102 168, 96 136, 103 122
+    A 22 22 0 0 1 145 122
+    C 152 136, 146 168, 124 200
+    Z"/>
+
+  <!-- Trailing wisp, right, medium. -->
+  <path fill="url(#wisp)" d="
+    M 180 186
+    C 166 162, 162 142, 167 131
+    A 15 15 0 0 1 193 131
+    C 198 142, 194 162, 180 186
+    Z"/>
+
+  <!--
+    A bright core inside each head. At small sizes these merge with the body
+    and simply make the tops read as light sources; at large sizes they give
+    the shapes depth.
+  -->
+  <ellipse cx="124" cy="122" rx="10" ry="11" fill="#ffffff" opacity="0.9"/>
+  <ellipse cx="74" cy="132" rx="6" ry="6.5" fill="#ffffff" opacity="0.65"/>
+  <ellipse cx="180" cy="133" rx="7" ry="7.5" fill="#ffffff" opacity="0.65"/>
 </svg>
