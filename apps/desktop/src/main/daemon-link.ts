@@ -28,6 +28,7 @@ import path from 'node:path';
 import { app } from 'electron';
 import {
   connectNode,
+  engineBuildStamp,
   fileLog,
   readEndpoint,
   type NodeClient,
@@ -139,6 +140,40 @@ export async function linkToDaemon(
 
   let endpoint = readEndpoint(dataDir);
   let started = false;
+
+  /*
+   * Replace a daemon running older code than ours.
+   *
+   * A daemon deliberately outlives the app, so it keeps whatever it loaded
+   * at startup. After an upgrade the UI is new and the engine is not, and
+   * nothing about that is visible: bugs stay fixed in the code and broken in
+   * the running process.
+   *
+   * This bit us for real. A shell-quoting fix was built and committed, and
+   * the daemon that had started eleven minutes earlier carried on mangling
+   * commands, so the fix appeared not to work.
+   *
+   * Restarting is safe because the daemon owns nothing but its own process:
+   * the store is on disk, and a fresh one picks up exactly where this left
+   * off.
+   */
+  if (endpoint && typeof endpoint.buildStamp === 'number') {
+    const ours = engineBuildStamp();
+    if (ours > 0 && endpoint.buildStamp > 0 && endpoint.buildStamp < ours) {
+      fileLog(
+        '[daemon-link] daemon is running older code; restarting it',
+        `(daemon ${new Date(endpoint.buildStamp).toISOString()} < app ${new Date(ours).toISOString()})`,
+      );
+      try {
+        process.kill(endpoint.pid);
+      } catch {
+        /* already gone */
+      }
+      // Give it a moment to release the socket before a new one binds.
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      endpoint = null;
+    }
+  }
 
   if (!endpoint) {
     const entry = daemonEntry();

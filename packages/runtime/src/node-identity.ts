@@ -14,6 +14,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const ENDPOINT_FILE = 'node-endpoint.json';
@@ -26,6 +27,40 @@ export interface NodeEndpoint {
   pid: number;
   nodeName: string;
   startedAt: number;
+  /**
+   * When the engine code this daemon loaded was last built.
+   *
+   * A daemon is long-lived by design: it survives the app quitting, which is
+   * the whole point. The consequence is that it keeps running whatever code
+   * it started with, so after an upgrade — or a developer rebuild — the UI
+   * can be new while the engine is old.
+   *
+   * That is not theoretical. A shell-quoting fix was built, tested and
+   * committed, and the running daemon carried on using the broken version
+   * for the next hour, because nothing had told it to reload. The symptoms
+   * looked like the fix had not worked.
+   *
+   * A client compares this against its own build stamp and restarts a
+   * daemon that is older.
+   */
+  buildStamp?: number;
+}
+
+/**
+ * When the currently loaded engine code was built.
+ *
+ * Uses this module's own file time: it is rebuilt whenever the runtime is,
+ * needs no build step to inject a version, and is honest about what is
+ * actually loaded rather than what a package.json claims.
+ */
+export function engineBuildStamp(): number {
+  try {
+    return Math.floor(fs.statSync(fileURLToPath(import.meta.url)).mtimeMs);
+  } catch {
+    // Unknowable — treated as "always current" so a packaging quirk cannot
+    // put a client into a restart loop.
+    return 0;
+  }
 }
 
 /**

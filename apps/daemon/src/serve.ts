@@ -28,6 +28,7 @@ import {
   syncMcpServers,
   addEventSink,
   clearEndpoint,
+  engineBuildStamp,
   generateToken,
   host,
   loadOrCreateIdentity,
@@ -252,6 +253,9 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
       pid: process.pid,
       nodeName: env.nodeName,
       startedAt: Date.now(),
+      // Lets a client notice it is talking to an engine older than its own
+      // code and restart it, instead of silently using stale behaviour.
+      buildStamp: engineBuildStamp(),
     });
   }
 
