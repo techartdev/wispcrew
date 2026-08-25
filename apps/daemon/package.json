@@ -5,6 +5,18 @@
   "description": "ghostbot serve — the headless GhostBot engine as a long-running process.",
   "license": "MIT",
   "type": "module",
+  "main": "./dist/serve.js",
+  "types": "./dist/serve.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/serve.d.ts",
+      "default": "./dist/serve.js"
+    },
+    "./host": {
+      "types": "./dist/daemon-host.d.ts",
+      "default": "./dist/daemon-host.js"
+    }
+  },
   "bin": {
     "ghostbot": "./dist/cli.js"
   },
