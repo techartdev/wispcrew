@@ -90,6 +90,10 @@ export const shellTool: Tool<ShellArgs> = {
       try {
         child = spawn(shell, shellArgs, {
           cwd,
+          // POSIX only: make the child its own group leader so a timeout can
+          // signal the whole group. Windows has no groups; taskkill /T is used
+          // there instead.
+          detached: !isWin,
           env: { ...process.env, ...(ctx.env ?? {}) },
           windowsHide: true,
           stdio: ['ignore', 'pipe', 'pipe'],
@@ -109,13 +113,40 @@ export const shellTool: Tool<ShellArgs> = {
       let stderr = '';
       let timedOut = false;
 
+      /*
+       * Kill the whole process tree, not just the shell we spawned.
+       *
+       * `child.kill` signals `cmd.exe` or `/bin/sh`, and its descendants
+       * survive — an `ssh` still waiting on a host keeps running, and keeps
+       * holding the stdio pipes. Beyond hanging the tool, that leaves real
+       * processes behind every time a command times out.
+       *
+       * Windows has no process groups, so `taskkill /T` is the documented
+       * way. On POSIX the child is its own group leader (see `detached`
+       * below), so a negative pid signals the group.
+       */
+      const killTree = () => {
+        try {
+          if (isWin && child.pid) {
+            spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+              stdio: 'ignore',
+            }).unref();
+          } else if (child.pid) {
+            process.kill(-child.pid, 'SIGKILL');
+          }
+        } catch {
+          // Already gone, or the group vanished between check and signal.
+          try {
+            child.kill('SIGKILL');
+          } catch {
+            /* nothing left to kill */
+          }
+        }
+      };
+
       const timer = setTimeout(() => {
         timedOut = true;
-        try {
-          child.kill('SIGKILL');
-        } catch {
-          /* already dead */
-        }
+        killTree();
       }, timeoutMs);
 
       child.stdout?.on('data', (d: Buffer) => {
@@ -124,7 +155,7 @@ export const shellTool: Tool<ShellArgs> = {
           stdout = stdout.slice(0, 200_000) + '\n...[stdout truncated]';
           timedOut = true;
           try {
-            child.kill('SIGKILL');
+            killTree();
           } catch {
             /* noop */
           }
@@ -146,8 +177,30 @@ export const shellTool: Tool<ShellArgs> = {
         });
       });
 
-      child.on('close', (code, signal) => {
+      /*
+       * Settle on `exit`, not `close`.
+       *
+       * `close` waits for every stdio pipe to be closed, which is a
+       * different event from the process ending. A command that spawns
+       * children — `ssh`, a shell with a background job, anything that
+       * daemonises — hands those pipes to descendants that keep them open
+       * after the parent is killed.
+       *
+       * Measured on Windows: killing even a plain `ping` emitted `exit` with
+       * no `close` at all. So a timed-out command never resolved, the tool
+       * call never returned, and the agent sat on "Running" forever with no
+       * way to recover short of restarting. That is what a user saw with an
+       * `ssh` waiting on an unreachable host.
+       *
+       * Resolving here can lose the last few bytes still in flight, which is
+       * a small price for a tool call that always returns.
+       */
+      let settled = false;
+      const finish = (code: number | null, signal: NodeJS.Signals | null) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
+
         const content = [
           timedOut ? `[timed out after ${timeoutMs}ms]` : '',
           stdout ? `--- stdout ---\n${stdout}` : '',
@@ -156,6 +209,7 @@ export const shellTool: Tool<ShellArgs> = {
         ]
           .filter(Boolean)
           .join('\n');
+
         resolve({
           id: '',
           name: 'shell',
@@ -164,7 +218,20 @@ export const shellTool: Tool<ShellArgs> = {
           content,
           data: { exitCode: code, signal: signal ?? null, timedOut },
         });
+      };
+
+      /*
+       * Prefer `close` when it arrives, because it guarantees all output has
+       * been read. `exit` is the backstop that guarantees we answer at all.
+       *
+       * The short grace period lets a well-behaved command deliver its last
+       * chunk; a command whose descendants hold the pipes simply never fires
+       * `close`, and the timer settles it instead.
+       */
+      child.on('exit', (code, signal) => {
+        setTimeout(() => finish(code, signal), 150).unref?.();
       });
+      child.on('close', (code, signal) => finish(code, signal));
     });
   },
 };
