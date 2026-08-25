@@ -17,93 +17,93 @@ import type { BridgeEvent, GhostBridge } from '@wispcrew/shared';
 const bridge: GhostBridge = {
   onEvent(listener: (event: BridgeEvent) => void): () => void {
     const handler = (_e: Electron.IpcRendererEvent, event: BridgeEvent) => listener(event);
-    ipcRenderer.on('gb:event', handler);
+    ipcRenderer.on('wc:event', handler);
     return () => {
-      ipcRenderer.removeListener('gb:event', handler);
+      ipcRenderer.removeListener('wc:event', handler);
     };
   },
 
   /* agents */
-  listAgents: () => ipcRenderer.invoke('gb:listAgents'),
-  createAgent: (patch) => ipcRenderer.invoke('gb:createAgent', patch),
-  updateAgent: (id, patch) => ipcRenderer.invoke('gb:updateAgent', id, patch),
-  deleteAgent: (id) => ipcRenderer.invoke('gb:deleteAgent', id),
-  duplicateAgent: (id) => ipcRenderer.invoke('gb:duplicateAgent', id),
+  listAgents: () => ipcRenderer.invoke('wc:listAgents'),
+  createAgent: (patch) => ipcRenderer.invoke('wc:createAgent', patch),
+  updateAgent: (id, patch) => ipcRenderer.invoke('wc:updateAgent', id, patch),
+  deleteAgent: (id) => ipcRenderer.invoke('wc:deleteAgent', id),
+  duplicateAgent: (id) => ipcRenderer.invoke('wc:duplicateAgent', id),
 
   /* conversation */
-  getTranscript: (agentId, limit) => ipcRenderer.invoke('gb:getTranscript', agentId, limit),
+  getTranscript: (agentId, limit) => ipcRenderer.invoke('wc:getTranscript', agentId, limit),
   sendPrompt: (agentId, prompt, attachmentPaths) =>
-    ipcRenderer.invoke('gb:sendPrompt', agentId, prompt, attachmentPaths),
-  pickFiles: () => ipcRenderer.invoke('gb:pickFiles'),
-  interrupt: (agentId) => ipcRenderer.invoke('gb:interrupt', agentId),
-  clearConversation: (agentId) => ipcRenderer.invoke('gb:clearConversation', agentId),
+    ipcRenderer.invoke('wc:sendPrompt', agentId, prompt, attachmentPaths),
+  pickFiles: () => ipcRenderer.invoke('wc:pickFiles'),
+  interrupt: (agentId) => ipcRenderer.invoke('wc:interrupt', agentId),
+  clearConversation: (agentId) => ipcRenderer.invoke('wc:clearConversation', agentId),
   rewindConversation: (agentId, entryId, mode) =>
-    ipcRenderer.invoke('gb:rewindConversation', agentId, entryId, mode),
+    ipcRenderer.invoke('wc:rewindConversation', agentId, entryId, mode),
   branchConversation: (agentId, entryId) =>
-    ipcRenderer.invoke('gb:branchConversation', agentId, entryId),
+    ipcRenderer.invoke('wc:branchConversation', agentId, entryId),
   resolveApproval: (requestId, resolution) =>
-    ipcRenderer.invoke('gb:resolveApproval', requestId, resolution),
+    ipcRenderer.invoke('wc:resolveApproval', requestId, resolution),
 
   /* subscription sign-in */
-  listOAuthStatus: () => ipcRenderer.invoke('gb:listOAuthStatus'),
-  oauthSignIn: (vendor) => ipcRenderer.invoke('gb:oauthSignIn', vendor),
-  oauthSignOut: (vendor) => ipcRenderer.invoke('gb:oauthSignOut', vendor),
-  oauthImportFromCli: (vendor) => ipcRenderer.invoke('gb:oauthImportFromCli', vendor),
-  listDetectedCliSignIns: () => ipcRenderer.invoke('gb:listDetectedCliSignIns'),
+  listOAuthStatus: () => ipcRenderer.invoke('wc:listOAuthStatus'),
+  oauthSignIn: (vendor) => ipcRenderer.invoke('wc:oauthSignIn', vendor),
+  oauthSignOut: (vendor) => ipcRenderer.invoke('wc:oauthSignOut', vendor),
+  oauthImportFromCli: (vendor) => ipcRenderer.invoke('wc:oauthImportFromCli', vendor),
+  listDetectedCliSignIns: () => ipcRenderer.invoke('wc:listDetectedCliSignIns'),
 
   /* standing tool permissions */
-  listToolGrants: () => ipcRenderer.invoke('gb:listToolGrants'),
+  listToolGrants: () => ipcRenderer.invoke('wc:listToolGrants'),
   revokeToolGrant: (agentId, toolName) =>
-    ipcRenderer.invoke('gb:revokeToolGrant', agentId, toolName),
-  revokeAllToolGrants: () => ipcRenderer.invoke('gb:revokeAllToolGrants'),
+    ipcRenderer.invoke('wc:revokeToolGrant', agentId, toolName),
+  revokeAllToolGrants: () => ipcRenderer.invoke('wc:revokeAllToolGrants'),
 
   /* settings & providers */
-  getSettings: () => ipcRenderer.invoke('gb:getSettings'),
-  saveSettings: (patch) => ipcRenderer.invoke('gb:saveSettings', patch),
-  getPresets: () => ipcRenderer.invoke('gb:getPresets'),
-  getPersonas: () => ipcRenderer.invoke('gb:getPersonas'),
-  testConnection: (cfg) => ipcRenderer.invoke('gb:testConnection', cfg),
+  getSettings: () => ipcRenderer.invoke('wc:getSettings'),
+  saveSettings: (patch) => ipcRenderer.invoke('wc:saveSettings', patch),
+  getPresets: () => ipcRenderer.invoke('wc:getPresets'),
+  getPersonas: () => ipcRenderer.invoke('wc:getPersonas'),
+  testConnection: (cfg) => ipcRenderer.invoke('wc:testConnection', cfg),
 
   /* MCP */
-  listMcpServers: () => ipcRenderer.invoke('gb:listMcpServers'),
-  addMcpServer: (server) => ipcRenderer.invoke('gb:addMcpServer', server),
-  updateMcpServer: (name, patch) => ipcRenderer.invoke('gb:updateMcpServer', name, patch),
-  removeMcpServer: (name) => ipcRenderer.invoke('gb:removeMcpServer', name),
-  setMcpToolEnabled: (tool, enabled) => ipcRenderer.invoke('gb:setMcpToolEnabled', tool, enabled),
+  listMcpServers: () => ipcRenderer.invoke('wc:listMcpServers'),
+  addMcpServer: (server) => ipcRenderer.invoke('wc:addMcpServer', server),
+  updateMcpServer: (name, patch) => ipcRenderer.invoke('wc:updateMcpServer', name, patch),
+  removeMcpServer: (name) => ipcRenderer.invoke('wc:removeMcpServer', name),
+  setMcpToolEnabled: (tool, enabled) => ipcRenderer.invoke('wc:setMcpToolEnabled', tool, enabled),
 
   /* routines */
-  listRoutines: (agentId) => ipcRenderer.invoke('gb:listRoutines', agentId),
-  createRoutine: (patch) => ipcRenderer.invoke('gb:createRoutine', patch),
-  updateRoutine: (id, patch) => ipcRenderer.invoke('gb:updateRoutine', id, patch),
-  deleteRoutine: (id) => ipcRenderer.invoke('gb:deleteRoutine', id),
-  runRoutineNow: (id) => ipcRenderer.invoke('gb:runRoutineNow', id),
+  listRoutines: (agentId) => ipcRenderer.invoke('wc:listRoutines', agentId),
+  createRoutine: (patch) => ipcRenderer.invoke('wc:createRoutine', patch),
+  updateRoutine: (id, patch) => ipcRenderer.invoke('wc:updateRoutine', id, patch),
+  deleteRoutine: (id) => ipcRenderer.invoke('wc:deleteRoutine', id),
+  runRoutineNow: (id) => ipcRenderer.invoke('wc:runRoutineNow', id),
 
   /* skills */
-  listSkills: () => ipcRenderer.invoke('gb:listSkills'),
-  createSkill: (patch) => ipcRenderer.invoke('gb:createSkill', patch),
-  updateSkill: (id, patch) => ipcRenderer.invoke('gb:updateSkill', id, patch),
-  deleteSkill: (id) => ipcRenderer.invoke('gb:deleteSkill', id),
+  listSkills: () => ipcRenderer.invoke('wc:listSkills'),
+  createSkill: (patch) => ipcRenderer.invoke('wc:createSkill', patch),
+  updateSkill: (id, patch) => ipcRenderer.invoke('wc:updateSkill', id, patch),
+  deleteSkill: (id) => ipcRenderer.invoke('wc:deleteSkill', id),
 
   /* misc */
-  pickDirectory: () => ipcRenderer.invoke('gb:pickDirectory'),
-  openPath: (target) => ipcRenderer.invoke('gb:openPath', target),
-  getAppInfo: () => ipcRenderer.invoke('gb:getAppInfo'),
+  pickDirectory: () => ipcRenderer.invoke('wc:pickDirectory'),
+  openPath: (target) => ipcRenderer.invoke('wc:openPath', target),
+  getAppInfo: () => ipcRenderer.invoke('wc:getAppInfo'),
 
   // Paired machines. Each is named explicitly, like every other method here —
   // a generic passthrough would hand the whole IPC surface to the page.
-  listNodes: () => ipcRenderer.invoke('gb:listNodes'),
+  listNodes: () => ipcRenderer.invoke('wc:listNodes'),
   pairNode: (address: string, code: string, expectFingerprint?: string) =>
-    ipcRenderer.invoke('gb:pairNode', address, code, expectFingerprint),
-  forgetNode: (nodeId: string) => ipcRenderer.invoke('gb:forgetNode', nodeId),
+    ipcRenderer.invoke('wc:pairNode', address, code, expectFingerprint),
+  forgetNode: (nodeId: string) => ipcRenderer.invoke('wc:forgetNode', nodeId),
 
   // Recovering an earlier version of a conversation.
   // Notification channel setup.
-  testTelegram: () => ipcRenderer.invoke('gb:testTelegram'),
-  discoverChatId: () => ipcRenderer.invoke('gb:discoverChatId'),
+  testTelegram: () => ipcRenderer.invoke('wc:testTelegram'),
+  discoverChatId: () => ipcRenderer.invoke('wc:discoverChatId'),
 
-  listHistory: (agentId: string) => ipcRenderer.invoke('gb:listHistory', agentId),
+  listHistory: (agentId: string) => ipcRenderer.invoke('wc:listHistory', agentId),
   restoreHistory: (agentId: string, file: string) =>
-    ipcRenderer.invoke('gb:restoreHistory', agentId, file),
+    ipcRenderer.invoke('wc:restoreHistory', agentId, file),
 };
 
 contextBridge.exposeInMainWorld('wispcrew', bridge);

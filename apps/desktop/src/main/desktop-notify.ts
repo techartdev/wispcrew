@@ -44,7 +44,7 @@ function desktopChannel(): ChannelDeliverer {
         if (win) {
           if (win.isMinimized()) win.restore();
           win.focus();
-          win.webContents.send('gb:event', {
+          win.webContents.send('wc:event', {
             type: 'notice',
             level: 'info',
             text: `${message.agentName}: ${message.summary}`,

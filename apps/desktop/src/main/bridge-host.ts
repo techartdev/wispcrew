@@ -5,13 +5,13 @@
  * reverse-engineered protocol shim with ~30 explicit, typed handlers we own.
  *
  * Conventions:
- *  - One `ipcMain.handle` per bridge method, named `gb:<method>`. Electron
+ *  - One `ipcMain.handle` per bridge method, named `wc:<method>`. Electron
  *    has no wildcard channels, so the list is explicit by necessity — which
  *    is also what makes the attack surface reviewable.
  *  - Handlers return plain values and throw on failure. The preload converts
  *    a rejection into a rejected promise in the renderer; there are no
  *    `{ok,value}` envelopes to get subtly wrong.
- *  - Events are pushed to every live window via `gb:event`.
+ *  - Events are pushed to every live window via `wc:event`.
  *  - No secret ever leaves through this boundary. `getSettings` reports
  *    `hasApiKey`/`isEncrypted` only.
  */
@@ -245,7 +245,7 @@ export function emitEvent(event: BridgeEvent): void {
 export function attachWindowEventSink(): () => void {
   return addEventSink((event) => {
     for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) win.webContents.send('gb:event', event);
+      if (!win.isDestroyed()) win.webContents.send('wc:event', event);
     }
   });
 }
@@ -455,7 +455,7 @@ export function registerBridge(context: BridgeContext): void {
     };
     methods.set(name, invoke as (...args: unknown[]) => Promise<unknown>);
     if (context.exposeIpc !== false) {
-      ipcMain.handle(`gb:${name}`, async (_e, ...args) => invoke(...args));
+      ipcMain.handle(`wc:${name}`, async (_e, ...args) => invoke(...args));
     }
   };
 

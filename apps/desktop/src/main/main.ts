@@ -138,7 +138,7 @@ function buildMenu(): void {
           {
             label: 'Settings…',
             accelerator: isMac ? 'Cmd+,' : 'Ctrl+,',
-            click: () => mainWindow?.webContents.send('gb:event', { type: 'open-settings' }),
+            click: () => mainWindow?.webContents.send('wc:event', { type: 'open-settings' }),
           },
           { type: 'separator' },
           { role: 'reload' },
