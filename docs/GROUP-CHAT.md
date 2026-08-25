@@ -57,14 +57,17 @@ Who speaks is decided in this order:
    build on your platform?" is plainly for the room. Detected by a plural
    address or an explicit `@all`, not by guessing.
 
-3. **Otherwise the last-addressed agent continues.** A conversation with one
-   active agent behaves exactly as it does today — you do not tag anybody to
-   keep talking to the agent you are already talking to.
+3. **Otherwise the agent that speaker last addressed continues.** Tracked
+   per person, not per room: with two humans present, "the last-addressed
+   agent" is ambiguous, and inheriting a colleague's addressee would send
+   your message somewhere you never intended. A room with one human and one
+   agent therefore behaves exactly as it does today — you do not tag anybody
+   to keep talking to the agent you are already talking to.
 
 4. **An untagged agent may request the floor.** One short line: *"Windows
-   builder wants to add something."* The user grants it or ignores it. This
-   is how an agent that noticed something relevant gets to say so without
-   every agent piling in.
+   builder wants to add something."* Whoever is present grants it or ignores
+   it. This is how an agent that noticed something relevant gets to say so
+   without every agent piling in.
 
 ## Making requests cheap
 

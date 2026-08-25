@@ -29,27 +29,62 @@ mistake.
 A **conversation** becomes the root record. It has participants.
 
 ```
-   Conversation "Cross-platform test run"
-     ├── agent:   Linux builder      (on node "vps")
-     ├── agent:   Windows builder    (local)
-     ├── agent:   macOS builder      (on node "mini")
-     ├── channel: desktop            (this app)
-     └── channel: telegram           (your phone)
+   Room "Cross-platform test run"
+     ├── human:   you                 (desktop, telegram)
+     ├── human:   a colleague         (desktop)
+     ├── agent:   Linux builder       (on node "vps")
+     ├── agent:   Windows builder     (local)
+     └── agent:   macOS builder       (on node "mini")
 ```
 
-A participant is an **agent** or a **channel**. That single idea answers all
-three problems:
+A participant is a **human** or an **agent**. A **channel** is how a
+participant reaches the room — not a member of it.
 
-- *Talking from your phone* is adding your Telegram as a participant. It then
-  receives the history because it is **in** the conversation, and messages
-  you send arrive as ordinary user turns.
+That distinction took a correction to arrive at. An earlier draft made a
+channel a participant alongside agents, with no humans at all, which quietly
+assumed a single user. Two problems follow. A colleague could never join,
+which is a strange limitation in something called a crew. And attribution
+comes out wrong: a message from your phone is **"you, via Telegram"**, not
+"Telegram said" — the channel has no opinions and no memory, it is a door.
+
+So a human participant has one identity and any number of channels. Sitting
+at the desktop or replying from a train are the same person in the same
+conversation, which is exactly the property that makes leaving the house
+harmless.
+
+That answers all three problems:
+
+- *Talking from your phone* is attaching Telegram to yourself. The room then
+  reaches you there, and what you send arrives as your own turn — the same
+  turn it would have been from the desktop.
 - *Agents working together* is adding several agents. They share one
   transcript, so each sees the others' work.
-- *More places* is another kind of channel participant. The conversation does
-  not change.
+- *Someone else joining* is adding another human. Nothing else changes.
 
-A conversation starts with one agent, which is the setup step and the common
+A room starts with you and one agent, which is the setup step and the common
 case. Everything else is adding participants later.
+
+### Guests
+
+Membership does not have to be permanent. An agent may bring another agent
+into a room for a specific problem, and that agent may leave when it is done:
+
+```
+You      Why is this container crashing?
+Dev      This looks infrastructure-specific. Bringing Infra in.
+—        Infra joined, invited by Dev.
+Infra    The OOM killer took it at 03:12; the memory limit is 512MB.
+—        Infra left.
+```
+
+This falls out of membership being recorded as events rather than kept as
+state: a join is a thing that happened, at a time, caused by someone. Without
+that record a guest's arrival would be inexplicable to everyone else in the
+room, which is the same reason the events exist at all.
+
+An agent inviting another is a real grant, so it goes through approval like
+any other consequential act — but as one decision, not one per message. What
+it must not become is an agent quietly assembling a committee.
 
 ### Why a channel is a participant, not a delivery target
 
@@ -63,6 +98,48 @@ present.
 As a participant, "make this chat work from my phone" is one action with an
 obvious inverse. That is the shape you described, and it is better than what
 I had been sketching.
+
+## What is actually distinctive
+
+Multi-agent group chat is not a differentiator. GrokBot reportedly has it
+already — several bots in a room, `@name` addressing, agents handing work to
+each other, persistent membership. I could not confirm the specifics from
+public documentation, so treat that as reported rather than verified; but it
+is safest to assume the feature itself is table stakes.
+
+What is not table stakes is **where the room can be reached from**.
+
+If a room is a first-class record with participants, then a UI is just one
+door into it. The desktop app is a door. Telegram is a door. A future web
+view is a door. The conversation does not live in any of them.
+
+```
+                    Room
+                     │
+     ┌───────────────┼───────────────┐
+   human            agents        channels
+     │                              (doors)
+  ┌──┴──┐                        ┌────┴────┐
+desktop telegram              desktop   telegram
+```
+
+So the same conversation continues when you leave the house, and a reply
+typed on a train is your turn in the room rather than a message to a
+side-channel bot. Later, at the desk:
+
+```
+08:31  Architect
+08:35  Coder
+08:36  You · via Telegram
+08:41  Coder
+```
+
+That, plus being open source, self-hosted, and able to run agents on machines
+the user already owns, is a more defensible identity than "we also have group
+chats". The honest one-line version:
+
+> Open-source AI teammates you can reach from anywhere. One conversation —
+> humans and agents, desktop and phone.
 
 ## What this does *not* mean
 
@@ -143,10 +220,15 @@ Four kinds:
 
 | Event | Example |
 |---|---|
-| Membership | `User added participant @linux.` |
-| Channels | `User connected Telegram to this conversation.` |
-| Approvals | `User approved shell access for @windows.` |
-| Floor | `@macos asked to speak. User declined.` |
+| Membership | `Vanyo added @linux.` · `Dev invited @infra.` · `@infra left.` |
+| Channels | `Vanyo connected Telegram.` |
+| Approvals | `Vanyo approved shell access for @windows.` |
+| Floor | `@macos asked to speak. Vanyo declined.` |
+
+Events name **who** did it, not "the user". With more than one human in a
+room, "User added @linux" is ambiguous — and it is equally wrong when an
+*agent* brought in a guest, which is the case where knowing the cause matters
+most.
 
 Channel events matter more than they look: an agent that knows the
 conversation is now reachable from a phone may reasonably keep its answers
