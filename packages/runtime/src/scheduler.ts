@@ -112,6 +112,14 @@ async function tick(): Promise<void> {
       continue;
     }
 
+    /*
+     * A watch is woken by the filesystem, not by the clock.
+     *
+     * Skipped here so its empty cron expression is never parsed; the
+     * watch manager fires it directly.
+     */
+    if (routine.watchPath) continue;
+
     let fields;
     try {
       fields = parseCron(routine.cron);
@@ -206,6 +214,12 @@ export function isRoutineRunning(routineId: string): boolean {
 export function refreshNextRunTime(routineId: string): void {
   const routine = listRoutines().find((r) => r.id === routineId);
   if (!routine) return;
+  // A watch has no next run: it fires when files change.
+  if (routine.watchPath) {
+    updateRoutine(routineId, { nextRunAt: undefined });
+    return;
+  }
+
   // A one-shot already knows when it runs; there is no expression to evaluate.
   if (typeof routine.runAt === 'number') {
     updateRoutine(routineId, { nextRunAt: routine.enabled ? routine.runAt : undefined });

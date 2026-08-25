@@ -330,6 +330,8 @@ export function createRoutine(patch: Partial<RoutineRecord> & { agentId: string 
      */
     runAt: patch.runAt,
     selfScheduled: patch.selfScheduled,
+    watchPath: patch.watchPath,
+    watchPattern: patch.watchPattern,
     runs: [],
     createdAt: ts,
     updatedAt: ts,

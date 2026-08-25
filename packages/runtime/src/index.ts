@@ -27,6 +27,8 @@ export * from './grants.js';
 
 export * from './cron.js';
 export * from './scheduler.js';
+export * from './watch.js';
+export * from './watch-manager.js';
 
 export * from './agent-sessions.js';
 export * from './delegation.js';

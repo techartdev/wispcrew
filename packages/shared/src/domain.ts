@@ -194,6 +194,17 @@ export interface RoutineRecord {
   runAt?: number;
   /** True when the agent asked for this itself, for the UI to distinguish. */
   selfScheduled?: boolean;
+  /**
+   * Wake when files change under this directory, instead of on a schedule.
+   *
+   * A third trigger alongside cron and a one-shot `runAt`. Kept on the
+   * routine rather than as a separate concept because everything else —
+   * the agent, the prompt, the run history, enabling and disabling — is
+   * identical; only what wakes it differs.
+   */
+  watchPath?: string;
+  /** Only wake for paths matching this, e.g. "*.log". */
+  watchPattern?: string;
   /** The message handed to the agent when the routine fires. */
   prompt: string;
   enabled: boolean;

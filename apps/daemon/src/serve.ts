@@ -26,6 +26,8 @@ import {
   setApprovalAsker,
   setHost,
   startScheduler,
+  stopWatches,
+  syncWatches,
   stopScheduler,
   syncMcpServers,
   addEventSink,
@@ -173,6 +175,10 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
     fileLog('[daemon] mcp sync failed', err.message),
   );
 
+  // Watches wake the same routines through the same runner, so a
+  // file-triggered run records its history like a scheduled one.
+  syncWatches(runRoutine);
+
   startScheduler(runRoutine, () => {
     /* routine list changed; nothing to refresh without a UI attached */
   });
@@ -278,6 +284,7 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
     pairing: pairingOffer,
     async stop() {
       stopScheduler();
+      stopWatches();
       await listener?.close().catch(() => {});
       if (options.listen) clearEndpoint(env.dataDir);
       await closeAllMcp().catch(() => {});

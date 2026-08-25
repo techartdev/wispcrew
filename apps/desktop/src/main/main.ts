@@ -71,7 +71,7 @@ import {
   pushTranscript,
   requestApproval,
 } from './bridge-host.js';
-import { startScheduler, stopScheduler } from '@ghostbot/runtime';
+import { startScheduler, stopScheduler, stopWatches, syncWatches } from '@ghostbot/runtime';
 
 // Must run at module scope, BEFORE anything reads app.getPath('userData').
 // Electron caches the userData path on first access and otherwise derives it
@@ -421,6 +421,7 @@ app.whenReady().then(async () => {
       .catch((err) => fileLog('[mcp] initial sync failed', (err as Error).message));
 
     startScheduler(runRoutine, emitRoutines);
+    syncWatches(runRoutine, emitRoutines);
   }
 
   /*
@@ -461,6 +462,7 @@ app.on('before-quit', () => {
     return;
   }
   stopScheduler();
+  stopWatches();
   void closeAllMcp();
 });
 
