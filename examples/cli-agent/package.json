@@ -39,6 +39,7 @@
     "test:retention": "node src/retention-test.mjs",
     "test:tool-deadline": "node src/tool-deadline-test.mjs",
     "test:observation": "node src/observation-test.mjs",
+    "test:platform-audit": "node src/platform-audit-test.mjs",
     "test:pid-identity": "node src/pid-identity-test.mjs",
     "test:pairing": "node src/pairing-test.mjs",
     "test:node-registry": "node src/node-registry-test.mjs",
@@ -50,7 +51,7 @@
     "test:desktop-client": "node src/desktop-client-test.mjs",
     "test:daemon": "node src/daemon-test.mjs",
     "test:detached": "node src/detached-test.mjs",
-    "test": "npm run smoke && npm run test:provider && npm run test:mcp && npm run test:memory && npm run test:cron && npm run test:markdown && npm run test:attachments && npm run test:delegation && npm run test:sandbox && npm run test:branching && npm run test:grants && npm run test:errors && npm run test:oauth && npm run test:retry && npm run test:protocol && npm run test:single-writer && npm run test:forwarding && npm run test:steering && npm run test:shell-timeout && npm run test:shell-quoting && npm run test:stale-daemon && npm run test:pid-identity && npm run test:environment-prompt && npm run test:channels && npm run test:agent-channels && npm run test:self-schedule && npm run test:watch && npm run test:watch-routine && npm run test:migration && npm run test:checkpoint && npm run test:retention && npm run test:tool-deadline && npm run test:observation && npm run test:pairing && npm run test:node-registry && npm run test:nodes-ui && npm run test:history-ui && npm run test:routines-ui && npm run test:remote-node"
+    "test": "npm run smoke && npm run test:provider && npm run test:mcp && npm run test:memory && npm run test:cron && npm run test:markdown && npm run test:attachments && npm run test:delegation && npm run test:sandbox && npm run test:branching && npm run test:grants && npm run test:errors && npm run test:oauth && npm run test:retry && npm run test:protocol && npm run test:single-writer && npm run test:forwarding && npm run test:steering && npm run test:shell-timeout && npm run test:shell-quoting && npm run test:stale-daemon && npm run test:pid-identity && npm run test:platform-audit && npm run test:environment-prompt && npm run test:channels && npm run test:agent-channels && npm run test:self-schedule && npm run test:watch && npm run test:watch-routine && npm run test:migration && npm run test:checkpoint && npm run test:retention && npm run test:tool-deadline && npm run test:observation && npm run test:pairing && npm run test:node-registry && npm run test:nodes-ui && npm run test:history-ui && npm run test:routines-ui && npm run test:remote-node"
   },
   "dependencies": {
     "@wispcrew/shared": "0.1.0",
