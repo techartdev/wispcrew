@@ -30,6 +30,7 @@ import { attachmentsToPromptText } from '@ghostbot/runtime';
 import { rebuildHistory } from '@ghostbot/runtime';
 import {
   defaultSettings,
+  createNodeCrypto,
   initGrants,
   runPrompt,
   runRoutine,
@@ -53,6 +54,7 @@ import { buildMcpTools, syncMcpServers, closeAllMcp } from '@ghostbot/runtime';
 import { readSecrets, upsertSecrets } from '@ghostbot/runtime';
 import { migrateUserData } from './userdata-migration.js';
 import { electronHost } from './electron-host.js';
+import { handoffIsCurrent, writeDaemonSecrets } from './secrets-handoff.js';
 import * as store from '@ghostbot/runtime';
 import {
   attachWindowEventSink,
@@ -283,6 +285,27 @@ app.whenReady().then(async () => {
    */
   attachWindowEventSink();
   setApprovalAsker((agentId, req) => requestApproval(agentId, req));
+
+  /*
+   * Share this profile's credentials with a background daemon.
+   *
+   * The daemon cannot open the OS keychain, so without this it would run
+   * with zero providers and fail every routine. Refreshed whenever the
+   * secrets change, not merely when the file is absent — a provider added
+   * in the UI must reach the daemon too.
+   *
+   * This lowers protection on those keys from "OS keychain" to "readable by
+   * anything running as this user". See secrets-handoff.ts for why that is
+   * the right default on one machine, and why it never applies to a remote
+   * node: keys are written beside the profile, never sent anywhere.
+   */
+  try {
+    if (!handoffIsCurrent(userDataDir, createNodeCrypto(userDataDir))) {
+      writeDaemonSecrets(userDataDir);
+    }
+  } catch (err) {
+    fileLog('[main] secrets handoff failed', (err as Error).message);
+  }
 
   buildMenu();
   await createWindow();

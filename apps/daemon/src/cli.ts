@@ -6,6 +6,7 @@
  * the runtime, so it behaves identically under the desktop app.
  */
 import { serve } from './serve.js';
+import { nodeMethods } from './methods.js';
 import { daemonHost, defaultDataDir } from './daemon-host.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -100,7 +101,27 @@ async function main(): Promise<void> {
     return;
   }
 
-  const running = await serve({ host: env, verbose: Boolean(args.verbose) });
+  /*
+ * `--listen` is opt-in. A daemon used only for routines opens no socket at
+ * all: this process runs shell commands, and a listener nobody asked for is
+ * attack surface for no benefit. The desktop app passes it because it needs
+ * to drive the engine; a cron-only node on a VPS does not.
+ */
+  const listen = Boolean(args.listen);
+  const methods = listen ? nodeMethods() : null;
+
+  const running = await serve({
+    host: env,
+    verbose: Boolean(args.verbose),
+    listen,
+    onCall: methods
+      ? async (method, callArgs) => {
+          const fn = methods[method];
+          if (!fn) throw new Error(`Unknown method "${method}".`);
+          return (fn as (...a: unknown[]) => unknown)(...callArgs);
+        }
+      : undefined,
+  });
 
   const agents = listAgents();
   const routines = listRoutines().filter((r) => r.enabled !== false);

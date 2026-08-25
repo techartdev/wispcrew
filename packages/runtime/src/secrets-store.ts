@@ -28,9 +28,21 @@ export type SecretMap = Record<string, string>;
 
 const ENC_FILE = 'ghostbot-secrets.enc';
 const PLAIN_FILE = 'ghostbot-secrets.json';
+/**
+ * A copy the desktop app writes for a background daemon.
+ *
+ * The primary store is encrypted with whatever backend wrote it — usually
+ * the OS keychain, which a detached daemon cannot open. Rather than have the
+ * daemon silently see zero providers, the desktop re-encrypts the same
+ * secrets with the machine-local key file and leaves them here.
+ */
+const NODE_FILE = 'ghostbot-secrets-node.enc';
 
 function encPath(userDataDir: string): string {
   return path.join(userDataDir, ENC_FILE);
+}
+function nodePath(userDataDir: string): string {
+  return path.join(userDataDir, NODE_FILE);
 }
 function plainPath(userDataDir: string): string {
   return path.join(userDataDir, PLAIN_FILE);
@@ -94,6 +106,26 @@ export function readSecrets(userDataDir: string): SecretMap {
        * be loud. Silently reporting "no API key" for providers the user
        * definitely configured is a maddening thing to debug.
        */
+      /*
+       * Before giving up: the desktop app may have left a copy encrypted
+       * for exactly this situation. Trying it here is what lets a detached
+       * daemon use the providers the user configured in the UI, instead of
+       * reporting no keys for a profile that plainly has them.
+       */
+      const shared = nodePath(userDataDir);
+      if (fs.existsSync(shared)) {
+        try {
+          const json = host().crypto.decrypt(fs.readFileSync(shared));
+          const parsed = JSON.parse(json) as SecretMap;
+          if (parsed && typeof parsed === 'object') {
+            fileLog('[secrets] using the copy shared by the desktop app');
+            return parsed;
+          }
+        } catch (shareErr) {
+          fileLog('[secrets] shared copy unreadable', (shareErr as Error).message);
+        }
+      }
+
       fileLog('[secrets] decrypt failed', (err as Error).message);
       fileLog(
         '[secrets] the store at',
