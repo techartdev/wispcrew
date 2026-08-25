@@ -13,13 +13,22 @@ import {
   AgentPanel,
   McpPanel,
   NewAgentPanel,
+  NodesPanel,
   RoutinesPanel,
   SettingsPanel,
   SkillsPanel,
 } from './Panels';
 import type { AgentRecord } from '@ghostbot/shared';
 
-type Panel = 'settings' | 'agent' | 'mcp' | 'routines' | 'skills' | 'new-agent' | null;
+type Panel =
+  | 'settings'
+  | 'agent'
+  | 'mcp'
+  | 'nodes'
+  | 'routines'
+  | 'skills'
+  | 'new-agent'
+  | null;
 
 export function App() {
   const { state, actions } = useGhostbot();
@@ -259,6 +268,7 @@ export function App() {
       {panel === 'agent' && selected && (
         <AgentPanel
           agent={selected}
+          nodes={state.nodes}
           presets={presets}
           personas={personas}
           onSave={(patch) => void actions.updateAgent(selected.id, patch)}
@@ -271,6 +281,17 @@ export function App() {
             setPanel(null);
           }}
           onPickDirectory={actions.pickDirectory}
+          onClose={() => setPanel(null)}
+        />
+      )}
+
+      {panel === 'nodes' && (
+        <NodesPanel
+          nodes={state.nodes}
+          agents={agents}
+          onPair={actions.pairNode}
+          onForget={actions.forgetNode}
+          onRefresh={() => void actions.refreshNodes()}
           onClose={() => setPanel(null)}
         />
       )}

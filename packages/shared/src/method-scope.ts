@@ -36,6 +36,20 @@ export const CLIENT_ONLY_METHODS = [
   'openPath',
   /** Describes the running application, which differs per client. */
   'getAppInfo',
+
+  /*
+   * Node management is the client's own business.
+   *
+   * The registry of paired machines, their tokens and their pinned
+   * fingerprints belong to whoever is doing the pairing. Nodes do not know
+   * about each other and there is no coordinator, so forwarding these to an
+   * engine asks a question it cannot answer — which is exactly what happened:
+   * a daemon replied `Unknown method "listNodes"` and the Machines panel came
+   * up empty.
+   */
+  'listNodes',
+  'pairNode',
+  'forgetNode',
 ] as const;
 
 export type ClientOnlyMethod = (typeof CLIENT_ONLY_METHODS)[number];

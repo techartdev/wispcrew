@@ -70,6 +70,11 @@ console.log('\n[scope] client-only methods are identified');
   for (const m of ['listAgents', 'sendPrompt', 'saveSettings', 'listMcpServers']) {
     check(`${m} is an engine method`, !isClientOnlyMethod(m));
   }
+  // Node management belongs to whoever is pairing. Forwarding it asked a
+  // daemon a question it cannot answer, and the Machines panel came up empty.
+  for (const m of ['listNodes', 'pairNode', 'forgetNode']) {
+    check(`${m} stays with the client`, isClientOnlyMethod(m));
+  }
 }
 
 console.log('\n[engine state] the node owns it');

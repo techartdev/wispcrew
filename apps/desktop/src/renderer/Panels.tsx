@@ -17,6 +17,7 @@ import type {
   GlobalSettings,
   McpServerRecord,
   McpServerStatus,
+  NodeSummary,
   PersonaView,
   PresetView,
   RoutineRecord,
@@ -574,6 +575,7 @@ export function SettingsPanel({
               />
             </label>
           )}
+
         </div>
 
         <div className="row-actions">
@@ -731,6 +733,7 @@ export function AgentPanel({
   agent,
   presets,
   personas,
+  nodes,
   onSave,
   onDelete,
   onDuplicate,
@@ -740,6 +743,8 @@ export function AgentPanel({
   agent: AgentRecord;
   presets: PresetView[];
   personas: PersonaView[];
+  /** Paired machines; empty when everything runs locally. */
+  nodes: NodeSummary[];
   onSave(patch: Partial<AgentRecord>): void;
   onDelete(): void;
   onDuplicate(): void;
@@ -752,6 +757,7 @@ export function AgentPanel({
   const [presetId, setPresetId] = useState(agent.presetId ?? '');
   const [model, setModel] = useState(agent.model ?? '');
   const [baseUrl, setBaseUrl] = useState(agent.baseUrl ?? '');
+  const [nodeId, setNodeId] = useState(agent.nodeId ?? '');
   const [workspaceRoot, setWorkspaceRoot] = useState(agent.workspaceRoot ?? '');
   const [policy, setPolicy] = useState<ApprovalPolicy | ''>(agent.approvalPolicy ?? '');
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -766,6 +772,9 @@ export function AgentPanel({
       presetId: presetId || undefined,
       model: model || undefined,
       baseUrl: baseUrl.trim() || undefined,
+      // Empty means this computer. `undefined` deletes the field, which is
+      // what "runs here" has always looked like on disk.
+      nodeId: nodeId || undefined,
       workspaceRoot: workspaceRoot || undefined,
       approvalPolicy: (policy || undefined) as ApprovalPolicy | undefined,
     });
@@ -869,6 +878,32 @@ export function AgentPanel({
           </label>
         )}
 
+        {/*
+          Only offered once a machine is paired. A picker with one option is
+          noise, and the idea is easier to meet at the moment it becomes real
+          than as a permanent field nobody uses.
+        */}
+        {nodes.length > 0 && (
+          <label className="field">
+            <span>
+              Runs on <em className="muted">— which machine does this agent's work</em>
+            </span>
+            <select value={nodeId} onChange={(e) => setNodeId(e.target.value)}>
+              <option value="">This computer</option>
+              {nodes.map((node) => (
+                <option key={node.id} value={node.id}>
+                  {node.name}
+                  {node.connected ? '' : ' (not reachable)'}
+                </option>
+              ))}
+            </select>
+            <span className="muted small">
+              This agent's conversation, files and provider keys live on the machine it runs
+              on. Changing it starts fresh there rather than moving anything across.
+            </span>
+          </label>
+        )}
+
         <label className="field">
           <span>Workspace folder</span>
           <div className="field-row">
@@ -926,6 +961,176 @@ export function AgentPanel({
           </button>
         </div>
       </footer>
+    </Modal>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Nodes — the machines that run your agents                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Pair and manage the machines an agent can run on.
+ *
+ * The mental model this screen has to convey: an agent lives on one machine,
+ * and that machine holds its conversation, its files and its credentials.
+ * Everything here is phrased around that rather than around connections.
+ */
+export function NodesPanel({
+  nodes,
+  agents,
+  onPair,
+  onForget,
+  onRefresh,
+  onClose,
+}: {
+  nodes: NodeSummary[];
+  agents: AgentRecord[];
+  onPair: (address: string, code: string, fingerprint?: string) => Promise<string | null>;
+  onForget: (nodeId: string) => Promise<boolean>;
+  onRefresh: () => void;
+  onClose: () => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [address, setAddress] = useState('');
+  const [code, setCode] = useState('');
+  const [fingerprint, setFingerprint] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setError(null);
+    if (!address.trim() || !code.trim()) {
+      setError('Enter the address of the machine and the code it is showing.');
+      return;
+    }
+    setBusy(true);
+    const failure = await onPair(address.trim(), code.trim(), fingerprint.trim() || undefined);
+    setBusy(false);
+    if (failure) {
+      setError(failure);
+      return;
+    }
+    setAdding(false);
+    setAddress('');
+    setCode('');
+    setFingerprint('');
+  };
+
+  /** How many agents would stop working if this node were forgotten. */
+  const agentsOn = (nodeId: string) => agents.filter((a) => a.nodeId === nodeId).length;
+
+  return (
+    <Modal title="Machines" onClose={onClose} wide>
+      <p className="muted">
+        Agents run on this computer unless you give them somewhere else. Pair a server, a
+        spare PC or a Raspberry Pi and an agent can live there instead — with its own files
+        and its own provider keys.
+      </p>
+
+      {nodes.length === 0 && !adding && (
+        <p className="muted">
+          No machines paired. Everything runs here.
+        </p>
+      )}
+
+      <div className="node-list">
+        {nodes.map((node) => {
+          const count = agentsOn(node.id);
+          return (
+            <div key={node.id} className="node-row">
+              <div className="node-main">
+                <strong>{node.name}</strong>
+                <span className={node.connected ? 'node-state online' : 'node-state offline'}>
+                  {node.connected ? 'connected' : 'not reachable'}
+                </span>
+              </div>
+              <div className="muted small">{node.address}</div>
+              <div className="muted small">
+                {count === 0
+                  ? 'No agents assigned'
+                  : `${count} agent${count === 1 ? '' : 's'} live here`}
+              </div>
+              {/* Shown so a user can compare it against the machine itself if
+                  they ever suspect they are talking to the wrong one. */}
+              <div className="muted tiny node-fingerprint">{node.fingerprint}</div>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={() => {
+                  const warning =
+                    count > 0
+                      ? `Forget ${node.name}? ${count} agent${count === 1 ? '' : 's'} live there ` +
+                        'and will stop working until you pair it again. Their conversations stay ' +
+                        'on that machine.'
+                      : `Forget ${node.name}?`;
+                  if (confirm(warning)) void onForget(node.id);
+                }}
+              >
+                Forget
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {adding ? (
+        <div className="stack">
+          <p className="muted small">
+            On the other machine run <code>ghostbot serve --listen --network --pair</code>.
+            It prints a code and a fingerprint.
+          </p>
+          <label>
+            Address
+            <input
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="192.168.1.50:8787"
+              autoFocus
+            />
+          </label>
+          <label>
+            Pairing code
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="ABCD-EFGH-JKLM"
+            />
+          </label>
+          <label>
+            Fingerprint (optional, recommended)
+            <input
+              value={fingerprint}
+              onChange={(e) => setFingerprint(e.target.value)}
+              placeholder="Paste the fingerprint the machine printed"
+            />
+          </label>
+          <p className="muted small">
+            Checking the fingerprint is what proves you are pairing with your machine and not
+            something pretending to be it. The code works once and expires in five minutes.
+          </p>
+          {error && <p className="error-text">{error}</p>}
+          <div className="row">
+            <button type="button" onClick={submit} disabled={busy}>
+              {busy ? 'Pairing…' : 'Pair'}
+            </button>
+            <button type="button" className="link-button" onClick={() => setAdding(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="row">
+          <button type="button" onClick={() => setAdding(true)}>
+            Pair a machine
+          </button>
+          {nodes.length > 0 && (
+            <button type="button" className="link-button" onClick={onRefresh}>
+              Refresh
+            </button>
+          )}
+        </div>
+      )}
     </Modal>
   );
 }

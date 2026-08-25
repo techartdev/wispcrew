@@ -1068,6 +1068,58 @@ body {
   font-size: 12.5px;
 }
 
+/* Paired machines. Each row states what would be lost by forgetting it,
+   because that is the decision the user is actually making. */
+.node-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.node-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.node-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.node-state {
+  font-size: 11.5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.node-state.online {
+  color: var(--ok, #4ade80);
+  border-color: currentColor;
+}
+
+.node-state.offline {
+  color: var(--text-dim);
+}
+
+/* Long, and only needed when verifying — so it does not compete with the
+   node's name for attention. */
+.node-fingerprint {
+  font-family: var(--mono);
+  word-break: break-all;
+  opacity: 0.55;
+}
+
+.tiny {
+  font-size: 10.5px;
+}
+
 /* Offered when the user has scrolled away from a live conversation, so
    leaving the bottom is reversible rather than a trap. */
 .jump-latest {

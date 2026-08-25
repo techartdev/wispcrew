@@ -43,7 +43,7 @@ interface SidebarProps {
   onSelect(id: string): void;
   onCreate(): void;
   onOpenSettings(): void;
-  onOpenPanel(panel: 'routines' | 'skills' | 'mcp'): void;
+  onOpenPanel(panel: 'routines' | 'skills' | 'mcp' | 'nodes'): void;
 }
 
 export function Sidebar({
@@ -142,6 +142,9 @@ export function Sidebar({
         </button>
         <button type="button" className="foot-btn" onClick={() => onOpenPanel('mcp')}>
           Plugins
+        </button>
+        <button type="button" className="foot-btn" onClick={() => onOpenPanel('nodes')}>
+          Machines
         </button>
         <button type="button" className="foot-btn" onClick={onOpenSettings}>
           Settings

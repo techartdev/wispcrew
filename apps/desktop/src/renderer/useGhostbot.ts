@@ -18,6 +18,7 @@ import type {
   BridgeEvent,
   DetectedSignIn,
   McpServerStatus,
+  NodeSummary,
   OAuthStatusView,
   PersonaView,
   PresetView,
@@ -42,6 +43,8 @@ export interface GhostbotState {
   presets: PresetView[];
   personas: PersonaView[];
   mcpServers: McpServerStatus[];
+  /** Machines paired with this client; empty until the user attaches one. */
+  nodes: NodeSummary[];
   routines: RoutineRecord[];
   skills: SkillRecord[];
   /** Transient banner messages (errors from the bridge, notices from main). */
@@ -57,6 +60,7 @@ export function useGhostbot() {
   const [presets, setPresets] = useState<PresetView[]>([]);
   const [personas, setPersonas] = useState<PersonaView[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServerStatus[]>([]);
+  const [nodes, setNodes] = useState<NodeSummary[]>([]);
   const [routines, setRoutines] = useState<RoutineRecord[]>([]);
   const [skills, setSkills] = useState<SkillRecord[]>([]);
   const [grants, setGrants] = useState<ToolGrant[]>([]);
@@ -89,7 +93,7 @@ export function useGhostbot() {
     let cancelled = false;
     void (async () => {
       try {
-        const [a, s, p, pe, m, r, sk, gr, oa, det] = await Promise.all([
+        const [a, s, p, pe, m, r, sk, gr, oa, det, nd] = await Promise.all([
           api.listAgents(),
           api.getSettings(),
           api.getPresets(),
@@ -100,6 +104,7 @@ export function useGhostbot() {
           api.listToolGrants(),
           api.listOAuthStatus(),
           api.listDetectedCliSignIns(),
+          api.listNodes(),
         ]);
         if (cancelled) return;
         // Defence in depth: main already repairs malformed stores, but a
@@ -118,6 +123,7 @@ export function useGhostbot() {
         setGrants(arr<ToolGrant>(gr));
         setOauthStatuses(arr<OAuthStatusView>(oa));
         setDetectedSignIns(arr<DetectedSignIn>(det));
+        setNodes(arr<NodeSummary>(nd));
         setSelectedId((prev) => prev ?? agentList[0]?.id ?? null);
         setReady(true);
       } catch (err) {
@@ -345,6 +351,45 @@ export function useGhostbot() {
       pickDirectory: api.pickDirectory,
       getAppInfo: api.getAppInfo,
 
+      /**
+       * Pair with a machine that is showing a code.
+       *
+       * Returns the error message rather than a boolean, because pairing
+       * fails for reasons the user can act on — a mistyped code, an
+       * unreachable host, a fingerprint that does not match — and "it didn't
+       * work" would leave them guessing which.
+       */
+      async pairNode(address: string, code: string, expectFingerprint?: string) {
+        try {
+          await api.pairNode(address, code, expectFingerprint);
+          setNodes(await api.listNodes());
+          return null;
+        } catch (err) {
+          return err instanceof Error ? err.message : String(err);
+        }
+      },
+
+      async forgetNode(nodeId: string) {
+        try {
+          setNodes(await api.forgetNode(nodeId));
+          // Agents that lived there are now unreachable, so refresh the
+          // roster to show it rather than leaving a stale "ready" state.
+          setAgents(await api.listAgents());
+          return true;
+        } catch (err) {
+          fail(err);
+          return false;
+        }
+      },
+
+      async refreshNodes() {
+        try {
+          setNodes(await api.listNodes());
+        } catch (err) {
+          fail(err);
+        }
+      },
+
       async addMcpServer(server: Parameters<typeof api.addMcpServer>[0]) {
         try {
           setMcpServers(await api.addMcpServer(server));
@@ -501,6 +546,7 @@ export function useGhostbot() {
       presets,
       personas,
       mcpServers,
+      nodes,
       routines,
       skills,
       grants,
