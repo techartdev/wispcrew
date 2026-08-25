@@ -56,6 +56,8 @@ import {
   addEventSink,
   addNode,
   emitEngineEvent,
+  listCheckpoints,
+  readCheckpoint,
   listNodes,
   pairWithNode,
   removeNode,
@@ -553,8 +555,54 @@ export function registerBridge(context: BridgeContext): void {
 
   handle('clearConversation', (agentId: string) => {
     clearSession(agentId);
-    store.clearTranscript(agentId);
+    // Named so the restore list says "cleared" rather than "write", which is
+    // the difference between a user recognising their own action and not.
+    store.saveTranscript(agentId, [], 'cleared');
     emitEvent({ type: 'run-state', agentId, state: 'idle' });
+  });
+
+  /* -- history recovery ----------------------------------------- */
+
+  /**
+   * Earlier versions of a conversation, newest first.
+   *
+   * Kept automatically whenever a write would remove entries — clearing,
+   * rewinding, or anything else that shortens the transcript.
+   */
+  handle('listHistory', (agentId: string) =>
+    listCheckpoints(ctx.userDataDir, agentId).map((point) => ({
+      file: point.file,
+      createdAt: point.createdAt,
+      entries: point.entries,
+      reason: point.reason,
+    })),
+  );
+
+  handle('restoreHistory', (agentId: string, file: string) => {
+    /*
+     * Restoring is itself a destructive write — it replaces whatever is
+     * there now. That write checkpoints too, so a mistaken restore is
+     * equally reversible and a user can step back and forth.
+     */
+    const entries = readCheckpoint(file);
+    if (!entries) {
+      throw new Error('That saved version could not be read.');
+    }
+    store.saveTranscript(agentId, entries, 'before restore');
+
+    /*
+     * Drop the in-memory session too.
+     *
+     * The agent holds its own message history for the conversation. Leaving
+     * it in place would mean the model still remembered what the transcript
+     * no longer shows — the UI and the agent disagreeing about what was
+     * said, which is worse than either version alone.
+     */
+    clearSession(agentId);
+
+    // The caller reloads the transcript, as `clearConversation` does. No new
+    // event type is needed for something the client already knows it did.
+    return entries;
   });
 
   handle('rewindConversation', (agentId: string, entryId: string, mode?: 'through' | 'before') => {
@@ -564,7 +612,8 @@ export function registerBridge(context: BridgeContext): void {
     // before the transcript was cleared or trimmed underneath it.
     if (kept === null) return entries;
 
-    store.saveTranscript(agentId, kept);
+    // Labelled so the recovery list distinguishes a rewind from a clear.
+    store.saveTranscript(agentId, kept, 'rewind');
     // Keep the live Agent's memory in step with what the user now sees;
     // otherwise the model would still remember the discarded turns.
     seedSessionHistory(agentId, rebuildHistory(kept));

@@ -305,6 +305,35 @@ export interface GhostBridge {
 
   /** Forget a node and delete its token. */
   forgetNode(nodeId: string): Promise<NodeSummary[]>;
+
+  /* -- history recovery ----------------------------------------- */
+
+  /**
+   * Earlier versions of a conversation, newest first.
+   *
+   * Kept automatically whenever a write would remove entries: clearing,
+   * rewinding, or anything else that shortens the transcript. A conversation
+   * that only grows produces none, because nothing was lost.
+   */
+  listHistory(agentId: string): Promise<HistoryPoint[]>;
+
+  /**
+   * Put a saved version back, returning the restored entries.
+   *
+   * The replaced transcript is itself checkpointed first, so a restore
+   * chosen by mistake can be undone the same way.
+   */
+  restoreHistory(agentId: string, file: string): Promise<TranscriptEntry[]>;
+}
+
+/** A recoverable earlier version of a conversation. */
+export interface HistoryPoint {
+  /** Opaque handle; pass back to `restoreHistory`. */
+  file: string;
+  createdAt: number;
+  entries: number;
+  /** What caused it to be kept, e.g. "cleared" or "rewind". */
+  reason: string;
 }
 
 /** A paired machine, as the UI sees it. */

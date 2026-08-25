@@ -13,18 +13,20 @@ import {
   AgentPanel,
   McpPanel,
   NewAgentPanel,
+  HistoryPanel,
   NodesPanel,
   RoutinesPanel,
   SettingsPanel,
   SkillsPanel,
 } from './Panels';
-import type { AgentRecord } from '@ghostbot/shared';
+import type { AgentRecord, HistoryPoint } from '@ghostbot/shared';
 
 type Panel =
   | 'settings'
   | 'agent'
   | 'mcp'
   | 'nodes'
+  | 'history'
   | 'routines'
   | 'skills'
   | 'new-agent'
@@ -33,6 +35,13 @@ type Panel =
 export function App() {
   const { state, actions } = useGhostbot();
   const [panel, setPanel] = useState<Panel>(null);
+  /*
+   * Loaded when the panel opens rather than kept in sync.
+   *
+   * Saved versions change only when something destructive happens, so
+   * subscribing to them would be churn for an list nobody is looking at.
+   */
+  const [historyPoints, setHistoryPoints] = useState<HistoryPoint[]>([]);
   /** Text lifted out of a message the user chose to retry, for the composer. */
   const [retryDraft, setRetryDraft] = useState<string | null>(null);
 
@@ -163,6 +172,15 @@ export function App() {
                 <button type="button" className="btn" onClick={() => setPanel('agent')}>
                   Configure
                 </button>
+                {/* Beside Clear chat on purpose: this is where someone
+                    realises they have lost something and looks for a way
+                    back. */}
+                <button type="button" className="btn" onClick={() => {
+                    void actions.listHistory().then(setHistoryPoints);
+                    setPanel('history');
+                  }}>
+                  History
+                </button>
                 <button
                   type="button"
                   className="btn"
@@ -281,6 +299,14 @@ export function App() {
             setPanel(null);
           }}
           onPickDirectory={actions.pickDirectory}
+          onClose={() => setPanel(null)}
+        />
+      )}
+
+      {panel === 'history' && (
+        <HistoryPanel
+          points={historyPoints}
+          onRestore={actions.restoreHistory}
           onClose={() => setPanel(null)}
         />
       )}

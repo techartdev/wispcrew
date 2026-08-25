@@ -95,6 +95,11 @@ const bridge: GhostBridge = {
   pairNode: (address: string, code: string, expectFingerprint?: string) =>
     ipcRenderer.invoke('gb:pairNode', address, code, expectFingerprint),
   forgetNode: (nodeId: string) => ipcRenderer.invoke('gb:forgetNode', nodeId),
+
+  // Recovering an earlier version of a conversation.
+  listHistory: (agentId: string) => ipcRenderer.invoke('gb:listHistory', agentId),
+  restoreHistory: (agentId: string, file: string) =>
+    ipcRenderer.invoke('gb:restoreHistory', agentId, file),
 };
 
 contextBridge.exposeInMainWorld('ghostbot', bridge);

@@ -16,6 +16,7 @@ import type {
   ApprovalPolicy,
   GlobalSettings,
   McpServerRecord,
+  HistoryPoint,
   McpServerStatus,
   NodeSummary,
   PersonaView,
@@ -964,6 +965,101 @@ export function AgentPanel({
     </Modal>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* History — getting a conversation back                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Earlier versions of a conversation, and a way to restore one.
+ *
+ * A transcript is written whole, so anything that shortens one used to lose
+ * the difference permanently. Versions are now kept automatically whenever a
+ * write removes entries; this is where they become reachable.
+ *
+ * Deliberately phrased around what happened rather than the mechanism: "58
+ * messages, before the chat was cleared" is what someone is looking for, not
+ * a checkpoint identifier.
+ */
+export function HistoryPanel({
+  points,
+  onRestore,
+  onClose,
+}: {
+  points: HistoryPoint[];
+  onRestore: (file: string) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+
+  /** Reasons read better as phrases than as bare labels. */
+  const describe = (reason: string) => {
+    switch (reason) {
+      case 'cleared':
+        return 'before the chat was cleared';
+      case 'rewind':
+        return 'before a rewind';
+      case 'before restore':
+        return 'before an earlier version was restored';
+      default:
+        return `before "${reason}"`;
+    }
+  };
+
+  return (
+    <Modal title="Conversation history" onClose={onClose} wide>
+      <p className="muted">
+        Earlier versions are kept whenever something removes messages — clearing the
+        chat, rewinding, or restoring. Nothing is saved while a conversation is only
+        growing, because nothing has been lost.
+      </p>
+
+      {points.length === 0 ? (
+        <p className="muted">No earlier versions. This conversation has not lost any messages.</p>
+      ) : (
+        <div className="node-list">
+          {points.map((point) => (
+            <div key={point.file} className="node-row">
+              <div className="node-main">
+                <strong>
+                  {point.entries} message{point.entries === 1 ? '' : 's'}
+                </strong>
+              </div>
+              <div className="muted small">{describe(point.reason)}</div>
+              <div className="muted small">{new Date(point.createdAt).toLocaleString()}</div>
+              <button
+                type="button"
+                className="btn"
+                disabled={busy !== null}
+                onClick={() => {
+                  // The current conversation is checkpointed before being
+                  // replaced, so this is reversible — worth saying, because
+                  // otherwise restoring feels like a one-way door.
+                  if (
+                    !confirm(
+                      `Restore ${point.entries} message${point.entries === 1 ? '' : 's'}? ` +
+                        'The current conversation is saved first, so you can come back to it.',
+                    )
+                  ) {
+                    return;
+                  }
+                  setBusy(point.file);
+                  void onRestore(point.file).then((ok) => {
+                    setBusy(null);
+                    if (ok) onClose();
+                  });
+                }}
+              >
+                {busy === point.file ? 'Restoring…' : 'Restore'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 
 /* ------------------------------------------------------------------ */
 /* Nodes — the machines that run your agents                           */

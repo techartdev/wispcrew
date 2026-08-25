@@ -312,6 +312,36 @@ export function useGhostbot() {
         }
       },
 
+      /** Earlier versions of the selected conversation, newest first. */
+      async listHistory() {
+        if (!selectedRef.current) return [];
+        try {
+          return await api.listHistory(selectedRef.current);
+        } catch (err) {
+          fail(err);
+          return [];
+        }
+      },
+
+      /**
+       * Put a saved version back.
+       *
+       * The restored entries come back from the call, so the view updates
+       * without a second round trip — and without depending on an event that
+       * a remote node would have to emit.
+       */
+      async restoreHistory(file: string) {
+        if (!selectedRef.current) return false;
+        try {
+          const entries = await api.restoreHistory(selectedRef.current, file);
+          setTranscript(Array.isArray(entries) ? entries : []);
+          return true;
+        } catch (err) {
+          fail(err);
+          return false;
+        }
+      },
+
       /**
        * Rewind, then optionally resend. `before` is "edit and retry": the
        * named message is dropped and its text handed back so the composer can

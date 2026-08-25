@@ -54,3 +54,4 @@ client-persistence.json
 # Debug screenshots at the repo root (GHOSTBOT_CAPTURE output)
 /*.png
 .panels-test.mjs
+.history-test.mjs

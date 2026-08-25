@@ -45,7 +45,10 @@ import {
   listGrants,
   listRoutines,
   listSkills,
+  listCheckpoints,
   loadTranscript,
+  readCheckpoint,
+  saveTranscript,
   newId,
   pushTranscript,
   statuses as mcpStatuses,
@@ -164,6 +167,30 @@ export function nodeMethods(): MethodTable {
     // The UI calls this `interrupt`; same operation, kept under both names so
     // a client does not need to know which engine it is talking to.
     interrupt: (id: never) => abortSession(id),
+
+    /*
+     * History recovery.
+     *
+     * Checkpoints live beside the transcript they protect, so a remote
+     * agent's saved versions are on the node, not on whichever machine the
+     * user happens to be sitting at.
+     */
+    listHistory: (id: never) =>
+      listCheckpoints(host().dataDir, id as unknown as string).map((point) => ({
+        file: point.file,
+        createdAt: point.createdAt,
+        entries: point.entries,
+        reason: point.reason,
+      })),
+    restoreHistory: (id: never, file: never) => {
+      const agentId = id as unknown as string;
+      const entries = readCheckpoint(file as unknown as string);
+      if (!entries) throw new Error('That saved version could not be read.');
+      // Checkpoint what is there now, so a mistaken restore is undoable too.
+      saveTranscript(agentId, entries, 'before restore');
+      clearSession(agentId);
+      return entries;
+    },
     clearConversation: (id: never) => {
       clearSession(id);
       clearTranscript(id);

@@ -286,7 +286,10 @@ export function upsertTranscriptEntry(agentId: string, entry: TranscriptEntry): 
 }
 
 export function clearTranscript(agentId: string): void {
-  saveTranscript(agentId, []);
+  // Named, so the recovery list reads "before the chat was cleared" rather
+  // than a generic "write". That label is the whole basis on which someone
+  // picks which saved version they want back.
+  saveTranscript(agentId, [], 'cleared');
 }
 
 /* ------------------------------------------------------------------ */

@@ -29,6 +29,11 @@ const AGENT_SCOPED = new Set([
   'duplicateAgent',
   'rewindConversation',
   'branchConversation',
+  // A remote agent's transcript lives on its node, so its saved versions do
+  // too. Answering these locally would list this machine's checkpoints for a
+  // conversation that never happened here.
+  'listHistory',
+  'restoreHistory',
 ]);
 
 interface Link {
