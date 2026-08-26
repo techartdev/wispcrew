@@ -45,6 +45,56 @@ The cost is real and is stated rather than hidden: **a cross-machine room
 needs a connected client.** Single-machine agents and routines are
 unaffected.
 
+### How to lift that limitation, when it becomes worth lifting
+
+The blocker is not trust or addressing — those are solved by pairing. It is
+**reachability**: a laptop behind NAT cannot accept an inbound connection, so
+even two nodes that trust each other have no way to meet.
+
+A relay solves it, and there is a well-worked design to borrow the *shape*
+of: [SCP2P](https://scp2p.com/) (§10, "NAT and reachability"). Three ideas
+are worth taking:
+
+**Reachability is a state, not an assumption.** A node is `direct` (accepts
+inbound), `outbound-only` (can dial, cannot be dialled), or `relayed`. Today
+WispCrew assumes every node is `direct`, which is why a home machine can only
+ever be reached by a client that dials it.
+
+**A relay is an ordinary node with a flag.** Not a service, not
+infrastructure, not something this project runs. A VPS the user already owns
+sets `relay = true`, and their laptop registers an outbound connection to it:
+
+```
+   laptop ──outbound──► vps (relay) ◄──dials── home server
+   (behind NAT)                                (behind NAT)
+```
+
+Both ends dial *out*, which every NAT permits. That is the whole trick, and
+it fits this project's "no central service" stance exactly — the relay is a
+machine the user chose, holding a slot, not their data.
+
+**Relay carries control, not bulk.** SCP2P's own caveat, and the right one:
+a relayed stream is for reaching a peer, not for shifting content through it.
+Agent turns are small — a prompt, a reply, tool results — so this suits them
+and would not suit file transfer.
+
+**The idea, not the implementation.** SCP2P is Rust, QUIC and CBOR; WispCrew
+is Node, TLS and NDJSON. Adopting the stack would mean a Rust dependency in a
+project whose stated rule is to prefer readable local code, and a wire format
+nobody can read in a log — this project has repeatedly found bugs by reading
+the wire. What transfers is the *design*: three reachability states, a
+slot-based relay role any node can take, and control-only traffic through it.
+
+One further idea worth remembering when pairing is next touched:
+`NodeId = SHA-256(public key)` makes a node's name *be* its key, so it cannot
+be impersonated by a re-issued certificate and stays stable across
+reinstalls. WispCrew pins a certificate fingerprint instead, which works and
+is weaker. Not worth a migration on its own; worth doing if pairing changes
+for another reason.
+
+**Not now.** The CLI comes first, and single-machine use — which is nearly
+everyone — does not need any of this.
+
 ## Agent visibility
 
 > "a node can have agents locally which are not directly exposed to remote
