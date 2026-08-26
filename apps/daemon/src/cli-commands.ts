@@ -10,7 +10,13 @@
  * extracting a provider key with a purpose-written probe, creating an agent
  * through a remote path that turned out to be broken.
  */
-import type { NodeClient } from '@wispcrew/runtime';
+import {
+  addNode,
+  listNodes,
+  pairWithNode,
+  removeNode,
+  type NodeClient,
+} from '@wispcrew/runtime';
 import type { Rendered } from './cli-output.js';
 import { table } from './cli-output.js';
 
@@ -20,6 +26,14 @@ export interface CommandContext {
   args: Record<string, string | boolean>;
   /** Positional arguments after the command name. */
   positional: string[];
+  /**
+   * This machine's profile.
+   *
+   * Needed by the few commands that read client-side state rather than the
+   * node's — the paired-machine registry is a record of who THIS machine
+   * trusts, which no node can answer for it.
+   */
+  dataDir: string;
 }
 
 const text = (args: Record<string, string | boolean>, name: string): string | undefined =>
@@ -457,8 +471,116 @@ export async function approvalsAnswer(
 /* machines                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Attach another machine from the command line.
+ *
+ * Runs in this process rather than through the daemon, because pairing
+ * writes to the CLIENT's registry — the record of machines *this* one trusts
+ * — and that is a different thing from the node's own state. `docs/
+ * NODES-MODEL.md` records why a headless machine may hold one at all.
+ *
+ * The fingerprint is optional but strongly wanted: comparing it against what
+ * the other machine printed is what stops someone intercepting the single
+ * moment in this protocol with nothing established to trust.
+ */
+export async function pair(ctx: CommandContext): Promise<Rendered> {
+  const [address, code] = ctx.positional;
+  if (!address || !code) {
+    throw new Error(
+      'Usage: wispcrew pair <address> <code> [--fingerprint <value>]\n' +
+        '  Run "wispcrew serve --network --pair" on the other machine for a code.',
+    );
+  }
+
+  const expectFingerprint = text(ctx.args, 'fingerprint');
+  if (!expectFingerprint && !ctx.args.yes) {
+    /*
+     * Refused rather than merely warned about.
+     *
+     * Pairing without checking the fingerprint trusts whatever answered the
+     * address, which on a hostile network is not necessarily the machine the
+     * user meant. `--yes` exists for the case where they have checked by
+     * some other means and know what they are doing.
+     */
+    throw new Error(
+      'Refusing to pair without a fingerprint to check.\n' +
+        '  The other machine printed one — pass it with --fingerprint,\n' +
+        '  or use --yes if you have verified it another way.',
+    );
+  }
+
+  const result = await pairWithNode(address, code, {
+    clientName: 'wispcrew-cli',
+    ...(expectFingerprint ? { expectFingerprint } : {}),
+  });
+
+  const record = addNode(ctx.dataDir, {
+    name: result.nodeName,
+    address,
+    token: result.token,
+    fingerprint: result.fingerprint,
+  });
+
+  return {
+    value: {
+      ok: true,
+      id: record.id,
+      name: record.name,
+      address: record.address,
+      fingerprint: record.fingerprint,
+    },
+    lines: [
+      `Paired with ${record.name}.`,
+      `  address      ${record.address}`,
+      `  fingerprint  ${record.fingerprint}`,
+      '',
+      /*
+       * Said here rather than left to be discovered. A daemon stores the
+       * peer but does not dial it, so pairing from a server records trust
+       * without yet routing work.
+       */
+      'Recorded on this machine. A daemon does not yet dial its peers,',
+      'so use the desktop to run agents that live on another machine.',
+    ],
+  };
+}
+
+export async function nodesForget(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) throw new Error('Which machine? Usage: wispcrew machines forget <name>');
+
+  const nodes = listNodes(ctx.dataDir);
+  const node =
+    nodes.find((n) => n.id === wanted) ??
+    nodes.find((n) => n.name?.toLowerCase() === wanted.toLowerCase());
+
+  if (!node) {
+    throw new Error(
+      `No machine called "${wanted}". Paired:\n` +
+        nodes.map((n) => `  ${n.name ?? n.id}`).join('\n'),
+    );
+  }
+
+  removeNode(ctx.dataDir, node.id);
+
+  return {
+    value: { ok: true, forgotten: node.id, name: node.name },
+    lines: [
+      `Forgot ${node.name ?? node.id}.`,
+      'Its token is deleted here; pair again to reattach.',
+    ],
+  };
+}
+
 export async function nodesList(ctx: CommandContext): Promise<Rendered> {
-  const nodes = await ctx.client.call<Record<string, unknown>[]>('listNodes');
+  /*
+   * Read locally, not through the daemon.
+   *
+   * The registry is the record of machines THIS one trusts — a client-side
+   * view, like the agent roster. Asking the node would return its own view,
+   * which is not the same question.
+   */
+  const nodes = listNodes(ctx.dataDir) as unknown as Record<string, unknown>[];
 
   const lines =
     nodes.length === 0
@@ -873,6 +995,30 @@ const COMMAND_SCHEMA = [
     summary: 'Other machines paired with this one.',
     args: [],
     returns: 'array of { id, name, address, fingerprint }',
+  },
+  {
+    name: 'machines forget',
+    summary: 'Drop a paired machine and delete its token here.',
+    args: [{ name: 'machine', required: true, positional: true, description: 'name or id' }],
+    returns: '{ ok, forgotten, name }',
+  },
+  {
+    name: 'pair',
+    summary: 'Attach another machine, using a code it printed.',
+    args: [
+      { name: 'address', required: true, positional: true, description: 'host or host:port' },
+      { name: 'code', required: true, positional: true, description: 'single-use, expires' },
+      {
+        name: '--fingerprint',
+        required: false,
+        description: 'what the other machine printed; checked before trusting it',
+      },
+      { name: '--yes', required: false, description: 'pair without checking a fingerprint' },
+    ],
+    returns: '{ ok, id, name, address, fingerprint }',
+    notes:
+      'Get a code with "wispcrew serve --network --pair" there. A daemon records ' +
+      'the peer but does not dial it yet, so run cross-machine work from the desktop.',
   },
   {
     name: 'configure',

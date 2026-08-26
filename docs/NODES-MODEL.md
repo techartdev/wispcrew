@@ -162,6 +162,35 @@ Also fixed: the Machines panel fetched reachability once at startup, before
 background links opened, and never again — so a connected machine was
 displayed permanently as "not reachable".
 
+## Can a headless machine hold a client registry?
+
+**Yes, and it should.** The question came up because pairing writes to the
+*client's* registry, and the CLI talks to a node — so `wispcrew pair` looked
+like it needed a design decision before it could exist.
+
+It does not. `nodes.json` lives in the data directory, which a daemon already
+owns, and `addNode` / `listNodes` / `removeNode` take a `dataDir` and import
+no Electron. Nothing about the registry is desktop-specific; it was simply
+only ever written by the desktop.
+
+What the desktop genuinely adds is **dialling**: `connectKnownNodes` opens
+links at startup and `routeForCall` sends agent-scoped calls to the machine
+that owns the agent. A daemon does neither, so a node that stores a peer
+would remember it and never talk to it.
+
+So the split is:
+
+| | desktop | daemon |
+|---|---|---|
+| pair, list, forget | yes | **yes** (new) |
+| dial known nodes at startup | yes | not yet |
+| route an agent's calls to its node | yes | not yet |
+
+`wispcrew pair` is therefore useful immediately — it attaches a machine and
+records the credential — and becomes *fully* useful when a daemon dials its
+peers too. Doing the first without the second is honest as long as the
+limitation is stated rather than discovered.
+
 ## A node forgets its clients when it restarts
 
 Found while verifying the fix below: a paired client stopped connecting, with

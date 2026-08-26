@@ -27,7 +27,9 @@ import {
   approvalsList,
   ask,
   capabilities,
+  nodesForget,
   nodesList,
+  pair,
   roomsAdd,
   roomsRemove,
   roomsShow,
@@ -65,6 +67,9 @@ wispcrew — run agents without a window open
   wispcrew tasks status <id>   the state of one
   wispcrew tasks wait <id>     block until it settles
   wispcrew tasks cancel <id>   stop an unfinished one
+  wispcrew pair <addr> <code>  attach another machine
+  wispcrew machines            machines paired with this one
+  wispcrew machines forget <name>
   wispcrew capabilities        what this binary can do, as data
   wispcrew rooms               list conversations
   wispcrew configure           set the provider, model and key
@@ -168,6 +173,9 @@ const CONNECTED: Record<string, (ctx: CommandContext) => Promise<Rendered>> = {
   'rooms add': roomsAdd,
   'rooms remove': roomsRemove,
   machines: nodesList,
+  'machines list': nodesList,
+  'machines forget': nodesForget,
+  pair,
   configure,
   settings: settingsShow,
 };
@@ -198,7 +206,7 @@ async function runConnectedCommand(
 
   try {
     const result = await withDaemon(dataDir, (client) =>
-      run({ client, args, positional }),
+      run({ client, args, positional, dataDir }),
     );
     emit(result, opts);
   } catch (err) {
