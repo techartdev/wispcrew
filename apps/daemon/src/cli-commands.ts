@@ -110,6 +110,35 @@ export async function agentsCreate(ctx: CommandContext): Promise<Rendered> {
   };
 }
 
+export async function agentsDelete(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) throw new Error('Which agent? Usage: wispcrew agents delete <name>');
+
+  const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+  const agent = findAgent(agents, wanted);
+
+  /*
+   * Deleting takes a conversation with it, so an ambiguous name must never
+   * be resolved by guessing — `findAgent` refuses rather than picking one.
+   *
+   * `--yes` is required in a script. A destructive command that proceeds
+   * because nobody was there to object is how an automation loses data it
+   * cannot get back.
+   */
+  if (ctx.args.yes !== true) {
+    throw new Error(
+      `This deletes "${agent.name}" and its conversation. Re-run with --yes to confirm.`,
+    );
+  }
+
+  await ctx.client.call('deleteAgent', [agent.id]);
+
+  return {
+    value: { ok: true, deleted: agent.id, name: agent.name },
+    lines: [`Deleted "${agent.name}".`],
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* settings                                                            */
 /* ------------------------------------------------------------------ */

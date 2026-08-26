@@ -21,6 +21,7 @@ import {
 } from '@wispcrew/runtime';
 import {
   agentsCreate,
+  agentsDelete,
   agentsList,
   agentsShow,
   configure,
@@ -41,6 +42,8 @@ wispcrew — run agents without a window open
   wispcrew agents show <name>  everything about one
   wispcrew agents create <name>
                                create an agent HERE, on this machine
+  wispcrew agents delete <name> --yes
+                               remove an agent and its conversation
   wispcrew rooms               list conversations
   wispcrew configure           set the provider, model and key
   wispcrew settings            show the current provider settings
@@ -124,6 +127,7 @@ const CONNECTED: Record<string, (ctx: CommandContext) => Promise<Rendered>> = {
   agents: agentsList,
   'agents show': agentsShow,
   'agents create': agentsCreate,
+  'agents delete': agentsDelete,
   rooms: roomsList,
   configure,
   settings: settingsShow,
