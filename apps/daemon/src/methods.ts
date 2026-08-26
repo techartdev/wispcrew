@@ -69,6 +69,8 @@ import {
   updateRoutine,
   updateSkill,
   writeSettings,
+  listTurns,
+  updateTurn,
 } from '@wispcrew/runtime';
 import { listPending, resolve as resolveApprovalRequest, touchApprovalListener } from './pending-approvals.js';
 import { handleFor } from '@wispcrew/shared';
@@ -381,6 +383,37 @@ export function nodeMethods(): MethodTable {
      * These belong to whoever is at the machine the tool would run on, and
      * `wispcrew approvals` is that someone.
      */
+    /*
+     * Turns, as tasks an external caller can follow.
+     *
+     * A turn is already durable and already survives a restart — it exists so
+     * a claim is not lost when a node dies mid-run. Exposing it costs nothing
+     * new and gives an orchestrator the one thing polling a transcript
+     * cannot: a stable id whose state it can ask about, including after the
+     * process that started the work has gone.
+     */
+    listTurns: (conversationId: never) => listTurns(conversationId as unknown as string),
+
+    cancelTurn: (id: never) => {
+      const wanted = String(id);
+      const turn = listTurns().find((t) => t.id === wanted);
+      if (!turn) throw new Error('No such task.');
+
+      /*
+       * Only an unfinished turn can be cancelled.
+       *
+       * Marking a completed one as cancelled would rewrite history: the work
+       * happened and its output is in the transcript, so saying otherwise
+       * makes the record lie to whoever reads it next.
+       */
+      if (turn.state === 'completed' || turn.state === 'failed') {
+        throw new Error(`That task already ${turn.state}.`);
+      }
+
+      updateTurn(turn.id, { state: 'cancelled', detail: 'cancelled by a client' });
+      return { ok: true, id: turn.id };
+    },
+
     listApprovals: () => {
       /*
        * Asking counts as watching.

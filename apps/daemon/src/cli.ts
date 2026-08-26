@@ -26,6 +26,11 @@ import {
   approvalsAnswer,
   approvalsList,
   ask,
+  capabilities,
+  tasksCancel,
+  tasksList,
+  tasksStatus,
+  tasksWait,
   agentsShow,
   configure,
   roomsList,
@@ -51,6 +56,11 @@ wispcrew — run agents without a window open
   wispcrew approvals           what is waiting for permission
   wispcrew approvals allow <id>
   wispcrew approvals deny <id>
+  wispcrew tasks               work that has run or is running
+  wispcrew tasks status <id>   the state of one
+  wispcrew tasks wait <id>     block until it settles
+  wispcrew tasks cancel <id>   stop an unfinished one
+  wispcrew capabilities        what this binary can do, as data
   wispcrew rooms               list conversations
   wispcrew configure           set the provider, model and key
   wispcrew settings            show the current provider settings
@@ -136,6 +146,12 @@ const CONNECTED: Record<string, (ctx: CommandContext) => Promise<Rendered>> = {
   'agents create': agentsCreate,
   'agents delete': agentsDelete,
   ask,
+  tasks: tasksList,
+  'tasks list': tasksList,
+  'tasks status': tasksStatus,
+  'tasks wait': tasksWait,
+  'tasks cancel': tasksCancel,
+  capabilities,
   approvals: approvalsList,
   'approvals list': approvalsList,
   'approvals allow': (ctx) => approvalsAnswer(ctx, true),

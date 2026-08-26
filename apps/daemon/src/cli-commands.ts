@@ -420,8 +420,336 @@ export async function approvalsAnswer(
 }
 
 /* ------------------------------------------------------------------ */
+/* tasks                                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A task is a turn, seen from outside.
+ *
+ * Nothing new is stored. A turn is already durable and already survives a
+ * restart — it exists so a claim is not lost when a node dies mid-run — and
+ * an orchestrator needs exactly what it already carries: a stable id whose
+ * state can be asked about later, from a different process.
+ *
+ * That is the difference between this and `ask`. `ask` blocks and returns
+ * the answer, which is what a person wants. A task is for work nobody is
+ * sitting in front of: start it, go away, come back.
+ */
+export async function tasksList(ctx: CommandContext): Promise<Rendered> {
+  const turns = await ctx.client.call<Record<string, unknown>[]>('listTurns');
+  const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+  const nameOf = (id: unknown) =>
+    String(agents.find((a) => a.id === id)?.name ?? String(id).slice(0, 8));
+
+  const value = turns.map((t) => ({
+    id: t.id,
+    agent: nameOf(t.agentId),
+    state: t.state,
+    startedAt: t.startedAt,
+    finishedAt: t.finishedAt ?? null,
+    detail: t.detail ?? null,
+  }));
+
+  const lines =
+    value.length === 0
+      ? ['No tasks recorded.']
+      : table(
+          value.map((t) => [
+            String(t.id).slice(0, 8),
+            String(t.agent),
+            String(t.state),
+            ageOf(Number(t.startedAt)),
+          ]),
+          ['ID', 'AGENT', 'STATE', 'STARTED'],
+        );
+
+  return { value, lines };
+}
+
+export async function tasksStatus(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) throw new Error('Which task? Usage: wispcrew tasks status <id>');
+
+  const task = await findTask(ctx, wanted);
+
+  return {
+    value: task,
+    lines: [
+      `id        ${task.id}`,
+      `state     ${task.state}`,
+      `started   ${new Date(Number(task.startedAt)).toISOString()}`,
+      ...(task.finishedAt
+        ? [`finished  ${new Date(Number(task.finishedAt)).toISOString()}`]
+        : []),
+      ...(task.detail ? [`detail    ${task.detail}`] : []),
+    ],
+  };
+}
+
+/**
+ * Block until a task settles.
+ *
+ * The command that makes asynchronous work usable from a script: start
+ * something, do other things, then wait for it here. Exits non-zero when the
+ * task failed or was cancelled, so `&&` behaves the way a caller expects.
+ */
+export async function tasksWait(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) throw new Error('Which task? Usage: wispcrew tasks wait <id>');
+
+  const timeoutMs = Number(text(ctx.args, 'timeout') ?? 600) * 1000;
+  const deadline = Date.now() + timeoutMs;
+
+  const SETTLED = new Set(['completed', 'failed', 'cancelled']);
+  let task = await findTask(ctx, wanted);
+
+  while (!SETTLED.has(String(task.state)) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 2000));
+    task = await findTask(ctx, String(task.id));
+  }
+
+  if (!SETTLED.has(String(task.state))) {
+    throw new Error(`Task ${String(task.id).slice(0, 8)} is still ${task.state} after the timeout.`);
+  }
+
+  if (task.state !== 'completed') {
+    // A failed task must not exit zero: a script chaining on it would carry
+    // on as though the work had been done.
+    throw new Error(`Task ${task.state}: ${task.detail ?? 'no detail'}`);
+  }
+
+  return {
+    value: task,
+    lines: [`Task ${String(task.id).slice(0, 8)} completed.`],
+  };
+}
+
+export async function tasksCancel(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) throw new Error('Which task? Usage: wispcrew tasks cancel <id>');
+
+  const task = await findTask(ctx, wanted);
+  await ctx.client.call('cancelTurn', [task.id]);
+
+  return {
+    value: { ok: true, id: task.id },
+    lines: [`Cancelled ${String(task.id).slice(0, 8)}.`],
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* discovery                                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * What this binary can do, as data.
+ *
+ * Written for another coding agent rather than a person: every agent already
+ * knows how to run a shell command, so a machine-readable description is the
+ * whole integration. Parsing help prose is guesswork, and it breaks the
+ * moment the wording is improved.
+ */
+export async function capabilities(ctx: CommandContext): Promise<Rendered> {
+  const settings = await ctx.client.call<Record<string, unknown>>('getSettings');
+  const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+
+  const value = {
+    product: 'wispcrew',
+    /*
+     * The protocol version, not the release. A caller cares whether the
+     * commands below behave as documented, which is what this promises.
+     */
+    schema: 1,
+    node: ctx.client.nodeName,
+    provider: {
+      preset: settings.presetId ?? null,
+      model: settings.model ?? null,
+      configured: Boolean(settings.hasApiKey),
+    },
+    agents: agents.map((a) => ({ id: a.id, name: a.name })),
+    commands: COMMAND_SCHEMA,
+  };
+
+  return {
+    value,
+    lines: [
+      `node      ${value.node}`,
+      `provider  ${value.provider.preset ?? '(none)'}${value.provider.configured ? '' : '  (no key)'}`,
+      `agents    ${value.agents.length}`,
+      `commands  ${COMMAND_SCHEMA.length}`,
+      '',
+      'For the full machine-readable description:  wispcrew capabilities --json',
+    ],
+  };
+}
+
+/**
+ * Every command, its arguments, and what it returns.
+ *
+ * Hand-written rather than derived, because a description generated from the
+ * dispatcher would say what each command IS called and nothing about when to
+ * use it — which is the part a caller actually needs.
+ */
+const COMMAND_SCHEMA = [
+  {
+    name: 'agents',
+    summary: 'List the agents on this machine.',
+    args: [],
+    returns: 'array of { id, name, model, node, approvalPolicy }',
+  },
+  {
+    name: 'agents show',
+    summary: 'Everything about one agent.',
+    args: [{ name: 'agent', required: true, description: 'name or id' }],
+    returns: 'object',
+  },
+  {
+    name: 'agents create',
+    summary: 'Create an agent on THIS machine, with its own room.',
+    args: [
+      { name: 'name', required: true, positional: true },
+      { name: '--description', required: false },
+      { name: '--model', required: false },
+      { name: '--policy', required: false, description: 'ask | auto | readonly' },
+    ],
+    returns: 'the created agent',
+  },
+  {
+    name: 'agents delete',
+    summary: 'Remove an agent and its conversation.',
+    args: [
+      { name: 'agent', required: true, positional: true },
+      { name: '--yes', required: true, description: 'destructive; required in scripts' },
+    ],
+    returns: '{ ok, deleted, name }',
+  },
+  {
+    name: 'ask',
+    summary: 'Send a message and wait for the reply. Blocks.',
+    args: [
+      { name: 'agent', required: true, positional: true },
+      { name: 'message', required: true, positional: true },
+      { name: '--timeout', required: false, description: 'seconds; default 180' },
+    ],
+    returns: '{ agent, answer, errors, timedOut }',
+    notes: 'Exits non-zero if the turn failed. For work nobody waits on, use tasks.',
+  },
+  {
+    name: 'tasks',
+    summary: 'List turns, past and present.',
+    args: [],
+    returns: 'array of { id, agent, state, startedAt, finishedAt, detail }',
+  },
+  {
+    name: 'tasks status',
+    summary: 'The state of one task.',
+    args: [{ name: 'id', required: true, positional: true, description: 'a prefix is enough' }],
+    returns: 'the task',
+  },
+  {
+    name: 'tasks wait',
+    summary: 'Block until a task settles.',
+    args: [
+      { name: 'id', required: true, positional: true },
+      { name: '--timeout', required: false, description: 'seconds; default 600' },
+    ],
+    returns: 'the task',
+    notes: 'Exits non-zero if it failed or was cancelled.',
+  },
+  {
+    name: 'tasks cancel',
+    summary: 'Stop an unfinished task.',
+    args: [{ name: 'id', required: true, positional: true }],
+    returns: '{ ok, id }',
+  },
+  {
+    name: 'approvals',
+    summary: 'What is waiting for permission to run.',
+    args: [],
+    returns: 'array of { id, agentId, agentName, tool, summary, createdAt, expiresAt }',
+    notes: 'An unanswered request is denied after five minutes.',
+  },
+  {
+    name: 'approvals allow',
+    summary: 'Permit one pending tool call.',
+    args: [{ name: 'id', required: true, positional: true, description: 'a prefix is enough' }],
+    returns: '{ ok, id, allowed }',
+  },
+  {
+    name: 'approvals deny',
+    summary: 'Refuse one pending tool call.',
+    args: [{ name: 'id', required: true, positional: true }],
+    returns: '{ ok, id, allowed }',
+  },
+  {
+    name: 'rooms',
+    summary: 'List conversations and who is in them.',
+    args: [],
+    returns: 'array of { id, title, mode, agents }',
+  },
+  {
+    name: 'configure',
+    summary: 'Set the provider, model and key for THIS machine.',
+    args: [
+      { name: '--provider', required: false },
+      { name: '--model', required: false },
+      { name: '--key', required: false, description: 'stored encrypted; never leaves this node' },
+    ],
+    returns: '{ ok, settings }',
+  },
+  {
+    name: 'settings',
+    summary: 'The current provider settings.',
+    args: [],
+    returns: 'object; the key itself is never returned',
+  },
+  {
+    name: 'capabilities',
+    summary: 'This description, as data.',
+    args: [],
+    returns: 'object',
+  },
+];
+
+/* ------------------------------------------------------------------ */
 /* helpers                                                             */
 /* ------------------------------------------------------------------ */
+
+/** How long ago, in words a person reads faster than a timestamp. */
+function ageOf(when: number): string {
+  const seconds = Math.max(0, Math.round((Date.now() - when) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h ago`;
+  return `${Math.round(seconds / 86400)}d ago`;
+}
+
+/**
+ * Find a task by id or unambiguous prefix.
+ *
+ * Nobody wants to type a full id, and an ambiguous prefix is refused rather
+ * than resolved — cancelling the wrong task would stop work somebody wanted.
+ */
+async function findTask(
+  ctx: CommandContext,
+  wanted: string,
+): Promise<Record<string, unknown>> {
+  const turns = await ctx.client.call<Record<string, unknown>[]>('listTurns');
+
+  const exact = turns.find((t) => t.id === wanted);
+  if (exact) return exact;
+
+  const matches = turns.filter((t) => String(t.id).startsWith(wanted));
+  if (matches.length === 1) return matches[0]!;
+  if (matches.length > 1) {
+    throw new Error(
+      `"${wanted}" matches ${matches.length} tasks. Use more characters:\n` +
+        matches.map((t) => `  ${String(t.id).slice(0, 12)}  ${t.state}`).join('\n'),
+    );
+  }
+
+  throw new Error(`No task starts with "${wanted}".`);
+}
 
 /**
  * Find an agent by name or id.
