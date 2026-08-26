@@ -689,6 +689,171 @@ export async function roomsRemove(ctx: CommandContext): Promise<Rendered> {
 }
 
 /* ------------------------------------------------------------------ */
+/* routines                                                            */
+/* ------------------------------------------------------------------ */
+
+export async function routinesList(ctx: CommandContext): Promise<Rendered> {
+  const routines = await ctx.client.call<Record<string, unknown>[]>('listRoutines');
+  const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+  const nameOf = (id: unknown) => String(agents.find((a) => a.id === id)?.name ?? id);
+
+  const lines =
+    routines.length === 0
+      ? ['No routines. Create one with:  wispcrew routines create <agent> <cron> "<prompt>"']
+      : table(
+          routines.map((r) => [
+            String(r.name),
+            nameOf(r.agentId),
+            String(r.cron ?? (r.runAt ? 'once' : '')),
+            r.enabled === false ? 'paused' : 'on',
+          ]),
+          ['NAME', 'AGENT', 'WHEN', 'STATE'],
+        );
+
+  return { value: routines, lines };
+}
+
+export async function routinesCreate(ctx: CommandContext): Promise<Rendered> {
+  const [agentName, cron] = ctx.positional;
+  const prompt = ctx.positional.slice(2).join(' ') || text(ctx.args, 'prompt');
+
+  if (!agentName || !cron || !prompt) {
+    throw new Error(
+      'Usage: wispcrew routines create <agent> "<cron>" "<prompt>"\n' +
+        '  e.g. wispcrew routines create Builder "0 9 * * *" "Check the build"',
+    );
+  }
+
+  const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+  const agent = findAgent(agents, agentName);
+
+  const created = await ctx.client.call<Record<string, unknown>>('createRoutine', [
+    {
+      agentId: agent.id,
+      name: text(ctx.args, 'name') ?? prompt.slice(0, 40),
+      cron,
+      prompt,
+      enabled: ctx.args.paused !== true,
+    },
+  ]);
+
+  return {
+    value: created,
+    lines: [
+      `Created "${created.name}" for ${agent.name}.`,
+      `  runs  ${cron}`,
+      ...(ctx.args.paused === true ? ['  paused — enable it with routines resume'] : []),
+    ],
+  };
+}
+
+export async function routinesDelete(ctx: CommandContext): Promise<Rendered> {
+  const routine = await findRoutine(ctx, ctx.positional[0]);
+
+  if (ctx.args.yes !== true) {
+    throw new Error(`This deletes the routine "${routine.name}". Re-run with --yes.`);
+  }
+
+  await ctx.client.call('deleteRoutine', [routine.id]);
+  return {
+    value: { ok: true, deleted: routine.id },
+    lines: [`Deleted "${routine.name}".`],
+  };
+}
+
+export async function routinesRun(ctx: CommandContext): Promise<Rendered> {
+  const routine = await findRoutine(ctx, ctx.positional[0]);
+
+  /*
+   * Fire it now, without waiting for the schedule.
+   *
+   * The command that makes a cron routine testable: writing "0 9 * * *" and
+   * finding out tomorrow whether the prompt was right is a poor loop.
+   */
+  await ctx.client.call('runRoutineNow', [routine.id]);
+
+  return {
+    value: { ok: true, id: routine.id, name: routine.name },
+    lines: [
+      `Started "${routine.name}".`,
+      'Follow it with:  wispcrew tasks',
+    ],
+  };
+}
+
+export async function routinesPause(ctx: CommandContext, enabled: boolean): Promise<Rendered> {
+  const routine = await findRoutine(ctx, ctx.positional[0]);
+  await ctx.client.call('updateRoutine', [routine.id, { enabled }]);
+
+  return {
+    value: { ok: true, id: routine.id, enabled },
+    lines: [`"${routine.name}" is now ${enabled ? 'active' : 'paused'}.`],
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* skills, grants, history                                             */
+/* ------------------------------------------------------------------ */
+
+export async function skillsList(ctx: CommandContext): Promise<Rendered> {
+  const skills = await ctx.client.call<Record<string, unknown>[]>('listSkills');
+
+  const lines =
+    skills.length === 0
+      ? ['No skills. A skill is a reusable instruction set, invoked with /name.']
+      : table(
+          skills.map((s) => [
+            `/${s.name}`,
+            String(s.description ?? '').slice(0, 60),
+          ]),
+          ['SKILL', 'WHAT IT DOES'],
+        );
+
+  return { value: skills, lines };
+}
+
+export async function grantsList(ctx: CommandContext): Promise<Rendered> {
+  const grants = await ctx.client.call<Record<string, unknown>[]>('listToolGrants');
+  const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+  const nameOf = (id: unknown) => String(agents.find((a) => a.id === id)?.name ?? id);
+
+  const lines =
+    grants.length === 0
+      ? ['No standing permissions. Every tool call asks.']
+      : table(
+          grants.map((g) => [nameOf(g.agentId), String(g.tool)]),
+          ['AGENT', 'ALWAYS ALLOWED'],
+        );
+
+  return { value: grants, lines };
+}
+
+export async function grantsRevoke(ctx: CommandContext): Promise<Rendered> {
+  if (ctx.args.all === true) {
+    /*
+     * The panic button, and the reason it is not the default: revoking
+     * everything makes every agent ask again, which is safe and noisy.
+     */
+    await ctx.client.call('revokeAllToolGrants');
+    return { value: { ok: true, revoked: 'all' }, lines: ['Revoked every standing permission.'] };
+  }
+
+  const [agentName, tool] = ctx.positional;
+  if (!agentName || !tool) {
+    throw new Error('Usage: wispcrew grants revoke <agent> <tool>   (or --all)');
+  }
+
+  const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+  const agent = findAgent(agents, agentName);
+
+  await ctx.client.call('revokeToolGrant', [agent.id, tool]);
+  return {
+    value: { ok: true, agent: agent.id, tool },
+    lines: [`${agent.name} will be asked about "${tool}" again.`],
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* tasks                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -991,6 +1156,74 @@ const COMMAND_SCHEMA = [
     returns: '{ ok, room, agent }',
   },
   {
+    name: 'routines',
+    summary: 'Scheduled work: what runs, for whom, and when.',
+    args: [],
+    returns: 'array of routines',
+  },
+  {
+    name: 'routines create',
+    summary: 'Schedule a prompt to run on its own.',
+    args: [
+      { name: 'agent', required: true, positional: true },
+      { name: 'cron', required: true, positional: true, description: 'five fields, e.g. "0 9 * * *"' },
+      { name: 'prompt', required: true, positional: true },
+      { name: '--name', required: false },
+      { name: '--paused', required: false, description: 'create it inactive' },
+    ],
+    returns: 'the created routine',
+  },
+  {
+    name: 'routines run',
+    summary: 'Run a routine now, without waiting for its schedule.',
+    args: [{ name: 'routine', required: true, positional: true }],
+    returns: '{ ok, id, name }',
+    notes: 'How to test a routine without waiting until tomorrow.',
+  },
+  {
+    name: 'routines pause',
+    summary: 'Stop a routine firing, without deleting it.',
+    args: [{ name: 'routine', required: true, positional: true }],
+    returns: '{ ok, id, enabled }',
+  },
+  {
+    name: 'routines resume',
+    summary: 'Let a paused routine fire again.',
+    args: [{ name: 'routine', required: true, positional: true }],
+    returns: '{ ok, id, enabled }',
+  },
+  {
+    name: 'routines delete',
+    summary: 'Remove a routine.',
+    args: [
+      { name: 'routine', required: true, positional: true },
+      { name: '--yes', required: true, description: 'destructive; required in scripts' },
+    ],
+    returns: '{ ok, deleted }',
+  },
+  {
+    name: 'skills',
+    summary: 'Reusable instruction sets, invoked in a message with /name.',
+    args: [],
+    returns: 'array of skills',
+  },
+  {
+    name: 'grants',
+    summary: 'Standing permissions — tools an agent may use without asking.',
+    args: [],
+    returns: 'array of { agentId, tool }',
+  },
+  {
+    name: 'grants revoke',
+    summary: 'Take back a standing permission, so the agent asks again.',
+    args: [
+      { name: 'agent', required: false, positional: true },
+      { name: 'tool', required: false, positional: true },
+      { name: '--all', required: false, description: 'revoke every grant' },
+    ],
+    returns: '{ ok, agent, tool } or { ok, revoked }',
+  },
+  {
     name: 'machines',
     summary: 'Other machines paired with this one.',
     args: [],
@@ -1077,6 +1310,35 @@ async function findRoom(
   throw new Error(
     `No room called "${wanted}". Available:\n` +
       rooms.map((r) => `  ${r.title}`).join('\n'),
+  );
+}
+
+/** Find a routine by name or id, refusing an ambiguous match. */
+async function findRoutine(
+  ctx: CommandContext,
+  wanted: string | undefined,
+): Promise<Record<string, unknown>> {
+  if (!wanted) throw new Error('Which routine? Its name or id.');
+
+  const routines = await ctx.client.call<Record<string, unknown>[]>('listRoutines');
+
+  const byId = routines.find((r) => r.id === wanted);
+  if (byId) return byId;
+
+  const matches = routines.filter(
+    (r) => String(r.name).toLowerCase() === wanted.toLowerCase(),
+  );
+  if (matches.length === 1) return matches[0]!;
+  if (matches.length > 1) {
+    throw new Error(
+      `More than one routine is called "${wanted}". Use an id:\n` +
+        matches.map((r) => `  ${r.id}  ${r.name}`).join('\n'),
+    );
+  }
+
+  throw new Error(
+    `No routine called "${wanted}". Available:\n` +
+      routines.map((r) => `  ${r.name}`).join('\n'),
   );
 }
 

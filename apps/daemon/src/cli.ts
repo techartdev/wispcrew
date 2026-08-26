@@ -27,10 +27,18 @@ import {
   approvalsList,
   ask,
   capabilities,
+  grantsList,
+  grantsRevoke,
   nodesForget,
   nodesList,
   pair,
   roomsAdd,
+  routinesCreate,
+  routinesDelete,
+  routinesList,
+  routinesPause,
+  routinesRun,
+  skillsList,
   roomsRemove,
   roomsShow,
   roomsTail,
@@ -156,6 +164,18 @@ const CONNECTED: Record<string, (ctx: CommandContext) => Promise<Rendered>> = {
   'agents create': agentsCreate,
   'agents delete': agentsDelete,
   ask,
+  routines: routinesList,
+  'routines list': routinesList,
+  'routines create': routinesCreate,
+  'routines delete': routinesDelete,
+  'routines run': routinesRun,
+  'routines pause': (ctx) => routinesPause(ctx, false),
+  'routines resume': (ctx) => routinesPause(ctx, true),
+  skills: skillsList,
+  'skills list': skillsList,
+  grants: grantsList,
+  'grants list': grantsList,
+  'grants revoke': grantsRevoke,
   tasks: tasksList,
   'tasks list': tasksList,
   'tasks status': tasksStatus,
@@ -186,6 +206,36 @@ const CONNECTED: Record<string, (ctx: CommandContext) => Promise<Rendered>> = {
  * `agents create Builder` is one command and one positional argument, not
  * three arguments — so the longer match is tried first.
  */
+/**
+ * The arguments that are not flags, and not a flag's value.
+ *
+ * Dropping anything starting with `--` was not enough: a flag's VALUE does
+ * not start with `--`, so it survived and became a positional argument.
+ * Measured — `routines create Assistant "0 9 * * *" "..." --data-dir <path>`
+ * created a routine whose prompt ended in `C:\Users\VANY...`, because the
+ * path was read as part of the prompt.
+ *
+ * Mirrors `parseArgs`, which consumes the same values, so the two agree on
+ * what a flag took with it.
+ */
+function positionalArgs(argv: string[]): string[] {
+  const out: string[] = [];
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (!arg.startsWith('--')) {
+      out.push(arg);
+      continue;
+    }
+
+    // A flag followed by a non-flag consumed it as its value.
+    const next = argv[i + 1];
+    if (next && !next.startsWith('--')) i++;
+  }
+
+  return out;
+}
+
 function resolveCommand(
   command: string,
   rest: string[],
@@ -234,7 +284,7 @@ async function main(): Promise<void> {
     workspace: typeof args.workspace === 'string' ? args.workspace : undefined,
   });
 
-  const resolved = resolveCommand(command, rest.filter((a) => !a.startsWith('--')));
+  const resolved = resolveCommand(command, positionalArgs(rest));
   if (resolved.run) {
     /*
      * The host is installed before any command runs.
