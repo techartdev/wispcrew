@@ -280,7 +280,23 @@ export function nodeMethods(): MethodTable {
 
     /* settings */
     getSettings: () => settingsView(),
-    writeSettings: (patch: never) => writeSettings(host().dataDir, patch),
+    /*
+     * Settings only — never a key.
+     *
+     * `saveSettings` below is the one that stores credentials. This writes
+     * the patch as given, so an `apiKey` here would land in the plaintext
+     * settings file, which is exactly the bug class hard rule 5 exists for.
+     *
+     * Refusing is deliberate. Silently dropping it shipped once and cost a
+     * day: `configureNode` reported success, the VPS stored nothing, and a
+     * remote agent produced empty turns with no error anywhere.
+     */
+    writeSettings: (patch: never) => {
+      if ((patch as { apiKey?: unknown } | null)?.apiKey !== undefined) {
+        throw new Error('writeSettings cannot store an API key — use saveSettings.');
+      }
+      return writeSettings(host().dataDir, patch);
+    },
     saveSettings: (patch: never) => {
       /*
        * A key sent here is stored on THIS node and goes no further.

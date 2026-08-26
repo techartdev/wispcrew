@@ -19,12 +19,31 @@ import {
   readSecrets,
   setHost,
 } from '@wispcrew/runtime';
+import {
+  agentsCreate,
+  agentsList,
+  agentsShow,
+  configure,
+  roomsList,
+  settingsShow,
+  type CommandContext,
+} from './cli-commands.js';
+import { emit, fail, outputOptions, type Rendered } from './cli-output.js';
+import { withDaemon } from './cli-connect.js';
 
 const USAGE = `
 wispcrew — run agents without a window open
 
   wispcrew serve [options]     run the engine until stopped
   wispcrew status              show what a daemon would use, then exit
+
+  wispcrew agents              list the agents on this machine
+  wispcrew agents show <name>  everything about one
+  wispcrew agents create <name>
+                               create an agent HERE, on this machine
+  wispcrew rooms               list conversations
+  wispcrew configure           set the provider, model and key
+  wispcrew settings            show the current provider settings
 
 Options
   --data-dir <path>   where agents, transcripts and secrets live
@@ -36,6 +55,19 @@ Options
   --pair              open a pairing window and print a code to enter
   --verbose           print agent output as it happens
   --help              this text
+
+For scripts and other agents
+  --json              one JSON object on stdout, nothing else
+  --output ndjson     one JSON object per line, for streaming
+  --quiet             suppress everything but the result
+  --no-interactive    never prompt; fail instead of waiting
+
+Configuring a headless machine
+  wispcrew configure --provider nvidia --model <id> --key <api-key>
+  wispcrew agents create Builder --description "You build things here"
+
+  Both talk to a running daemon, so "wispcrew serve" must be up. Nothing
+  reads the profile directly: two writers on one store lose updates.
 
 Attaching this machine from elsewhere
   here:    wispcrew serve --listen --network --pair
@@ -81,6 +113,62 @@ function parseArgs(argv: string[]): Record<string, string | boolean> {
   return out;
 }
 
+/**
+ * Commands that need a running daemon.
+ *
+ * Everything here goes over the protocol rather than touching the profile.
+ * `serve` and `status` are deliberately absent: one IS the engine, and the
+ * other reports what a daemon would use before one exists.
+ */
+const CONNECTED: Record<string, (ctx: CommandContext) => Promise<Rendered>> = {
+  agents: agentsList,
+  'agents show': agentsShow,
+  'agents create': agentsCreate,
+  rooms: roomsList,
+  configure,
+  settings: settingsShow,
+};
+
+/**
+ * Resolve a command that may be two words.
+ *
+ * `agents create Builder` is one command and one positional argument, not
+ * three arguments — so the longer match is tried first.
+ */
+function resolveCommand(
+  command: string,
+  rest: string[],
+): { run?: (ctx: CommandContext) => Promise<Rendered>; positional: string[] } {
+  const two = `${command} ${rest[0] ?? ''}`.trim();
+  if (CONNECTED[two]) return { run: CONNECTED[two], positional: rest.slice(1) };
+  if (CONNECTED[command]) return { run: CONNECTED[command], positional: rest };
+  return { positional: rest };
+}
+
+async function runConnectedCommand(
+  run: (ctx: CommandContext) => Promise<Rendered>,
+  dataDir: string,
+  args: Record<string, string | boolean>,
+  positional: string[],
+): Promise<void> {
+  const opts = outputOptions(args);
+
+  try {
+    const result = await withDaemon(dataDir, (client) =>
+      run({ client, args, positional }),
+    );
+    emit(result, opts);
+  } catch (err) {
+    /*
+     * A missing daemon is the common case and deserves the next command to
+     * type rather than a stack trace. Anything else is reported as-is:
+     * inventing a friendlier message for an error I have not anticipated
+     * would hide what actually happened.
+     */
+    fail((err as Error).message, opts);
+  }
+}
+
 async function main(): Promise<void> {
   const [command = 'serve', ...rest] = process.argv.slice(2);
   const args = parseArgs(rest);
@@ -94,6 +182,12 @@ async function main(): Promise<void> {
     dataDir: typeof args['data-dir'] === 'string' ? args['data-dir'] : undefined,
     workspace: typeof args.workspace === 'string' ? args.workspace : undefined,
   });
+
+  const resolved = resolveCommand(command, rest.filter((a) => !a.startsWith('--')));
+  if (resolved.run) {
+    await runConnectedCommand(resolved.run, env.dataDir, args, resolved.positional);
+    return;
+  }
 
   if (command === 'status') {
     // Deliberately reports the *resolved* paths rather than the defaults, so

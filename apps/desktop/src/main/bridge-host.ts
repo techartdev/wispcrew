@@ -1076,7 +1076,19 @@ export function registerBridge(context: BridgeContext): void {
     if (!link) return { ok: false, error: 'That machine is not connected.' };
 
     try {
-      await link.call('writeSettings', [patch]);
+      /*
+       * `saveSettings`, not `writeSettings`.
+       *
+       * The difference is invisible until it matters: `writeSettings` writes
+       * the patch as given, so an `apiKey` in it is silently dropped.
+       * `saveSettings` peels the key off and routes it through
+       * `setProviderKey`, which encrypts it with that node's own key file.
+       *
+       * This shipped wrong: `configureNode` reported `{ ok: true }` while
+       * the VPS never stored a key, so a remote agent had no way to reach a
+       * model and its turns produced nothing at all.
+       */
+      await link.call('saveSettings', [patch]);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: (err as Error).message };

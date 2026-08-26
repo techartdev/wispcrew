@@ -75,14 +75,17 @@ export async function connectLocal(dataDir: string): Promise<Connection> {
   });
 
   /*
-   * Unreference the socket.
+   * Deliberately NOT unreferenced.
    *
-   * An open handle keeps Node alive, so without this a one-shot command
-   * prints its answer and then hangs — a CLI that does not exit is worse
-   * than one that fails. Frames still flow normally; this only removes it
-   * from the set of handles holding the loop open.
+   * The desktop unrefs its link so an open socket cannot keep Electron alive
+   * at quit, and copying that here was wrong: a one-shot command has the
+   * opposite problem. Unreferencing removes the only handle holding the loop
+   * open, so Node exits before the reply arrives — measured as no output, no
+   * error and exit code 0, which is the worst way for a command to fail.
+   *
+   * `withDaemon` closes the socket explicitly when the call is done, so the
+   * process ends at the right moment rather than by accident.
    */
-  socket.unref();
 
   const client = await connectNode({
     socket,
