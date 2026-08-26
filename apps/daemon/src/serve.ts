@@ -40,6 +40,8 @@ import {
   clearEndpoint,
   engineBuildStamp,
   generateToken,
+  getSecret,
+  upsertSecrets,
   host,
   loadOrCreateIdentity,
   localAddress,
@@ -96,6 +98,29 @@ export interface RunningDaemon {
  * Returns once everything is running. The process then stays alive because
  * the scheduler holds a timer — the caller does not need to keep it awake.
  */
+/**
+ * The token network clients authenticate with, kept across restarts.
+ *
+ * A node that forgets its token forgets every client it has ever paired
+ * with, and says so in a way nobody can act on. Persisting it means pairing
+ * is what it appears to be: something you do once.
+ *
+ * Rotating it is deliberately not automatic. A user who wants every client
+ * detached can delete this secret, which is a decision they take rather than
+ * one a restart takes for them.
+ */
+const NETWORK_TOKEN_KEY = 'WISPCREW_NODE_NETWORK_TOKEN';
+
+function loadOrCreateNetworkToken(dataDir: string): string {
+  const existing = getSecret(dataDir, NETWORK_TOKEN_KEY);
+  if (existing) return existing;
+
+  const created = generateToken();
+  upsertSecrets(dataDir, [{ key: NETWORK_TOKEN_KEY, value: created }]);
+  fileLog('[node] created a network token for this machine');
+  return created;
+}
+
 export async function serve(options: ServeOptions): Promise<RunningDaemon> {
   setHost(options.host);
 
@@ -269,7 +294,25 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
         'localhost',
         options.network.host,
       ]);
-      const netToken = generateToken();
+      /*
+       * The network token survives a restart.
+       *
+       * It used to be generated on every start, so a node that restarted —
+       * on boot, after an upgrade, or because someone ran `serve` again —
+       * silently invalidated every client that had ever paired with it. The
+       * client's error was "wrong token, or it is not accepting clients",
+       * which describes the symptom and gives no hint that re-pairing is
+       * required. Measured against the real VPS: a paired desktop stopped
+       * connecting after a routine restart, with the fingerprint still
+       * matching.
+       *
+       * Stored through the same encrypted store as provider keys, because it
+       * is exactly that kind of credential: it grants full access to this
+       * node's engine. On a server with no OS keychain that means the
+       * machine-local key file, which is the same protection the node's own
+       * TLS key already relies on.
+       */
+      const netToken = loadOrCreateNetworkToken(env.dataDir);
       const window = new PairingWindow();
 
       const tlsServer = createTlsServer({ cert: identity.cert, key: identity.key });
