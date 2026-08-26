@@ -1,8 +1,35 @@
 # The CLI
 
-**Status: planned, not built.** This records a design and the reasoning
-behind it so the work can start from a decision rather than a blank page.
-Nothing here exists yet beyond what the last section says.
+**Status: built, and verified on a real headless machine.** What follows is
+the design; this note records what actually shipped against it.
+
+Working today, all through the daemon protocol and none of it touching the
+store directly:
+
+| | |
+|---|---|
+| `serve` `status` | run the engine, and see what it would use |
+| `configure` `settings` | provider, model and key, encrypted on that machine |
+| `agents` `show` `create` `delete` | including creating an agent **on the machine running the command** |
+| `rooms` `show` `tail` `add` `remove` | membership and transcript |
+| `ask` | send a message and wait for the reply |
+| `approvals` `allow` `deny` | a headless node can ask a person now |
+| `tasks` `status` `wait` `cancel` | asynchronous work, on the durable turn record |
+| `machines` | paired nodes |
+| `capabilities` | the whole surface as JSON, for another agent |
+
+Every command supports `--json`, `--output ndjson` and `--quiet`.
+
+**Not built**, and named rather than quietly skipped:
+
+- **`pair` from the CLI.** The runtime has `pairWithNode` and `addNode`, so it
+  is reachable — but pairing writes to the *client's* registry, and the CLI
+  talks only to a node. Doing it properly means deciding whether a headless
+  machine holds a client registry at all, which is a design question rather
+  than a missing function.
+- **`--timeout` beyond `ask` and `tasks wait`.** Every other command is a
+  single round trip that answers or fails; a timeout there would be
+  decoration.
 
 ## Why this is not a developer convenience
 
