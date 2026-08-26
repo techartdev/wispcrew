@@ -133,7 +133,18 @@ function environmentSection(opts: SystemPromptOptions): string {
   }
 
   if (opts.channels?.length) {
-    lines.push(`- You may reach the user through: ${opts.channels.join(', ')}.`);
+    /*
+     * "Reach" means interrupt, not reply.
+     *
+     * Phrased as "you may reach the user through: app", a model reasonably
+     * concluded that `notify_user` was how to answer — and sent two
+     * notifications for two questions before replying once. Saying when the
+     * capability applies costs one clause and removes the ambiguity.
+     */
+    lines.push(
+      `- When the user is away you can still reach them through: ${opts.channels.join(', ')}.`,
+      '  Your ordinary replies already reach them; that is for interrupting, not answering.',
+    );
   }
 
   lines.push(
@@ -164,6 +175,17 @@ function environmentSection(opts: SystemPromptOptions): string {
       '- You are being asked to reply because you were addressed. Answer directly.',
       '- Do not hand this to another participant. They are colleagues in the room,',
       '  not helpers you delegate to; the user can address them themselves.',
+      /*
+       * And not to anyone else either, when you can simply answer.
+       *
+       * Measured: asked "what is 3 + 4?", an agent delegated to a
+       * general-purpose agent outside the room, which answered "7" and was
+       * relayed back. Two model calls and a confusing transcript for
+       * something the first agent knew. Delegation is for work needing
+       * another machine or another specialism, not for offloading.
+       */
+      '- Answer from your own knowledge when you can. Only delegate work that',
+      '  genuinely needs another machine or a specialism you lack.',
       '- To draw someone in deliberately, mention them by handle in your reply.',
       '',
     );

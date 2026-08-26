@@ -80,6 +80,24 @@ console.log('\n[personas] the room reaches every persona, not just the default')
   }
 }
 
+console.log('\n[notify] reaching the user is not the same as replying');
+{
+  /*
+   * Measured on a real conversation: told "you may reach the user through:
+   * app", an agent used `notify_user` to ANSWER — two notifications for two
+   * questions, then one combined reply. The user saw a malfunction.
+   *
+   * The capability is real and worth stating; when it applies is the part
+   * that was missing.
+   */
+  const prompt = defaultSystemPrompt({ persistent: true, channels: ['app', 'desktop'] });
+
+  check('the channels are still named', /app/.test(prompt) && /desktop/.test(prompt));
+  check('but framed around absence', /When the user is away/i.test(prompt));
+  check('and replies are distinguished', /ordinary replies already reach them/i.test(prompt));
+  check('interrupting, not answering', /interrupting, not answering/i.test(prompt));
+}
+
 console.log('');
 if (failures) {
   console.error(`ROOM-PROMPT TEST FAILED — ${failures} assertion(s)\n`);

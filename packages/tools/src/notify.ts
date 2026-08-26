@@ -48,11 +48,23 @@ export function setNotifySender(sender: NotifySender | null): void {
 export const notifyTool: Tool<NotifyArgs> = {
   definition: {
     name: 'notify_user',
+    /*
+     * Deliberately phrased around when NOT to use it.
+     *
+     * The first version read "send the user a short message through the
+     * channels they have enabled", and models used it to answer questions —
+     * calling it twice in a room and then replying once, so the user saw
+     * two notifications and one answer for two questions. A reply is
+     * already delivered; a notification as well is duplicate and reads as a
+     * malfunction. Measured on a real multi-agent conversation.
+     */
     description:
-      'Send the user a short message through the channels they have enabled ' +
-      '(the app, a desktop notification, or a direct message). Use this when ' +
-      'you find something worth their attention, when a scheduled task ' +
-      'produces a result, or when you finish work they are not watching. ' +
+      'Interrupt the user when they are NOT watching this conversation: a ' +
+      'scheduled task that produced a result, work you finished while they ' +
+      'were away, or something urgent enough to wake them for. ' +
+      'Do NOT use it to answer or acknowledge a message they just sent — ' +
+      'your ordinary reply already reaches them, and a notification on top ' +
+      'of it is duplicate. ' +
       'Keep the summary to one line; put detail in the body.',
     parameters: {
       type: 'object',

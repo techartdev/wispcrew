@@ -132,6 +132,44 @@ export function makeAskAgentTool(
   ctx: DelegationContext,
   run: DelegateRunner,
 ): Tool<AskAgentArgs> | null {
+  const caller = store.listAgents().find((a) => a.id === callerId);
+
+  /*
+   * Could this agent do something the caller cannot?
+   *
+   * Delegation is worth its cost — a second model call, a second
+   * transcript, a relayed answer — only when the delegate brings something:
+   * another MACHINE, or a stated specialism. An agent with neither is pure
+   * indirection, and measured behaviour is that a model offered such a tool
+   * will use it: "what is 3 + 4?" went to a general-purpose agent, came
+   * back as "7", and was relayed.
+   *
+   * Prose did not fix this. Three instructions to answer from its own
+   * knowledge were all ignored, because a tool that is offered gets used.
+   */
+  const couldPlausiblyHelp = (a: AgentRecord): boolean => {
+    // A different machine is a real capability: the work has to happen there.
+    if ((a.nodeId ?? '') !== (caller?.nodeId ?? '')) return true;
+
+    /*
+     * The default agent is not a delegate.
+     *
+     * Every fresh profile creates one so the roster is not empty. It is
+     * general-purpose by definition, on this machine, with no stated
+     * specialism — so it can never do anything the caller cannot, and
+     * measured behaviour is that a model offered it will use it: "what is
+     * 3 + 4?" went there, came back as "7", and was relayed.
+     *
+     * Narrowed deliberately to this case. "Undescribed agents cannot be
+     * delegates" also worked, and would have silently broken delegation for
+     * anyone who created "Rust expert" and forgot the description.
+     */
+    const isDefaultAgent =
+      a.name === 'Assistant' && a.persona === 'general' && !a.description?.trim();
+
+    return !isDefaultAgent;
+  };
+
   const candidates = store
     .listAgents()
     .filter(
@@ -140,7 +178,8 @@ export function makeAskAgentTool(
         a.id !== callerId &&
         !ctx.stack.includes(a.id) &&
         // A room-mate is addressed with @handle, not delegated to.
-        !(ctx.roomMembers ?? []).includes(a.id),
+        !(ctx.roomMembers ?? []).includes(a.id) &&
+        couldPlausiblyHelp(a),
     );
 
   // Nothing to delegate to: do not advertise a tool that can only fail.
