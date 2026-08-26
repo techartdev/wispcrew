@@ -40,7 +40,7 @@ working tree — during the final round.
 | Claim | Evidence |
 |---|---|
 | Clean clone builds | `git clone` → `npm ci` → `typecheck` → `build`, all exit 0 |
-| Tests pass | 55 offline suites, no API key, no network |
+| Tests pass | 56 offline suites, no API key, no network |
 | Packages | `npm run pack` → 325 MB, no `vendor/` in the output |
 | Packaged app runs | Boots on a **fresh profile**, renders the first-run screen |
 | Live provider | Tool call executed and the model used the real result |
