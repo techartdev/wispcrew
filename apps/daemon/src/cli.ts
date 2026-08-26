@@ -236,6 +236,21 @@ async function main(): Promise<void> {
 
   const resolved = resolveCommand(command, rest.filter((a) => !a.startsWith('--')));
   if (resolved.run) {
+    /*
+     * The host is installed before any command runs.
+     *
+     * Most commands only speak to the daemon and never touch the runtime's
+     * storage, so this looked unnecessary — until `pair`, which writes to
+     * THIS machine's registry of trusted peers. Without it the runtime
+     * refuses with "used before setHost(): the engine does not guess where
+     * to store data", which is a good error and still a stumble.
+     *
+     * Installing it does not make the CLI a second engine: no scheduler is
+     * started and no store is opened for writing except by the few commands
+     * that hold client-side state.
+     */
+    setHost(env);
+
     await runConnectedCommand(resolved.run, env.dataDir, args, resolved.positional);
     return;
   }

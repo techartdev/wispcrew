@@ -68,7 +68,22 @@ export function addNode(
   dataDir: string,
   node: Omit<PairedNode, 'id' | 'pairedAt'> & { id?: string },
 ): StoredNode {
-  const id = node.id ?? `node_${Date.now().toString(36)}`;
+  /*
+   * Re-pairing the same machine replaces its record.
+   *
+   * A new pairing used to mint a new id, so pairing twice left two entries
+   * for one machine — both listed, both dialled, and only the newer holding
+   * a token the node still honours. Seen immediately when testing
+   * `wispcrew pair` against a VPS paired minutes earlier.
+   *
+   * Matched on FINGERPRINT rather than address: the fingerprint is the
+   * machine's identity, while an address is only where it happened to be. A
+   * laptop that changes network is the same laptop; two machines behind one
+   * address are not the same machine.
+   */
+  const existing = readNodes(dataDir).find((n) => n.fingerprint === node.fingerprint);
+  const id = node.id ?? existing?.id ?? `node_${Date.now().toString(36)}`;
+
   const record: StoredNode = {
     id,
     name: node.name,
