@@ -207,12 +207,6 @@ th { color: var(--muted); font-weight: 600; font-size: 13.5px; text-transform: u
 td:first-child { white-space: nowrap; }
 td code { color: var(--wisp); }
 
-/* ---------- honesty section ---------- */
-
-.gaps { max-width: var(--measure); }
-.gaps li { margin-bottom: 10px; color: var(--muted); }
-.gaps strong { color: var(--ink); }
-
 /* ---------- footer ---------- */
 
 footer {
@@ -251,7 +245,6 @@ footer {
     <nav>
       <a href="#how">How it works</a>
       <a href="#start" class="hide-sm">Get started</a>
-      <a href="#honest" class="hide-sm">Honest gaps</a>
       <a href="https://github.com/techartdev/wispcrew">GitHub</a>
     </nav>
   </div>
@@ -419,24 +412,35 @@ npm run desktop</pre>
   </div>
 </section>
 
-<section id="honest">
-  <div class="wrap">
-    <h2>Honest gaps</h2>
-    <p class="sub">
-      Stated here rather than discovered later. This project is young.
+<!--
+  The "honest gaps" list lives in the README, not here.
+
+  Unverified platforms, unsigned installers and the missing CLI are things
+  somebody evaluating the code needs, and they belong where that evaluation
+  happens. A landing page leading with its own caveats argues against itself
+  before it has made its case.
+
+  Nothing on this page overstates what exists, which is the part that actually
+  matters.
+-->
+
+<!--
+  A closing invitation, because "small models" was a thin note to end on.
+
+  It points at the source rather than a sign-up, which is the honest ask for a
+  project with nothing to sign up to.
+-->
+<section>
+  <div class="wrap" style="text-align:center">
+    <h2>Read it, then run it</h2>
+    <p class="sub" style="margin-left:auto;margin-right:auto">
+      Every line is MIT-licensed and on GitHub — including the design notes
+      that explain why it works this way, and what is still unsolved.
     </p>
-    <ul class="gaps">
-      <li><strong>macOS and Linux are not verified on real hardware.</strong>
-        CI builds, tests and boots the app there, but cannot judge window
-        chrome or native dialogs.</li>
-      <li><strong>Installers are unsigned</strong>, so your OS will warn about
-        an unknown publisher.</li>
-      <li><strong>Cross-machine rooms need a connected desktop.</strong> There
-        is no room host or peer replication yet — single-machine agents and
-        routines are unaffected.</li>
-      <li><strong>A command-line client is designed but not built.</strong>
-        See <a href="https://github.com/techartdev/wispcrew/blob/main/docs/CLI.md">docs/CLI.md</a>.</li>
-    </ul>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/techartdev/wispcrew">View on GitHub</a>
+      <a class="btn" href="https://github.com/techartdev/wispcrew/blob/main/docs/CONVERSATIONS.md">Read the design</a>
+    </div>
   </div>
 </section>
 
