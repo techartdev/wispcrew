@@ -350,6 +350,20 @@ function dropTrailingUserEntry(entries: TranscriptEntry[]): TranscriptEntry[] {
  * The assistant message keeps a single stable id and is rewritten as tokens
  * arrive, so the UI updates in place rather than accumulating fragments.
  */
+/** Anything a caller needs to say that is not one of the positional six. */
+export interface RunOptions {
+  /**
+   * True when nobody is waiting on this turn.
+   *
+   * A routine, a file watch or a self-scheduled follow-up runs with the
+   * window possibly closed, so `notify_user` is how it reports at all. A
+   * turn a person just typed is one they are reading, and notifying as well
+   * is duplicate — measured: two notifications for two questions, then one
+   * combined answer, which reads as a malfunction.
+   */
+  unattended?: boolean;
+}
+
 export async function runPrompt(
   agentId: string,
   rawPrompt: string,
@@ -377,6 +391,7 @@ export async function runPrompt(
    * conversation has always meant.
    */
   transcriptId?: string,
+  opts?: RunOptions,
 ): Promise<string> {
   /*
    * Where this run's output goes.
@@ -554,6 +569,24 @@ export async function runPrompt(
   if (askAgent) tools.register(askAgent as never);
   for (const name of agent?.disabledTools ?? []) tools.unregister(name);
 
+  /*
+   * `notify_user` interrupts someone who is away.
+   *
+   * A turn a person just typed is one they are reading: the reply already
+   * reaches them, so a notification as well is duplicate and reads as a
+   * malfunction. Measured — two notifications for two questions, then one
+   * combined answer.
+   *
+   * Prose did not stop it. The description says plainly "do NOT use it to
+   * answer a message they just sent", and a model called it twice anyway,
+   * because a tool that is offered gets used. Same lesson as the delegation
+   * fix, same remedy: withhold it when it cannot be the right choice.
+   *
+   * A routine, a file watch or a self-scheduled follow-up keeps it, because
+   * for those it is the only way to report at all.
+   */
+  if (!opts?.unattended) tools.unregister('notify_user');
+
   const fingerprint = JSON.stringify({
     presetId: cfg.presetId,
     model: preset.model,
@@ -566,6 +599,9 @@ export async function runPrompt(
     // The delegation roster and depth change the tool set, so a session
     // built at one depth must not be reused at another.
     delegates: askAgent ? askAgent.definition.description.length : 0,
+    // Same reason: `notify_user` is withheld for an attended turn, so a
+    // session built for a routine must not be reused for a typed message.
+    unattended: Boolean(opts?.unattended),
     mcp: (settings.mcpServers ?? []).map(
       (s) => `${s.name}:${s.command}:${(s.args ?? []).join(' ')}:${s.disabled ? 0 : 1}`,
     ),
@@ -749,6 +785,15 @@ export async function runRoutine(routine: RoutineRecord): Promise<void> {
     content: routine.prompt,
     createdAt: Date.now(),
   });
-  await runPrompt(routine.agentId, routine.prompt);
+  /*
+   * Unattended by definition.
+   *
+   * A routine fires whether or not anyone is looking, so `notify_user` is
+   * the only way it can report — which is exactly why it is withheld from
+   * turns a person typed.
+   */
+  await runPrompt(routine.agentId, routine.prompt, [], undefined, undefined, undefined, {
+    unattended: true,
+  });
 }
 

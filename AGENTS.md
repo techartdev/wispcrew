@@ -172,6 +172,16 @@ Config lives in `<userData>/wispcrew-settings.json`
    renderer are hand-written) and justify additions.
 10. Do not commit screenshots, `boot*.log`, or anything matching the key
     patterns in `.gitignore`.
+11. **Make the wrong choice unavailable rather than discouraged.** Users
+    bring their own model, including small self-hosted ones that follow
+    instructions loosely. Measured on Llama 3.3 70B: an agent delegated
+    "what is 3 + 4?" to another agent, and used `notify_user` to answer a
+    question the user was already reading. Three separate prompt edits fixed
+    neither, because **a tool that is offered gets used**. Removing the
+    option worked: the default general-purpose agent is no longer a
+    delegate, and `notify_user` is withheld from attended turns. This costs
+    a strong model nothing and is the difference between working and not on
+    a small one.
 
 ## Current state
 

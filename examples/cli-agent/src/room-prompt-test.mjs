@@ -98,6 +98,39 @@ console.log('\n[notify] reaching the user is not the same as replying');
   check('interrupting, not answering', /interrupting, not answering/i.test(prompt));
 }
 
+console.log('\n[tool registry] notify_user is withheld from an attended turn');
+{
+  /*
+   * The structural half of the same fix. Prose said "do NOT use it to answer
+   * a message they just sent" and a model called it twice anyway, because a
+   * tool that is offered gets used.
+   *
+   * This checks the registry rather than the model: the default set contains
+   * it, and the engine removes it for a turn somebody is watching.
+   */
+  const { defaultTools, ToolRegistry } = await import('@wispcrew/tools');
+
+  const names = defaultTools.map((t) => t.definition.name);
+  check('the default set includes it', names.includes('notify_user'), names.join(', '));
+
+  // The constructor already installs the defaults.
+  const registry = new ToolRegistry();
+  check('a fresh registry has it', registry.get('notify_user') !== undefined);
+
+  registry.unregister('notify_user');
+  check('and it can be withheld', registry.get('notify_user') === undefined);
+
+  /*
+   * Withholding must not disturb anything else. A blunt filter that removed
+   * more than intended would be worse than the bug it fixes — an agent that
+   * quietly loses `shell` is far harder to diagnose than one that notifies
+   * too often.
+   */
+  const survivors = names.filter((n) => n !== 'notify_user' && registry.get(n) !== undefined);
+  check('every other tool survives', survivors.length === names.length - 1,
+    `${survivors.length} of ${names.length - 1}`);
+}
+
 console.log('');
 if (failures) {
   console.error(`ROOM-PROMPT TEST FAILED — ${failures} assertion(s)\n`);

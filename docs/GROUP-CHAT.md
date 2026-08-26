@@ -16,6 +16,42 @@ reads is oversight in name only.
 So the design has to make the common case free and the consequential case
 deliberate.
 
+## Small models are a first-class case
+
+WispCrew lets people bring their own model, and a real reason to use it is
+self-hosting: Ollama, LM Studio, a 7B on a laptop, a 70B on a rented GPU.
+Those models follow instructions less reliably than a frontier one, and
+designing only for the strong case would quietly exclude exactly the users
+who chose this project for its local-first promise.
+
+Two behaviours measured on **Llama 3.3 70B** make the point:
+
+- Asked "what is 3 + 4?", an agent **delegated** to a general-purpose agent,
+  which answered "7", which was relayed back.
+- Told it could "reach the user through: app", an agent used `notify_user`
+  to *answer*, sending two notifications for two questions before replying
+  once.
+
+Both were fixed, and neither fix was a stronger instruction. Three separate
+prompt edits telling an agent to answer from its own knowledge changed
+nothing, because **a tool that is offered gets used**. What worked was
+removing the option: the default general-purpose agent is no longer a
+delegate, and `notify_user` is not registered for a turn somebody is
+watching.
+
+That is the principle worth generalising:
+
+> Make the wrong choice unavailable rather than discouraged.
+
+It costs a strong model nothing — it would not have made those calls — and
+it is the difference between working and not working on a small one. Prompt
+wording is a hint; a tool registry is a fact.
+
+**But do not expect a small model to be a large one.** Some things will
+remain worse: reasoning through a long tool chain, holding a room's context,
+knowing when to stop. The test is whether the *product* behaves correctly,
+not whether every model is equally good at using it.
+
 ## Prior art
 
 [AutoGen's `SelectorGroupChat`](https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/selector-group-chat.html)
