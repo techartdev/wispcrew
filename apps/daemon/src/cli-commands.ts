@@ -420,6 +420,119 @@ export async function approvalsAnswer(
 }
 
 /* ------------------------------------------------------------------ */
+/* machines                                                            */
+/* ------------------------------------------------------------------ */
+
+export async function nodesList(ctx: CommandContext): Promise<Rendered> {
+  const nodes = await ctx.client.call<Record<string, unknown>[]>('listNodes');
+
+  const lines =
+    nodes.length === 0
+      ? ['No other machines are paired.']
+      : table(
+          nodes.map((n) => [
+            String(n.name ?? n.id),
+            String(n.address ?? ''),
+            String(n.fingerprint ?? '').slice(0, 17),
+          ]),
+          ['MACHINE', 'ADDRESS', 'FINGERPRINT'],
+        );
+
+  return { value: nodes, lines };
+}
+
+/* ------------------------------------------------------------------ */
+/* rooms                                                               */
+/* ------------------------------------------------------------------ */
+
+export async function roomsShow(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) throw new Error('Which room? Usage: wispcrew rooms show <name>');
+
+  const room = await findRoom(ctx, wanted);
+  const participants = (room.participants ?? []) as Record<string, unknown>[];
+  const transcript = await ctx.client.call<Record<string, unknown>[]>('getTranscript', [room.id]);
+
+  return {
+    value: { ...room, entries: transcript.length },
+    lines: [
+      `room     ${room.title}`,
+      `id       ${room.id}`,
+      `mode     ${room.mode}`,
+      `entries  ${transcript.length}`,
+      '',
+      'In this room:',
+      ...participants.map(
+        (p) => `  ${p.kind === 'agent' ? `@${p.handle}` : String(p.name ?? p.id)}`,
+      ),
+    ],
+  };
+}
+
+/**
+ * Print the last part of a conversation.
+ *
+ * The command for finding out what an unattended agent has been doing —
+ * which, on a headless machine, is otherwise invisible.
+ */
+export async function roomsTail(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) throw new Error('Which room? Usage: wispcrew rooms tail <name>');
+
+  const room = await findRoom(ctx, wanted);
+  const count = Number(text(ctx.args, 'lines') ?? 20);
+
+  const transcript = await ctx.client.call<Record<string, unknown>[]>('getTranscript', [room.id]);
+  const recent = transcript.slice(-count);
+
+  return {
+    value: recent,
+    lines: recent.map((e) => {
+      const who =
+        e.kind === 'message' ? String(e.role === 'user' ? 'you' : 'agent') : String(e.kind);
+      const body = String(e.content ?? e.text ?? '').replace(/\s+/g, ' ');
+      return `${who.padEnd(8)} ${body}`;
+    }),
+  };
+}
+
+export async function roomsAdd(ctx: CommandContext): Promise<Rendered> {
+  const [roomName, agentName] = ctx.positional;
+  if (!roomName || !agentName) {
+    throw new Error('Usage: wispcrew rooms add <room> <agent>');
+  }
+
+  const room = await findRoom(ctx, roomName);
+  const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+  const agent = findAgent(agents, agentName);
+
+  await ctx.client.call('addRoomAgent', [room.id, agent.id]);
+
+  return {
+    value: { ok: true, room: room.id, agent: agent.id },
+    lines: [`Added ${agent.name} to "${room.title}".`],
+  };
+}
+
+export async function roomsRemove(ctx: CommandContext): Promise<Rendered> {
+  const [roomName, agentName] = ctx.positional;
+  if (!roomName || !agentName) {
+    throw new Error('Usage: wispcrew rooms remove <room> <agent>');
+  }
+
+  const room = await findRoom(ctx, roomName);
+  const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+  const agent = findAgent(agents, agentName);
+
+  await ctx.client.call('removeRoomParticipant', [room.id, agent.id]);
+
+  return {
+    value: { ok: true, room: room.id, agent: agent.id },
+    lines: [`Removed ${agent.name} from "${room.title}".`],
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* tasks                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -688,6 +801,46 @@ const COMMAND_SCHEMA = [
     returns: 'array of { id, title, mode, agents }',
   },
   {
+    name: 'rooms show',
+    summary: 'One conversation: who is in it, and how much has been said.',
+    args: [{ name: 'room', required: true, positional: true, description: 'title or id' }],
+    returns: 'the room, plus an entry count',
+  },
+  {
+    name: 'rooms tail',
+    summary: 'The last part of a conversation.',
+    args: [
+      { name: 'room', required: true, positional: true },
+      { name: '--lines', required: false, description: 'default 20' },
+    ],
+    returns: 'array of transcript entries',
+    notes: 'How to see what an unattended agent has been doing.',
+  },
+  {
+    name: 'rooms add',
+    summary: 'Put an agent in a room, so it can be addressed there.',
+    args: [
+      { name: 'room', required: true, positional: true },
+      { name: 'agent', required: true, positional: true },
+    ],
+    returns: '{ ok, room, agent }',
+  },
+  {
+    name: 'rooms remove',
+    summary: 'Take an agent out of a room.',
+    args: [
+      { name: 'room', required: true, positional: true },
+      { name: 'agent', required: true, positional: true },
+    ],
+    returns: '{ ok, room, agent }',
+  },
+  {
+    name: 'machines',
+    summary: 'Other machines paired with this one.',
+    args: [],
+    returns: 'array of { id, name, address, fingerprint }',
+  },
+  {
     name: 'configure',
     summary: 'Set the provider, model and key for THIS machine.',
     args: [
@@ -714,6 +867,38 @@ const COMMAND_SCHEMA = [
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Find a room by title or id, refusing an ambiguous match.
+ *
+ * Two rooms may share a title — an agent's own room is named after it — so
+ * guessing would send a message to the wrong conversation.
+ */
+async function findRoom(
+  ctx: CommandContext,
+  wanted: string,
+): Promise<Record<string, unknown>> {
+  const rooms = await ctx.client.call<Record<string, unknown>[]>('listConversations');
+
+  const byId = rooms.find((r) => r.id === wanted);
+  if (byId) return byId;
+
+  const matches = rooms.filter(
+    (r) => String(r.title).toLowerCase() === wanted.toLowerCase(),
+  );
+  if (matches.length === 1) return matches[0]!;
+  if (matches.length > 1) {
+    throw new Error(
+      `More than one room is called "${wanted}". Use an id:\n` +
+        matches.map((r) => `  ${r.id}  ${r.title}`).join('\n'),
+    );
+  }
+
+  throw new Error(
+    `No room called "${wanted}". Available:\n` +
+      rooms.map((r) => `  ${r.title}`).join('\n'),
+  );
+}
 
 /** How long ago, in words a person reads faster than a timestamp. */
 function ageOf(when: number): string {

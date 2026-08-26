@@ -96,7 +96,7 @@ console.log('\n[routed] every command is described');
    * Aliases are deliberately not documented twice. `tasks` and `tasks list`
    * are the same command, and listing both would imply a difference.
    */
-  const ALIASES = new Set(['tasks list', 'approvals list']);
+  const ALIASES = new Set(['tasks list', 'approvals list', 'rooms list']);
 
   const undocumented = [...routed].filter(
     (name) => !documented.has(name) && !ALIASES.has(name),
