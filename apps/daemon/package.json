@@ -19,6 +19,10 @@
     "./methods": {
       "types": "./dist/methods.d.ts",
       "default": "./dist/methods.js"
+    },
+    "./cli-output": {
+      "types": "./dist/cli-output.d.ts",
+      "default": "./dist/cli-output.js"
     }
   },
   "bin": {

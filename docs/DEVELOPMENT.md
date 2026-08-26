@@ -19,7 +19,7 @@ npm run desktop # build everything and launch
 |---|---|
 | `npm run typecheck` | `tsc --noEmit` across every workspace |
 | `npm run build` | Builds packages (tsc) and desktop bundles (esbuild + Vite) |
-| `npm run test --workspace @wispcrew/examples-cli` | All 51 offline suites |
+| `npm run test --workspace @wispcrew/examples-cli` | All 52 offline suites |
 | `npm run desktop` | Build + launch Electron |
 | `npm run agent --workspace @wispcrew/examples-cli -- "…"` | Headless CLI (needs a key) |
 | `npm run dist:win` / `dist:mac` / `dist:linux` | Installers |
