@@ -2,10 +2,10 @@
 
 # WispCrew
 
-**A free, open-source desktop AI agent. Bring your own model.**
+**Your AI crew, across your machines, reachable from anywhere.**
 
-No account. No subscription. No vendor lock-in.
-Runs locally, talks to whichever LLM provider you choose.
+Free and MIT-licensed. Bring your own model.
+No account, no subscription, no cloud component.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](package.json)
@@ -16,43 +16,47 @@ Runs locally, talks to whichever LLM provider you choose.
 
 ## What it is
 
-WispCrew is a desktop agent that can actually *do* things on your computer —
-read and write files, run shell commands, search code, fetch web pages — while
-you stay in control of every action that touches your system.
+WispCrew runs AI agents that can actually *do* things — read and write files,
+run shell commands, search code, fetch pages — on the machines you own.
 
-It is deliberately **local-first** and **provider-agnostic**. Your conversations
-and your API key live on your machine. The only network traffic is the request
-you asked for, sent to the provider you chose.
+Three ideas make it different from a chat window with tools:
+
+**A conversation is a room, not a thread with one bot.** It has participants:
+you, a colleague, and any number of agents. Everyone sees every message; who
+*answers* depends on how you address them.
+
+**Your agents live on your machines.** An agent belongs to one node — your
+laptop, a home server, a VPS — where its workspace, its files and its provider
+key stay. The Linux agent runs on Linux because that is where it is.
+
+**A room is reachable from anywhere.** The desktop app is one door into it.
+Telegram is another. A reply typed on a train is *your own turn* in the same
+conversation, not a message to a side-channel bot with separate memory.
+
+```
+                      Room: "Cross-platform release"
+                                  │
+        ┌─────────────────────────┼─────────────────────────┐
+        │                         │                         │
+      You                    @windows                    @linux
+        │                    (this PC)                  (a VPS)
+   ┌────┴────┐
+   │         │
+Desktop  Telegram
+```
 
 ### Why it exists
 
-Most capable desktop agents are tied to one company's model, one subscription,
-and one cloud. WispCrew keeps the useful parts of that experience — durable
-agents, tool use, scheduled work, extensibility — without the account, the
-monthly fee, or the requirement to run your work on someone else's computer.
+Most capable agent platforms are tied to one company's model, one
+subscription, and one cloud. WispCrew keeps the useful parts — durable agents,
+tool use, scheduled work, several agents collaborating — without the account,
+the monthly fee, or running your work on someone else's computer.
 
-## Features
+It is deliberately **local-first**. There is no WispCrew service. What leaves a
+machine leaves because you configured it: your model provider, a Telegram bot
+you created, or a node you own.
 
-| | |
-|---|---|
-| **Any provider** | DeepSeek, OpenAI, Anthropic, Groq, OpenRouter, Ollama, LM Studio, or any OpenAI-compatible endpoint |
-| **Durable agents** | Named teammates with their own instructions, model, workspace, and permissions |
-| **Real tools** | Shell, file read/write/edit, grep, directory listing, web fetch and search |
-| **Attachments** | Drop in images and files — images go to vision models, text is inlined |
-| **Agent delegation** | Agents can hand tasks to each other, with depth, cycle and permission guards |
-| **Rewind & branch** | Undo a bad turn, or fork a conversation into a new agent from any point |
-| **Permission gates** | Every write or command asks first — or set an agent to read-only, or let it run free |
-| **Standing permissions** | “Always allow” is remembered per agent and tool, and listed in Settings so you can revoke it |
-| **Subscription sign-in** | Optionally use a Claude or ChatGPT subscription instead of an API key — see the caveats below |
-| **Free inference** | NVIDIA NIM has a free tier (~40 requests/minute) with Llama, Nemotron and Mistral models — get a key at [build.nvidia.com](https://build.nvidia.com/) |
-| **Routines** | Cron-scheduled prompts, so an agent can work while you are away |
-| **Skills** | Reusable instruction sets, invoked with `/name` |
-| **MCP plugins** | Extend agents with any Model Context Protocol server |
-| **Encrypted keys** | API keys are sealed with the OS keychain (DPAPI / Keychain / libsecret) |
-| **Streaming chat** | Token-by-token output, collapsible tool cards, stoppable mid-run |
-| **Local & offline-capable** | Point it at Ollama or LM Studio and it never touches the internet |
-
-## Install
+## Getting started
 
 Requires **Node.js 20+**.
 
@@ -63,20 +67,166 @@ npm install
 npm run desktop
 ```
 
-On first launch, open **Settings**, pick a provider, and paste an API key
-(or choose Ollama/LM Studio and skip the key entirely).
+On first launch, open **Settings**, pick a provider, and paste an API key — or
+choose Ollama or LM Studio and skip the key entirely.
+
+If you want to try it for nothing, [build.nvidia.com](https://build.nvidia.com/)
+has a free tier with Llama, Nemotron and Mistral models.
 
 ### Building an installer
 
 ```bash
-npm run dist:win     # NSIS installer
-npm run dist:mac     # DMG
-npm run dist:linux   # AppImage
+npm run dist:win --workspace @wispcrew/desktop     # NSIS installer
+npm run dist:mac --workspace @wispcrew/desktop     # DMG
+npm run dist:linux --workspace @wispcrew/desktop   # AppImage
 ```
 
-## Using it from the terminal
+Installers are currently **unsigned**, so your OS will warn about an unknown
+publisher.
 
-The agent core also runs headless:
+## Using it
+
+### One agent
+
+It works as an ordinary assistant out of the box: type, it answers, tool calls
+ask permission first. Nothing below is required.
+
+### Several agents in a room
+
+Open a conversation, press **Members**, and add another agent. A strip appears
+showing who is present:
+
+```
+In this room:  @architect  @coder            Open ▾   Members
+```
+
+Then address them:
+
+| You type | What happens |
+|---|---|
+| `@coder check the build` | Only that agent answers |
+| `@coder @reviewer compare notes` | Both answer, concurrently |
+| `@all what do you think?` | Everyone answers |
+| `and the tests?` | Continues with whoever *you* last addressed |
+
+**Agents do not reply to each other by default.** Two helpful agents answering
+each other is an unbounded loop that costs real money, so an agent acts because
+it was *addressed*. It may draw a colleague in by mentioning them, and a hard
+budget stops a long chain to check with you.
+
+Three modes decide how much the room constrains speaking:
+
+- **Directed** — only agents you tag
+- **Open** — untagged agents may offer to answer *(default)*
+- **Free** — any agent may answer
+
+### From your phone
+
+Create a bot with [@BotFather](https://t.me/botfather), paste the token into
+**Settings → Channels**, then message your bot:
+
+```
+/connect Release      bind this chat or topic to a conversation
+/here                 which conversation is this?
+/disconnect           unbind it
+```
+
+Telegram **topics** map to rooms, so a private chat or a forum group can hold
+many conversations with no switching command — you tap the topic. Replying to
+an agent's message addresses that agent.
+
+Work appears as it happens: a placeholder message that edits itself as tools
+run, then becomes the answer.
+
+**Approval works remotely too.** A request from Telegram gets Allow/Deny
+buttons — and an agent set to run unattended at your desk will still *ask*
+when the request arrives from your phone, because those are different risks.
+You can override that per agent if you want it.
+
+### While you are away
+
+- **Routines** — cron-scheduled prompts, run by a background daemon whether or
+  not the window is open
+- **Follow-ups** — an agent can schedule itself to check back
+- **File watches** — an agent wakes when files change under its workspace
+- **Notifications** — in-app, desktop, or Telegram
+
+### Across machines
+
+Pair another computer in **Machines**. Agents belong to it, and a room can hold
+agents from several machines at once.
+
+**Keys stay on the node that owns them.** A VPS never sees your laptop's
+Anthropic key. Cross-machine rooms are relayed by the desktop, so they need it
+connected — single-machine agents and routines keep running regardless.
+
+## Features
+
+| | |
+|---|---|
+| **Any provider** | DeepSeek, OpenAI, Anthropic, Groq, OpenRouter, Ollama, LM Studio, NVIDIA NIM, or any OpenAI-compatible endpoint |
+| **Rooms** | Several agents and several people in one conversation, with `@handle` addressing |
+| **Reachable anywhere** | Desktop and Telegram are doors onto the same room, not separate chats |
+| **Remote machines** | Paired nodes over TLS with pinned fingerprints; keys never leave their node |
+| **Background daemon** | Agents and routines survive closing the window |
+| **Durable agents** | Named teammates with their own instructions, model, workspace and permissions |
+| **Real tools** | Shell, file read/write/edit, grep, directory listing, web fetch and search |
+| **Attachments** | Drop in images and files — images go to vision models, text is inlined |
+| **Delegation** | Agents can hand work to each other, with depth, cycle and permission guards |
+| **Rewind & branch** | Undo a bad turn, or fork a conversation into a new agent from any point |
+| **Permission gates** | Every write or command asks first — per agent, and per channel |
+| **Routines & watches** | Cron schedules, self-scheduled follow-ups, filesystem triggers |
+| **Skills** | Reusable instruction sets, invoked with `/name` |
+| **MCP servers** | Extend agents with any Model Context Protocol server |
+| **Encrypted keys** | Sealed with the OS keychain (DPAPI / Keychain / libsecret) |
+| **Works offline** | Point it at Ollama or LM Studio and it never touches the internet |
+
+## Small models are a first-class case
+
+Self-hosting is a real reason to use this, so the design assumes models that
+follow instructions loosely. The principle: **make the wrong choice
+unavailable rather than discouraged.**
+
+Two examples, both measured on Llama 3.3 70B. An agent delegated *"what is
+3 + 4?"* to another agent rather than answering. Another used the notification
+tool to reply to a question the user was already reading. Three separate prompt
+edits fixed neither — a tool that is offered gets used — so the fix was to stop
+offering them: the default general-purpose agent is not a delegate, and
+notifications are unavailable on a turn you are watching.
+
+That costs a strong model nothing, and it is the difference between working
+and not working on a small one. **But do not expect a small model to be a
+large one** — long tool chains and knowing when to stop are still harder.
+
+## How it is put together
+
+```
+packages/
+  runtime/          THE ENGINE — no Electron anywhere, so it runs in both hosts
+  shared/           protocol + domain types (zero dependencies)
+  llm/              provider adapters and presets
+  core/             the agent loop and personas
+  tools/            built-in tools + registry
+  mcp/              MCP stdio client
+
+apps/desktop/       Electron app — the deliverable
+apps/daemon/        headless host: keeps agents alive with the window closed
+
+examples/cli-agent/ headless CLI and the offline test suites
+```
+
+The engine lives in `packages/runtime` and imports no Electron, so the desktop
+app and the daemon are **two hosts for one engine**. The desktop is a client:
+it links to a detached daemon that owns durable state, spawning one if none is
+running. Agent-scoped calls are routed to whichever node owns that agent.
+
+A message flows **renderer → preload → bridge → room routing → engine →
+provider**, with tool calls gated by the approval policy and results streamed
+back as events. There is no polling and no hidden network path.
+
+### Terminal use
+
+The agent core runs headless today:
 
 ```bash
 WISPCREW_PROVIDER=openai WISPCREW_API_KEY=sk-... \
@@ -85,33 +235,16 @@ WISPCREW_PROVIDER=openai WISPCREW_API_KEY=sk-... \
 
 Omit the prompt for an interactive REPL.
 
-## How it is put together
+A proper `wispcrew` binary is **planned but not built** — see
+[docs/CLI.md](docs/CLI.md) for the design and why it matters: every coding
+agent already knows how to run a shell command, so a CLI is how Claude Code,
+Codex or a CI job could drive WispCrew without any integration work.
 
-```
-apps/desktop/          Electron app
-  src/main/            main process — bridge, agent runs, scheduler, storage
-  src/preload/         the single, explicit IPC surface
-  src/renderer/        React UI (chat, roster, panels)
-packages/
-  shared/              protocol + domain types (zero dependencies)
-  llm/                 provider adapters and presets
-  core/                the agent loop and personas
-  tools/               built-in tools + registry
-  mcp/                 MCP stdio client
-examples/cli-agent/    headless CLI and the offline test suite
-```
-
-A message flows: **renderer → preload → bridge-host → agent loop → provider**,
-with tool calls gated by the approval policy and results streamed back as
-events. There is no polling and no hidden network path.
-
-### Subscription sign-in (optional, and read this first)
+## Subscription sign-in (optional — read this first)
 
 WispCrew can sign in with a **Claude Pro/Max** or **ChatGPT** subscription
 instead of an API key, either through your browser or by adopting a sign-in
-that Claude Code or Codex CLI already holds on your machine. Where the
-provider reports it, Settings shows how much of your plan you have used and
-when it resets.
+that Claude Code or Codex CLI already holds.
 
 **The caveats are real, and they are yours to weigh:**
 
@@ -119,37 +252,28 @@ when it resets.
   Free/Pro/Max OAuth tokens in third-party products, and accounts can be
   suspended without warning. The account at risk is yours.
 - **OpenAI does not document it for third-party apps.** "Sign in with ChatGPT"
-  is a real product, but the subscription-billing path is documented for
-  OpenAI's own surfaces. The endpoint WispCrew uses is private and can change
-  at any time.
+  is real, but the subscription-billing path is documented for OpenAI's own
+  surfaces. The endpoint WispCrew uses is private and can change at any time.
 
-It is off by default, never enabled silently, and the warning appears above
-the button rather than under it. **An API key is the supported path**, and the
-one we recommend.
+It is off by default, never enabled silently, and the warning appears above the
+button rather than under it. **An API key is the supported path.**
 
-### Rate limits
+## Rate limits
 
 Free tiers throttle. NVIDIA's is roughly 40 requests per minute, and an agent
-turn is several requests — think, call a tool, think again — so a busy turn
-can brush against it.
+turn is several requests — think, call a tool, think again — so a busy turn can
+brush against it.
 
-WispCrew retries transient failures (429 and 5xx) with exponential backoff
-and jitter, honouring `Retry-After` when the provider sends one. It also
-catches capacity errors that arrive *inside* a successful response, which
-NVIDIA does under load. Permanent failures — a bad key, an unknown model — are
-never retried, because retrying them only delays a clear error.
+WispCrew retries transient failures (429 and 5xx) with exponential backoff and
+jitter, honouring `Retry-After` when the provider sends one. It also catches
+capacity errors that arrive *inside* a successful response, which NVIDIA does
+under load. Permanent failures — a bad key, an unknown model — are never
+retried, because that only delays a clear error.
 
 This smooths bursts inside your allowance. It does not rotate keys or work
 around a provider's limits, and it never will.
 
-### When something goes wrong
-
-Misconfiguration is the expected first-run state for a bring-your-own-provider
-app, so failures explain themselves. A rejected key says to check Settings; an
-unknown model names the model; an unreachable local endpoint tells you to
-start Ollama or LM Studio. You should never see a raw HTTP dump.
-
-### Security posture
+## Security posture
 
 This app runs commands on your machine, so the boundaries are deliberate:
 
@@ -158,13 +282,23 @@ This app runs commands on your machine, so the boundaries are deliberate:
 - A strict CSP forbids remote script, inline script, and outbound connections
   from the UI.
 - Markdown from the model is rendered as React elements — never
-  `dangerouslySetInnerHTML` — so HTML in a model response cannot execute.
-  Only `http(s)` links are clickable.
-- File tools are confined to the agent's workspace root; path traversal is
-  rejected.
+  `dangerouslySetInnerHTML` — so HTML in a response cannot execute. Only
+  `http(s)` links are clickable.
+- File tools are confined to the agent's workspace root; traversal is rejected.
 - API keys are encrypted at rest and never sent to the renderer.
+- A remote channel does not inherit `auto` approval. Someone who compromises
+  your Telegram cannot silently run shell commands.
+- Paired nodes use TLS with pinned fingerprints and per-node tokens. Each node
+  holds only its own credentials.
 
 Found a problem? Please see [SECURITY.md](SECURITY.md).
+
+### When something goes wrong
+
+Misconfiguration is the expected first-run state for a bring-your-own-provider
+app, so failures explain themselves. A rejected key says to check Settings; an
+unknown model names the model; an unreachable local endpoint tells you to start
+Ollama or LM Studio. You should never see a raw HTTP dump.
 
 ## Development
 
@@ -173,32 +307,55 @@ npm run typecheck                               # everywhere
 npm run build                                   # all packages + desktop
 npm run test --workspace @wispcrew/examples-cli # 51 offline suites, no API key needed
 npm run desktop                                 # build + launch
+npm run verify                                  # everything CI does, locally
 ```
 
-The offline suites cover the agent loop, real HTTP/SSE wire format, MCP
-end-to-end (including spawning from a path containing spaces), multi-turn
-memory and interrupt safety, the cron scheduler (including DST and timezone
-edge cases), the Markdown renderer (including XSS resistance), attachment
-handling plus provider routing, agent delegation (depth, cycles, fan-out and
-permission narrowing), workspace confinement (traversal, prefix siblings,
-case variants, NUL bytes), and conversation branching (every transcript
-prefix must rebuild to a provider-valid history). They need no API key and
-should stay green.
+`npm run verify` is the one to run before finishing: typecheck, build, all
+offline suites, encoding, provenance and credential guards, and a headless boot
+that fails if the window does not paint. About two minutes.
+
+The offline suites need no API key and no network. Several were written after a
+real bug and exist to keep it fixed: two engines writing one store, a killed
+process that emits `exit` without `close` on Windows, a recycled pid that must
+not be signalled, overwriting a file nobody read, and every panel's CSS classes
+actually existing — that last one caught a modal that typechecked while looking
+broken.
+
+Four more suites need real credentials and are excluded from `npm test`.
 
 CI additionally **boots the app headlessly on Linux, macOS and Windows** and
 fails if the window does not render.
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for depth, and
-[docs/HANDOVER.md](docs/HANDOVER.md) for an honest account of what is
-verified and what is not.
+### Design documents
+
+These record decisions and their reasoning, including what is *not* solved:
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the pieces fit
+- [docs/CONVERSATIONS.md](docs/CONVERSATIONS.md) — the room model, and open problems
+- [docs/GROUP-CHAT.md](docs/GROUP-CHAT.md) — who speaks when several agents share a room
+- [docs/DISTRIBUTED.md](docs/DISTRIBUTED.md) — nodes, pairing, and where keys live
+- [docs/CLI.md](docs/CLI.md) — the planned `wispcrew` binary
+- [docs/HANDOVER.md](docs/HANDOVER.md) — an honest account of what is verified and what is not
+
+## Known gaps
+
+Stated plainly rather than discovered later:
+
+- **macOS and Linux are not verified on real hardware.** CI builds, tests and
+  boots the app there, but cannot judge window chrome or native dialogs.
+- **Installers are unsigned.**
+- Claude *inference* is unverified — the test account has been rate-limited
+  throughout. The token exchange is confirmed working.
+- Cross-machine rooms need a connected desktop; there is no room host or peer
+  replication yet.
 
 ## Contributing
 
-Contributions are genuinely welcome — see
-[CONTRIBUTING.md](CONTRIBUTING.md). Ideas that would help most right now:
+Contributions are genuinely welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+What would help most right now:
 
-- macOS and Linux testing (only Windows is verified so far)
+- macOS and Linux testing on real hardware
+- The `wispcrew` CLI ([docs/CLI.md](docs/CLI.md))
 - More provider presets
 - Additional built-in tools
 - Translations

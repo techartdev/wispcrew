@@ -177,6 +177,34 @@ check('no credentials in tracked files', keys.trim() === '', keys.split('\n')[0]
 check('LICENSE exists', fs.existsSync(path.join(repo, 'LICENSE')));
 
 /*
+ * The README describes something that exists.
+ *
+ * It is the one document everybody reads and nobody tests. Writing this check
+ * immediately found three install commands that had never worked as printed:
+ * they were documented as root scripts and actually live in `apps/desktop`.
+ * Every broken link and wrong command costs a reader some trust in everything
+ * around it.
+ */
+{
+  let readmeOk = true;
+  let detail = '';
+  try {
+    execFileSync(process.execPath, [path.join(repo, 'scripts', 'check-readme.cjs')], {
+      cwd: repo,
+      stdio: 'pipe',
+    });
+  } catch (err) {
+    readmeOk = false;
+    detail = String(err.stdout ?? '')
+      .split('\n')
+      .filter((line) => line.includes('FAIL'))
+      .map((line) => line.trim())
+      .join('; ');
+  }
+  check('README describes what exists', readmeOk, detail);
+}
+
+/*
  * Boot the app and confirm the window actually paints.
  *
  * The most valuable thing CI does, and it works locally too — this machine
