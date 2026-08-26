@@ -1,0 +1,35 @@
+# wispcrew.app — static landing page.
+#
+# Follows the convention already on this host: one directory per site under
+# /opt/hosting/sites, each with its own Caddyfile, imported by the main one.
+#
+# Cloudflare proxies this zone, so Caddy never sees the visitor directly and
+# an ACME challenge would fail. `tls internal` serves the origin certificate
+# that Cloudflare's "Full" mode expects; visitors see Cloudflare's edge cert.
+wispcrew.app {
+	tls internal
+	root * /opt/hosting/sites/wispcrew.app/public
+	file_server
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		# The page loads nothing from anywhere else — no fonts, no analytics,
+		# no scripts — so the policy can say exactly that.
+		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'none'; frame-ancestors 'none'"
+	}
+
+	# Assets are content-stable; the page itself should not be cached for long
+	# while the project is moving this quickly.
+	@assets path *.svg *.png *.ico
+	header @assets Cache-Control "public, max-age=86400"
+	header /index.html Cache-Control "public, max-age=300"
+}
+
+# www redirects to the apex, so there is one canonical address.
+www.wispcrew.app {
+	tls internal
+	redir https://wispcrew.app{uri} permanent
+}

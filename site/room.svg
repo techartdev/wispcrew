@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  One room, several machines, several doors.
+
+  A screenshot would show a chat window, which is the least distinctive thing
+  about this project — every AI product has one. What is actually different is
+  the shape: one conversation, agents living on the machines that own them,
+  and more than one way in.
+
+  Drawn rather than photographed because the idea is structural. Inline SVG
+  also costs no request, scales to any display, and can be read in the page
+  source by anyone curious enough to look.
+
+  Geometry notes, from looking at the first draft rather than reasoning about
+  it: the person's connector used to run straight down the middle and pass
+  THROUGH the centre machine, and its caption landed on top of that card. The
+  line now leaves the room on the left and comes down clear of everything, and
+  the viewBox has room for the bottom row.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 470" role="img"
+     aria-labelledby="roomTitle roomDesc" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <title id="roomTitle">One conversation, reached from several machines and devices</title>
+  <desc id="roomDesc">
+    A central room labelled "Cross-platform release" holds three agents:
+    Architect on a home server, Windows on a desktop PC, and Linux on a VPS.
+    The same room is reached by one person through two doors, a desktop app
+    and Telegram.
+  </desc>
+
+  <defs>
+    <linearGradient id="wisp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7fd8ff"/>
+      <stop offset="55%" stop-color="#4aa8f0" stop-opacity="0.92"/>
+      <stop offset="100%" stop-color="#2b6fd0" stop-opacity="0"/>
+    </linearGradient>
+
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#5fc8ff" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#5fc8ff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- A wisp, small enough to sit inside a node card. -->
+    <symbol id="mark" viewBox="0 0 256 256">
+      <path fill="url(#wisp)" d="M124 200C102 168 96 136 103 122A22 22 0 0 1 145 122C152 136 146 168 124 200Z"/>
+    </symbol>
+  </defs>
+
+  <rect width="760" height="470" fill="none"/>
+  <circle cx="380" cy="140" r="190" fill="url(#glow)"/>
+
+  <!--
+    The room. Drawn first and widest, because everything else is described in
+    relation to it: the machines hold agents that are IN this room, and the
+    doors are ways to reach it.
+  -->
+  <g>
+    <rect x="240" y="20" width="280" height="62" rx="12"
+          fill="#151b24" stroke="#2f6ea0" stroke-width="1.5"/>
+    <text x="380" y="44" text-anchor="middle" fill="#97a3b4" font-size="11.5"
+          letter-spacing="1.4">ONE CONVERSATION</text>
+    <text x="380" y="66" text-anchor="middle" fill="#e8edf4" font-size="15.5" font-weight="600">
+      Cross-platform release
+    </text>
+  </g>
+
+  <!-- Room to agents. Curves rather than elbows: these are relationships, not wiring. -->
+  <g fill="none" stroke="#2b3646" stroke-width="1.5">
+    <path d="M310 82 C310 124, 140 124, 140 162"/>
+    <path d="M380 82 L380 162"/>
+    <path d="M450 82 C450 124, 620 124, 620 162"/>
+  </g>
+
+  <!--
+    Three machines. The point of this row is that each agent's box names a
+    DIFFERENT computer — that is the claim the product makes, and the reason
+    keys never leave their node.
+  -->
+  <g>
+    <!-- Architect -->
+    <rect x="40" y="162" width="200" height="92" rx="11" fill="#151b24" stroke="#232c39"/>
+    <use href="#mark" x="58" y="180" width="20" height="20"/>
+    <text x="86" y="195" fill="#7fd8ff" font-size="14.5" font-weight="600"
+          font-family="ui-monospace, SFMono-Regular, Menlo, monospace">@architect</text>
+    <text x="58" y="220" fill="#97a3b4" font-size="12.5">home server</text>
+    <text x="58" y="240" fill="#5f6b7d" font-size="11.5">its files and key stay here</text>
+
+    <!-- Windows -->
+    <rect x="280" y="162" width="200" height="92" rx="11" fill="#151b24" stroke="#232c39"/>
+    <use href="#mark" x="298" y="180" width="20" height="20"/>
+    <text x="326" y="195" fill="#7fd8ff" font-size="14.5" font-weight="600"
+          font-family="ui-monospace, SFMono-Regular, Menlo, monospace">@windows</text>
+    <text x="298" y="220" fill="#97a3b4" font-size="12.5">this PC</text>
+    <text x="298" y="240" fill="#5f6b7d" font-size="11.5">builds where it builds</text>
+
+    <!-- Linux -->
+    <rect x="520" y="162" width="200" height="92" rx="11" fill="#151b24" stroke="#232c39"/>
+    <use href="#mark" x="538" y="180" width="20" height="20"/>
+    <text x="566" y="195" fill="#7fd8ff" font-size="14.5" font-weight="600"
+          font-family="ui-monospace, SFMono-Regular, Menlo, monospace">@linux</text>
+    <text x="538" y="220" fill="#97a3b4" font-size="12.5">a VPS</text>
+    <text x="538" y="240" fill="#5f6b7d" font-size="11.5">awake while you are not</text>
+  </g>
+
+  <!--
+    The person's connection to the room.
+
+    Routed around the LEFT of the machines rather than through the middle: the
+    first draft ran it straight down and it passed through the centre card,
+    which read as a wire into that machine rather than a line to the room.
+    Dashed, because this is a different kind of relationship — a person
+    reaching a conversation, not an agent belonging to a computer.
+  -->
+  <path d="M262 51 C180 51, 20 90, 20 300 C20 348, 240 348, 300 348"
+        fill="none" stroke="#2f6ea0" stroke-width="1.5" stroke-dasharray="4 5"/>
+
+  <g>
+    <rect x="300" y="326" width="160" height="44" rx="10"
+          fill="#151b24" stroke="#2f6ea0" stroke-width="1.5"/>
+    <text x="380" y="353" text-anchor="middle" fill="#e8edf4" font-size="14" font-weight="600">You</text>
+  </g>
+
+  <!-- Person to doors. -->
+  <g fill="none" stroke="#2b3646" stroke-width="1.5">
+    <path d="M380 370 C380 396, 288 396, 288 412"/>
+    <path d="M380 370 C380 396, 472 396, 472 412"/>
+  </g>
+
+  <!--
+    Doors, not participants.
+
+    A channel has no memory and no opinions — it is how a person arrives. The
+    labels say "via" for exactly that reason: a message from the phone is
+    "you, via Telegram", never "Telegram said".
+  -->
+  <g>
+    <rect x="212" y="412" width="152" height="36" rx="9" fill="#10151d" stroke="#232c39"/>
+    <text x="288" y="435" text-anchor="middle" fill="#97a3b4" font-size="12.5">via Desktop</text>
+
+    <rect x="396" y="412" width="152" height="36" rx="9" fill="#10151d" stroke="#232c39"/>
+    <text x="472" y="435" text-anchor="middle" fill="#97a3b4" font-size="12.5">via Telegram</text>
+  </g>
+
+  <!-- Clear of every box, on the empty right-hand side. -->
+  <text x="600" y="348" fill="#5f6b7d" font-size="11.5">the same room,</text>
+  <text x="600" y="365" fill="#5f6b7d" font-size="11.5">whichever door you use</text>
+</svg>

@@ -7,7 +7,7 @@
 
 <meta name="description" content="Free, MIT-licensed, local-first AI agents that run on the machines you own and stay reachable from anywhere. Bring your own model.">
 <link rel="canonical" href="https://wispcrew.app/">
-<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://wispcrew.app/">
@@ -131,24 +131,21 @@ h1 .accent {
 
 /* ---------- the room diagram ---------- */
 
+/*
+ * The diagram sits on the page background rather than in a panel: it already
+ * has its own cards, and a box around boxes reads as clutter.
+ */
 .room {
-  margin: 52px auto 0;
-  max-width: 640px;
-  padding: 24px 20px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  overflow-x: auto;
+  margin: 46px auto 0;
+  max-width: 760px;
+  padding: 0;
 }
 
-.room pre {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.55;
-  white-space: pre;
+.room img {
+  display: block;
+  width: 100%;
+  height: auto;
 }
-.room .hl { color: var(--wisp); }
 
 /* ---------- sections ---------- */
 
@@ -275,21 +272,26 @@ footer {
   </div>
 
   <!--
-    The diagram is the argument. "Several agents, several machines, several
-    doors onto one conversation" is hard to convey in a sentence and obvious
-    as a picture.
+    The diagram is the argument.
+
+    "Several agents, several machines, several doors onto one conversation" is
+    hard to say in a sentence and obvious as a picture. Deliberately not a
+    screenshot: a chat window is the least distinctive thing here, and every
+    AI product has one.
   -->
-  <div class="room">
-<pre>            Room: <span class="hl">"Cross-platform release"</span>
-                        │
-    ┌───────────────────┼───────────────────┐
-    │                   │                   │
-   <span class="hl">You</span>             <span class="hl">@windows</span>            <span class="hl">@linux</span>
-    │                (this PC)            (a VPS)
- ┌──┴───┐
- │      │
-Desktop Telegram</pre>
-  </div>
+  <figure class="room">
+    <!--
+      Relative, not absolute.
+
+      `/room.svg` is correct once deployed and broken when the file is opened
+      directly — which is how anyone reviews it before it ships, and how I
+      found this: the page rendered its alt text instead of the diagram.
+    -->
+    <img src="room.svg" width="760" height="470" alt="One conversation called
+      &quot;Cross-platform release&quot; holding three agents — Architect on a
+      home server, Windows on this PC, Linux on a VPS — reached by one person
+      through two doors, a desktop app and Telegram.">
+  </figure>
 </div>
 
 <section id="how">
