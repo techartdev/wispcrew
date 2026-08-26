@@ -435,7 +435,43 @@ export function registerBridge(context: BridgeContext): void {
          * can answer for all of them.
          */
         const agentNode = context.remoteForAgent?.(name, args);
-        if (agentNode) return (await agentNode.call(name, args)) as T;
+        if (agentNode) {
+          const value = (await agentNode.call(name, args)) as T;
+
+          /*
+           * A node does not know its own id here.
+           *
+           * `nodeId` is the CLIENT's name for that machine — it lives in this
+           * machine's registry and the node has never seen it. So a record
+           * returned by a node has no `nodeId`, and storing it verbatim gave
+           * an agent that existed on the VPS and looked local here: the next
+           * call about it routed to the local engine, which had never heard
+           * of it.
+           *
+           * Same shape as the `getSettings` correction below — a value that
+           * crosses a boundary needs the receiving side's view added back.
+           */
+          if (name === 'createAgent' && value && typeof value === 'object') {
+            const patch = args[0] as { nodeId?: string } | undefined;
+            const remoteAgent = value as Record<string, unknown>;
+
+            if (patch?.nodeId && typeof remoteAgent.id === 'string') {
+              /*
+               * The roster is a client-side view of every node's agents, so
+               * the record is mirrored here with the SAME id — both sides
+               * then agree on what to call it, and routing works.
+               */
+              const record = store.createAgent({
+                ...(remoteAgent as Partial<AgentRecord>),
+                nodeId: patch.nodeId,
+              });
+              emitAgents();
+              return record as T;
+            }
+          }
+
+          return value;
+        }
 
         const remote = context.remote?.();
         if (remote) {

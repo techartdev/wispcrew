@@ -288,7 +288,10 @@ export async function ask(ctx: CommandContext): Promise<Rendered> {
   await ctx.client.call('sendToRoom', [roomId, message]);
 
   const timeoutMs = Number(text(ctx.args, 'timeout') ?? 180) * 1000;
-  const deadline = Date.now() + timeoutMs;
+  let deadline = Date.now() + timeoutMs;
+
+  /** Approval ids already mentioned, so each is announced once. */
+  const announced = new Set<string>();
 
   let stable = 0;
   let previous = '';
@@ -302,13 +305,44 @@ export async function ask(ctx: CommandContext): Promise<Rendered> {
      * turn is blocked on. An approval raised mid-turn would otherwise sit
      * unseen until this command gave up.
      */
-    const blocked = await ctx.client.call<Record<string, unknown>[]>('listApprovals');
-    if (blocked.length > 0 && !ctx.args.quiet) {
+    /*
+     * Only this agent's approvals.
+     *
+     * A request left parked by an earlier, interrupted run is still in the
+     * queue, and reporting it here told the user to allow an id that had
+     * nothing to do with their turn — measured on the VPS, where allowing
+     * the stale one let the real request time out.
+     */
+    const blocked = (
+      await ctx.client.call<Record<string, unknown>[]>('listApprovals')
+    ).filter((p) => p.agentId === agent.id);
+
+    if (blocked.length > 0) {
+      /*
+       * Waiting for a person is not the agent being slow.
+       *
+       * The timeout exists to catch a turn that has stalled, and a turn
+       * paused for approval has not stalled — somebody simply has not
+       * answered yet. Counting that time against the deadline made `ask`
+       * give up while the agent was still waiting, then return an empty
+       * answer for a turn that went on to succeed. Measured on the VPS: the
+       * transcript held a correct reply that the caller never saw.
+       */
+      deadline = Date.now() + timeoutMs;
+
+      // Printed once per request, not once per poll — the same three lines
+      // every two seconds buries anything else on the terminal.
       for (const p of blocked) {
-        process.stderr.write(
-          `waiting for approval: ${p.tool} — ${p.summary}\n` +
-            `  wispcrew approvals allow ${String(p.id).slice(0, 8)}\n`,
-        );
+        const id = String(p.id);
+        if (announced.has(id)) continue;
+        announced.add(id);
+
+        if (!ctx.args.quiet) {
+          process.stderr.write(
+            `waiting for approval: ${p.tool} — ${p.summary}\n` +
+              `  wispcrew approvals allow ${id.slice(0, 8)}\n`,
+          );
+        }
       }
     }
 

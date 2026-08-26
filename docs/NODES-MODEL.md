@@ -162,10 +162,28 @@ Also fixed: the Machines panel fetched reachability once at startup, before
 background links opened, and never again — so a connected machine was
 displayed permanently as "not reachable".
 
-## Still broken: creating an agent on a node
+## A node forgets its clients when it restarts
 
-Fixes one and three above are real but **not sufficient**, and the honest
-position is that remote agent creation does not work.
+Found while verifying the fix below: a paired client stopped connecting, with
+`The node refused the connection (wrong token, or it is not accepting
+clients)`. The fingerprint still matched, so pinning was fine.
+
+**Client tokens live only in memory.** A node has no file holding them, so
+every restart invalidates every pairing and each client must pair again with
+a fresh code — which nobody would guess from the error, and which makes a
+node that restarts on boot effectively unpairable.
+
+Not fixed here. The shape of the fix is clear — persist the issued tokens
+beside the certificate, encrypted with the node's own key file, since they
+are credentials of exactly the kind `secrets-store` already handles — but it
+is a separate change from the CLI work and deserves its own verification.
+
+## Fixed: creating an agent on a node
+
+**Now working, and verified on the real VPS**: an agent created from the
+desktop with a `nodeId` is created on that machine, keeps its `nodeId` in the
+client's roster, and appears on the node under the same id. The account below
+is kept because the three wrong attempts are the useful part.
 
 `routeForCall` now sends `createAgent` to the node named in the patch, which
 is right: the node creates the agent in its own store, with its own workspace
@@ -182,8 +200,14 @@ Three attempts, three different wrong places:
    before any handler body runs.
 2. In `routeForCall` — right place, wrong direction: the return value is the
    node's, not the client's.
-3. Not yet attempted: the client stamps its own `nodeId` onto whatever the
-   node returns, because only the client knows it.
+3. **The fix**: the client stamps its own `nodeId` onto whatever the node
+   returns, and mirrors the record into its roster under the same id. Only
+   the client knows that id, because it is the client's name for the machine.
+
+   The precedent was already there — `getSettings` is corrected on return for
+   the same reason, because encryption at rest is a property of the receiving
+   machine rather than the answering one. A value crossing a boundary needs
+   the receiver's view added back.
 
 The fix is small. The reason it is not made yet is the next section.
 
