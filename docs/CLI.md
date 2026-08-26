@@ -20,16 +20,35 @@ store directly:
 
 Every command supports `--json`, `--output ndjson` and `--quiet`.
 
-**Not built**, and named rather than quietly skipped:
+Also: `pair` / `machines` / `machines forget`, `routines`, `skills`,
+`grants`, `mcp`, `history`, `providers`, `personas`, `signins`, and
+`test provider` / `test telegram`.
 
-- **`pair` from the CLI.** The runtime has `pairWithNode` and `addNode`, so it
-  is reachable — but pairing writes to the *client's* registry, and the CLI
-  talks only to a node. Doing it properly means deciding whether a headless
-  machine holds a client registry at all, which is a design question rather
-  than a missing function.
-- **`--timeout` beyond `ask` and `tasks wait`.** Every other command is a
-  single round trip that answers or fails; a timeout there would be
-  decoration.
+### How complete is it?
+
+`node scripts/cli-gap.cjs` compares every method in the bridge — the
+desktop's whole surface — against what a CLI command reaches. It is a report
+rather than a gate, and the number is meant to be checked rather than
+remembered.
+
+**Nine GUI-only capabilities are deliberately absent**, each because a
+terminal genuinely cannot offer it: a browser sign-in, a file or directory
+picker, opening a path in a file manager, window chrome, and the two
+event-subscription methods, which are a push channel rather than a command.
+
+**Nine remain unbuilt**, named rather than skipped:
+
+| | why not yet |
+|---|---|
+| `createSkill` `updateSkill` `deleteSkill` | a skill is a body of instructions; editing it on a command line wants an `$EDITOR` convention this project has not chosen |
+| `updateMcpServer` `setMcpToolEnabled` | per-tool toggling needs a way to name one tool of many; `mcp add`/`remove` cover the common case |
+| `configureNode` | configuring *another* machine, which `wispcrew configure` run there already does better |
+| `oauthImportFromCli` `listDetectedCliSignIns` | adopting a Claude Code or Codex sign-in; reachable, and touching borrowed credentials deserves its own care |
+| `discoverChatId` | finding a Telegram chat id by watching for a message — inherently interactive |
+
+**`--timeout` stays on `ask` and `tasks wait` only.** Every other command is
+a single round trip that answers or fails; a timeout there would be
+decoration.
 
 ## Why this is not a developer convenience
 

@@ -153,9 +153,166 @@ export async function agentsDelete(ctx: CommandContext): Promise<Rendered> {
   };
 }
 
+export async function agentsUpdate(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) {
+    throw new Error(
+      'Usage: wispcrew agents set <agent> [--model x] [--policy ask|auto|readonly]\n' +
+        '                              [--description "..."] [--workspace <path>]',
+    );
+  }
+
+  const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+  const agent = findAgent(agents, wanted);
+
+  const patch: Record<string, unknown> = {};
+  for (const [flag, field] of [
+    ['model', 'model'],
+    ['policy', 'approvalPolicy'],
+    ['description', 'description'],
+    ['workspace', 'workspaceRoot'],
+    ['name', 'name'],
+  ] as const) {
+    const value = text(ctx.args, flag);
+    if (value !== undefined) patch[field] = value;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    throw new Error('Nothing to change. Pass at least one of --model, --policy, --description.');
+  }
+
+  const updated = await ctx.client.call<Record<string, unknown>>('updateAgent', [agent.id, patch]);
+
+  return {
+    value: updated,
+    lines: [
+      `Updated ${agent.name}.`,
+      ...Object.entries(patch).map(([k, v]) => `  ${k}  ${String(v)}`),
+    ],
+  };
+}
+
+export async function agentsDuplicate(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) throw new Error('Which agent? Usage: wispcrew agents duplicate <agent>');
+
+  const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+  const agent = findAgent(agents, wanted);
+
+  /*
+   * Configuration is copied; the conversation is not. A duplicate is a fresh
+   * teammate with the same instructions, not a clone mid-thought.
+   */
+  const copy = await ctx.client.call<Record<string, unknown>>('duplicateAgent', [agent.id]);
+
+  return {
+    value: copy,
+    lines: [`Created "${copy.name}" from ${agent.name}.`, 'Its conversation starts empty.'],
+  };
+}
+
+export async function agentsStop(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) throw new Error('Which agent? Usage: wispcrew agents stop <agent>');
+
+  const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+  const agent = findAgent(agents, wanted);
+
+  await ctx.client.call('interrupt', [agent.id]);
+
+  return {
+    value: { ok: true, agent: agent.id },
+    lines: [`Asked ${agent.name} to stop.`],
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* settings                                                            */
 /* ------------------------------------------------------------------ */
+
+export async function providers(ctx: CommandContext): Promise<Rendered> {
+  const presets = await ctx.client.call<Record<string, unknown>[]>('getPresets');
+
+  return {
+    value: presets,
+    lines: table(
+      presets.map((p) => [
+        String(p.id),
+        String(p.label ?? p.id),
+        String(p.defaultModel ?? ''),
+      ]),
+      ['ID', 'PROVIDER', 'DEFAULT MODEL'],
+    ),
+  };
+}
+
+export async function personas(ctx: CommandContext): Promise<Rendered> {
+  const list = await ctx.client.call<Record<string, unknown>[]>('getPersonas');
+
+  return {
+    value: list,
+    lines: table(
+      list.map((p) => [String(p.id), String(p.description ?? '').slice(0, 60)]),
+      ['PERSONA', 'WHAT IT IS FOR'],
+    ),
+  };
+}
+
+/**
+ * Check that the configured provider actually answers.
+ *
+ * The first thing to run after `configure`, and the difference between
+ * "configured" and "working" — a key can be present, well-formed and wrong.
+ */
+export async function testProvider(ctx: CommandContext): Promise<Rendered> {
+  const result = await ctx.client.call<Record<string, unknown>>('testConnection');
+
+  const ok = result.ok === true;
+  return {
+    value: result,
+    lines: ok
+      ? ['The provider answered.']
+      : [`The provider did not answer: ${result.error ?? 'no reason given'}`],
+  };
+}
+
+export async function testChannel(ctx: CommandContext): Promise<Rendered> {
+  const result = await ctx.client.call<Record<string, unknown>>('testTelegram');
+
+  const ok = result.ok === true;
+  return {
+    value: result,
+    lines: ok
+      ? ['Telegram accepted a test message.']
+      : [`Telegram refused: ${result.error ?? 'no reason given'}`],
+  };
+}
+
+export async function signins(ctx: CommandContext): Promise<Rendered> {
+  const status = await ctx.client.call<Record<string, unknown>[]>('listOAuthStatus');
+
+  const lines =
+    status.length === 0
+      ? ['No subscription sign-ins.']
+      : table(
+          status.map((s) => [
+            String(s.vendor),
+            s.signedIn ? 'signed in' : 'signed out',
+            String(s.detail ?? ''),
+          ]),
+          ['VENDOR', 'STATE', 'DETAIL'],
+        );
+
+  return { value: status, lines };
+}
+
+export async function signOut(ctx: CommandContext): Promise<Rendered> {
+  const vendor = ctx.positional[0];
+  if (!vendor) throw new Error('Which one? Usage: wispcrew signout <claude|chatgpt>');
+
+  await ctx.client.call('oauthSignOut', [vendor]);
+  return { value: { ok: true, vendor }, lines: [`Signed out of ${vendor}.`] };
+}
 
 export async function configure(ctx: CommandContext): Promise<Rendered> {
   const patch: Record<string, unknown> = {};
@@ -972,6 +1129,192 @@ export async function tasksCancel(ctx: CommandContext): Promise<Rendered> {
 }
 
 /* ------------------------------------------------------------------ */
+/* MCP servers                                                         */
+/* ------------------------------------------------------------------ */
+
+export async function mcpList(ctx: CommandContext): Promise<Rendered> {
+  const servers = await ctx.client.call<Record<string, unknown>[]>('listMcpServers');
+
+  const lines =
+    servers.length === 0
+      ? ['No MCP servers. Add one with:  wispcrew mcp add <name> <command> [args...]']
+      : table(
+          servers.map((s) => [
+            String(s.name),
+            String(s.command ?? ''),
+            (s.tools as unknown[] | undefined)?.length
+              ? `${(s.tools as unknown[]).length} tools`
+              : 'not connected',
+          ]),
+          ['NAME', 'COMMAND', 'STATE'],
+        );
+
+  return { value: servers, lines };
+}
+
+export async function mcpAdd(ctx: CommandContext): Promise<Rendered> {
+  const [name, command, ...args] = ctx.positional;
+  if (!name || !command) {
+    throw new Error(
+      'Usage: wispcrew mcp add <name> <command> [args...]\n' +
+        '  e.g. wispcrew mcp add files npx -y @modelcontextprotocol/server-filesystem /data',
+    );
+  }
+
+  const created = await ctx.client.call<Record<string, unknown>>('addMcpServer', [
+    { name, command, args },
+  ]);
+
+  return {
+    value: created,
+    lines: [`Added "${name}".`, `  ${command} ${args.join(' ')}`.trimEnd()],
+  };
+}
+
+export async function mcpRemove(ctx: CommandContext): Promise<Rendered> {
+  const name = ctx.positional[0];
+  if (!name) throw new Error('Which server? Usage: wispcrew mcp remove <name>');
+
+  if (ctx.args.yes !== true) {
+    throw new Error(`This removes the MCP server "${name}". Re-run with --yes.`);
+  }
+
+  await ctx.client.call('removeMcpServer', [name]);
+  return { value: { ok: true, removed: name }, lines: [`Removed "${name}".`] };
+}
+
+/* ------------------------------------------------------------------ */
+/* history and recovery                                                */
+/* ------------------------------------------------------------------ */
+
+export async function historyList(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) throw new Error('Which room? Usage: wispcrew history <room>');
+
+  const room = await findRoom(ctx, wanted);
+  const versions = await ctx.client.call<Record<string, unknown>[]>('listHistory', [room.id]);
+
+  const lines =
+    versions.length === 0
+      ? ['No earlier versions of this conversation.']
+      : table(
+          versions.map((v) => [
+            String(v.id).slice(0, 8),
+            ageOf(Number(v.savedAt)),
+            `${v.entryCount ?? '?'} entries`,
+            String(v.reason ?? ''),
+          ]),
+          ['ID', 'SAVED', 'SIZE', 'WHY'],
+        );
+
+  return { value: versions, lines };
+}
+
+export async function historyRestore(ctx: CommandContext): Promise<Rendered> {
+  const [roomName, versionId] = ctx.positional;
+  if (!roomName || !versionId) {
+    throw new Error('Usage: wispcrew history restore <room> <id>');
+  }
+
+  const room = await findRoom(ctx, roomName);
+  const versions = await ctx.client.call<Record<string, unknown>[]>('listHistory', [room.id]);
+
+  const matches = versions.filter((v) => String(v.id).startsWith(versionId));
+  if (matches.length === 0) throw new Error(`No saved version starts with "${versionId}".`);
+  if (matches.length > 1) {
+    throw new Error(`"${versionId}" matches ${matches.length} versions. Use more characters.`);
+  }
+
+  /*
+   * Restoring replaces the current transcript, and the current one is saved
+   * first — so this is reversible, which is why it does not demand --yes.
+   */
+  await ctx.client.call('restoreHistory', [room.id, matches[0]!.id]);
+
+  return {
+    value: { ok: true, room: room.id, version: matches[0]!.id },
+    lines: [
+      `Restored "${room.title}" to its earlier version.`,
+      'The version you replaced was saved too.',
+    ],
+  };
+}
+
+export async function roomsRewind(ctx: CommandContext): Promise<Rendered> {
+  const [roomName, entryId] = ctx.positional;
+  if (!roomName || !entryId) {
+    throw new Error(
+      'Usage: wispcrew rooms rewind <room> <entry-id>\n' +
+        '  Find an id with:  wispcrew rooms tail <room> --json',
+    );
+  }
+
+  const room = await findRoom(ctx, roomName);
+  await ctx.client.call('rewindConversation', [room.id, entryId]);
+
+  return {
+    value: { ok: true, room: room.id, to: entryId },
+    lines: [
+      `Rewound "${room.title}".`,
+      'The removed part was saved — see:  wispcrew history ' + room.title,
+    ],
+  };
+}
+
+export async function roomsBranch(ctx: CommandContext): Promise<Rendered> {
+  const [roomName, entryId] = ctx.positional;
+  if (!roomName || !entryId) {
+    throw new Error('Usage: wispcrew rooms branch <room> <entry-id> [--name <name>]');
+  }
+
+  const room = await findRoom(ctx, roomName);
+  const created = await ctx.client.call<Record<string, unknown>>('branchConversation', [
+    room.id,
+    entryId,
+    text(ctx.args, 'name'),
+  ]);
+
+  return {
+    value: created,
+    lines: [
+      `Branched into "${created.name}".`,
+      'The original is untouched.',
+    ],
+  };
+}
+
+export async function roomsClear(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) throw new Error('Which room? Usage: wispcrew rooms clear <room> --yes');
+
+  const room = await findRoom(ctx, wanted);
+  if (ctx.args.yes !== true) {
+    throw new Error(`This clears "${room.title}". Re-run with --yes.`);
+  }
+
+  await ctx.client.call('clearConversation', [room.id]);
+  return {
+    value: { ok: true, room: room.id },
+    lines: [`Cleared "${room.title}".`, 'Recoverable from:  wispcrew history ' + room.title],
+  };
+}
+
+export async function roomsMode(ctx: CommandContext): Promise<Rendered> {
+  const [roomName, mode] = ctx.positional;
+  if (!roomName || !mode) {
+    throw new Error('Usage: wispcrew rooms mode <room> <directed|open|free>');
+  }
+
+  const room = await findRoom(ctx, roomName);
+  await ctx.client.call('setRoomMode', [room.id, mode]);
+
+  return {
+    value: { ok: true, room: room.id, mode },
+    lines: [`"${room.title}" is now ${mode}.`],
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* discovery                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -1154,6 +1497,150 @@ const COMMAND_SCHEMA = [
       { name: 'agent', required: true, positional: true },
     ],
     returns: '{ ok, room, agent }',
+  },
+  {
+    name: 'agents set',
+    summary: 'Change an agent: model, permissions, description, workspace.',
+    args: [
+      { name: 'agent', required: true, positional: true },
+      { name: '--model', required: false },
+      { name: '--policy', required: false, description: 'ask | auto | readonly' },
+      { name: '--description', required: false },
+      { name: '--workspace', required: false },
+      { name: '--name', required: false },
+    ],
+    returns: 'the updated agent',
+  },
+  {
+    name: 'agents duplicate',
+    summary: 'Copy an agent\u2019s configuration under a new name.',
+    args: [{ name: 'agent', required: true, positional: true }],
+    returns: 'the new agent',
+    notes: 'Configuration only — the copy starts with an empty conversation.',
+  },
+  {
+    name: 'agents stop',
+    summary: 'Interrupt whatever an agent is doing.',
+    args: [{ name: 'agent', required: true, positional: true }],
+    returns: '{ ok, agent }',
+  },
+  {
+    name: 'rooms clear',
+    summary: 'Empty a conversation.',
+    args: [
+      { name: 'room', required: true, positional: true },
+      { name: '--yes', required: true, description: 'destructive; required in scripts' },
+    ],
+    returns: '{ ok, room }',
+    notes: 'Recoverable — the previous version is kept, see history.',
+  },
+  {
+    name: 'rooms mode',
+    summary: 'How much the room constrains who speaks.',
+    args: [
+      { name: 'room', required: true, positional: true },
+      { name: 'mode', required: true, positional: true, description: 'directed | open | free' },
+    ],
+    returns: '{ ok, room, mode }',
+  },
+  {
+    name: 'rooms rewind',
+    summary: 'Drop everything after an entry.',
+    args: [
+      { name: 'room', required: true, positional: true },
+      { name: 'entry', required: true, positional: true, description: 'id from rooms tail --json' },
+    ],
+    returns: '{ ok, room, to }',
+    notes: 'The removed part is saved and appears in history.',
+  },
+  {
+    name: 'rooms branch',
+    summary: 'Fork a conversation into a new agent from a chosen point.',
+    args: [
+      { name: 'room', required: true, positional: true },
+      { name: 'entry', required: true, positional: true },
+      { name: '--name', required: false },
+    ],
+    returns: 'the new agent',
+    notes: 'The original is untouched.',
+  },
+  {
+    name: 'history',
+    summary: 'Earlier versions of a conversation, kept before anything was removed.',
+    args: [{ name: 'room', required: true, positional: true }],
+    returns: 'array of saved versions',
+  },
+  {
+    name: 'history restore',
+    summary: 'Put a conversation back to an earlier version.',
+    args: [
+      { name: 'room', required: true, positional: true },
+      { name: 'id', required: true, positional: true, description: 'a prefix is enough' },
+    ],
+    returns: '{ ok, room, version }',
+    notes: 'Reversible — the version being replaced is saved first.',
+  },
+  {
+    name: 'mcp',
+    summary: 'Model Context Protocol servers, and whether they connected.',
+    args: [],
+    returns: 'array of servers',
+  },
+  {
+    name: 'mcp add',
+    summary: 'Register an MCP server, extending every agent\u2019s tools.',
+    args: [
+      { name: 'name', required: true, positional: true },
+      { name: 'command', required: true, positional: true },
+      { name: 'args', required: false, positional: true, description: 'remaining words' },
+    ],
+    returns: 'the server',
+  },
+  {
+    name: 'mcp remove',
+    summary: 'Unregister an MCP server.',
+    args: [
+      { name: 'name', required: true, positional: true },
+      { name: '--yes', required: true },
+    ],
+    returns: '{ ok, removed }',
+  },
+  {
+    name: 'providers',
+    summary: 'Provider presets this build knows about.',
+    args: [],
+    returns: 'array of { id, label, defaultModel }',
+  },
+  {
+    name: 'personas',
+    summary: 'Built-in agent personas.',
+    args: [],
+    returns: 'array of { id, description }',
+  },
+  {
+    name: 'test provider',
+    summary: 'Check the configured provider actually answers.',
+    args: [],
+    returns: '{ ok, error? }',
+    notes: 'The difference between "configured" and "working" — run it after configure.',
+  },
+  {
+    name: 'test telegram',
+    summary: 'Send a test message through Telegram.',
+    args: [],
+    returns: '{ ok, error? }',
+  },
+  {
+    name: 'signins',
+    summary: 'Subscription sign-ins and whether they are still valid.',
+    args: [],
+    returns: 'array of { vendor, signedIn, detail }',
+  },
+  {
+    name: 'signout',
+    summary: 'Forget a subscription sign-in.',
+    args: [{ name: 'vendor', required: true, positional: true, description: 'claude | chatgpt' }],
+    returns: '{ ok, vendor }',
   },
   {
     name: 'routines',
