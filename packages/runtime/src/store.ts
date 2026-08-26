@@ -178,6 +178,18 @@ export function createAgent(patch: Partial<AgentRecord>): AgentRecord {
     avatarColor: patch.avatarColor,
     presetId: patch.presetId,
     model: patch.model,
+    /*
+     * Which machine owns this agent.
+     *
+     * Dropped until now, so `createAgent({ nodeId })` silently produced a
+     * LOCAL agent — the caller asked for a remote one and got no error, just
+     * the wrong thing. Found by creating an agent on a real paired VPS and
+     * watching it answer from this laptop.
+     *
+     * The Agent panel never hit it because editing goes through
+     * `updateAgent`, which spreads the patch instead of listing fields.
+     */
+    nodeId: patch.nodeId,
     workspaceRoot: patch.workspaceRoot,
     approvalPolicy: patch.approvalPolicy,
     /*

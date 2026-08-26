@@ -50,6 +50,12 @@ export const CLIENT_ONLY_METHODS = [
   'listNodes',
   'pairNode',
   'forgetNode',
+  /*
+   * Addresses a node BY ID rather than being about one agent, so the client
+   * has to pick the link itself. Forwarding it would send a node's key to
+   * whichever engine answered, which is the opposite of the intent.
+   */
+  'configureNode',
 ] as const;
 
 export type ClientOnlyMethod = (typeof CLIENT_ONLY_METHODS)[number];

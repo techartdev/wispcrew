@@ -479,6 +479,18 @@ export function registerBridge(context: BridgeContext): void {
 
   handle('listAgents', () => store.listAgents());
 
+  /*
+   * Reached only for a LOCAL agent.
+   *
+   * When the patch names a node, `routeForCall` sends the whole call to that
+   * machine instead, and this handler never runs — the node creates the
+   * agent in its own store, with its own workspace and engine.
+   *
+   * A previous attempt put the node-forwarding here and it was dead code:
+   * `createAgent` is not client-only, so the bridge forwards it before any
+   * handler body executes. The agent was created locally with a `nodeId`
+   * pointing at a machine that had never heard of it.
+   */
   handle('createAgent', (patch: Partial<AgentRecord>) => {
     // With its room: an agent that has none cannot be talked to.
     const created = createAgentWithRoom(patch);
@@ -1051,6 +1063,25 @@ export function registerBridge(context: BridgeContext): void {
   });
 
   /* -- rooms ----------------------------------------------------- */
+
+  /*
+   * Configure a paired machine.
+   *
+   * Sent over that node's own link, so the key reaches exactly the machine
+   * the user chose and is encrypted there. Nothing is stored locally: this
+   * client never holds another node's credentials.
+   */
+  handle('configureNode', async (nodeId: string, patch: Record<string, unknown>) => {
+    const link = existingLink(nodeId);
+    if (!link) return { ok: false, error: 'That machine is not connected.' };
+
+    try {
+      await link.call('writeSettings', [patch]);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  });
 
   handle('listConversations', () => listConversations());
 

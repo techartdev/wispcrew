@@ -304,6 +304,22 @@ export interface WispBridge {
    */
   pairNode(address: string, code: string, expectFingerprint?: string): Promise<NodeSummary>;
 
+  /**
+   * Give a paired node its own provider settings and key.
+   *
+   * A node holds only the credentials it was given — keys are never copied
+   * between machines — so each one is configured directly. The key travels
+   * over that node's pinned TLS link and is encrypted there with its own
+   * machine-local key file; this machine never stores it.
+   *
+   * Without this a remote agent had no way to reach a model, which made
+   * remote agents look supported and be unusable.
+   */
+  configureNode(
+    nodeId: string,
+    settings: { presetId?: string; model?: string; baseUrl?: string; apiKey?: string },
+  ): Promise<{ ok: boolean; error?: string }>;
+
   /** Forget a node and delete its token. */
   forgetNode(nodeId: string): Promise<NodeSummary[]>;
 

@@ -137,6 +137,19 @@ export function App() {
    */
   const [draftMention, setDraftMention] = useState<string | null>(null);
 
+  /*
+   * Ask again when the Machines panel opens.
+   *
+   * Reachability is knowable only from a live link, and links are opened in
+   * the background after startup — so the list fetched at launch says "not
+   * reachable" for a node that connects a moment later, and keeps saying it.
+   * A user then sees a machine they can demonstrably use described as
+   * unreachable, with no indication that the answer is simply old.
+   */
+  useEffect(() => {
+    if (panel === 'nodes') void actions.refreshNodes();
+  }, [panel, actions]);
+
   const configuredServers = useMemo(() => settings?.mcpServers ?? [], [settings?.mcpServers]);
 
   /*

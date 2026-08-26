@@ -108,6 +108,23 @@ export function routeForCall(
   method: string,
   args: unknown[],
 ): NodeClient | null {
+  /*
+   * `createAgent` names its node in the patch, not as an agent id.
+   *
+   * Every other routed method takes an existing agent's id as its first
+   * argument. This one creates the agent, so there is no id yet — the node
+   * is chosen by the caller and travels in `patch.nodeId`.
+   *
+   * Without this the call was forwarded to the local daemon like any other,
+   * and an agent assigned to a VPS was created on this machine instead:
+   * correct node shown in the interface, nothing on the node itself, and a
+   * message to it silently doing nothing.
+   */
+  if (method === 'createAgent') {
+    const patch = args[0] as { nodeId?: string } | undefined;
+    return patch?.nodeId ? existingLink(patch.nodeId) : null;
+  }
+
   if (!AGENT_SCOPED.has(method)) return null;
   const agentId = args[0];
   if (typeof agentId !== 'string') return null;
