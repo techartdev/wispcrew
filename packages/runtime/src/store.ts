@@ -257,6 +257,19 @@ export function updateAgent(id: string, patch: AgentPatch): AgentRecord {
   return next;
 }
 
+/**
+ * Called when an agent is deleted, so its room can go too.
+ *
+ * A hook rather than an import: `conversations.ts` already imports this
+ * module, and importing it back would be a cycle. Optional, so a host that
+ * never loads the conversation layer still deletes agents cleanly.
+ */
+let onAgentDeleted: ((agentId: string) => void) | undefined;
+
+export function setAgentDeletedHook(hook: (agentId: string) => void): void {
+  onAgentDeleted = hook;
+}
+
 export function deleteAgent(id: string): void {
   saveAgents(listAgents().filter((a) => a.id !== id));
   try {
@@ -264,6 +277,24 @@ export function deleteAgent(id: string): void {
   } catch {
     /* transcript may not exist */
   }
+
+  /*
+   * The agent's own room goes with it.
+   *
+   * Every agent gets a room whose id IS the agent id, so deleting the agent
+   * without the room leaves a conversation nobody can answer — it renders in
+   * the sidebar, accepts messages, and does nothing with them. Seen on a
+   * real VPS as a "Linux" room with no agent in it.
+   *
+   * Done through a hook rather than a direct call: `conversations.ts`
+   * imports this module, so importing it back would be a cycle. The
+   * conversation layer registers itself at startup.
+   *
+   * A room the agent merely PARTICIPATES in is left alone — that belongs to
+   * whoever created it, and may hold other agents and a transcript the user
+   * still wants.
+   */
+  onAgentDeleted?.(id);
 }
 
 /**

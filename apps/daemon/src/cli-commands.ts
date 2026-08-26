@@ -241,6 +241,185 @@ export async function roomsList(ctx: CommandContext): Promise<Rendered> {
 }
 
 /* ------------------------------------------------------------------ */
+/* asking                                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Send a message and wait for the reply.
+ *
+ * The command that makes the CLI useful rather than merely administrative.
+ * Deliberately blocking: a caller wants the answer, and a fire-and-forget
+ * send that prints "queued" leaves them polling a transcript.
+ */
+export async function ask(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  const message = ctx.positional.slice(1).join(' ') || text(ctx.args, 'message');
+
+  if (!wanted || !message) {
+    throw new Error('Usage: wispcrew ask <agent> "your message"');
+  }
+
+  const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+  const agent = findAgent(agents, wanted);
+  const roomId = String(agent.id);
+
+  /*
+   * Where the reply will start.
+   *
+   * Counting from the current end means a busy transcript does not make the
+   * command re-read history it has already seen, and two `ask`es running at
+   * once cannot show each other's answers.
+   */
+  const before = (await ctx.client.call<unknown[]>('getTranscript', [roomId])).length;
+
+  /*
+   * Say that somebody is here before the turn starts.
+   *
+   * The daemon denies approvals when nothing is attached. This command IS
+   * somebody — a person at a terminal waiting for the answer — so a tool
+   * call that needs permission should reach them rather than being refused
+   * before they see it.
+   *
+   * Listed again on every poll below, which keeps the window open for as
+   * long as this command is waiting.
+   */
+  await ctx.client.call('listApprovals');
+
+  await ctx.client.call('sendToRoom', [roomId, message]);
+
+  const timeoutMs = Number(text(ctx.args, 'timeout') ?? 180) * 1000;
+  const deadline = Date.now() + timeoutMs;
+
+  let stable = 0;
+  let previous = '';
+  let entries: Record<string, unknown>[] = [];
+
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 2000));
+
+    /*
+     * Keeps the "somebody is here" window open, and surfaces anything the
+     * turn is blocked on. An approval raised mid-turn would otherwise sit
+     * unseen until this command gave up.
+     */
+    const blocked = await ctx.client.call<Record<string, unknown>[]>('listApprovals');
+    if (blocked.length > 0 && !ctx.args.quiet) {
+      for (const p of blocked) {
+        process.stderr.write(
+          `waiting for approval: ${p.tool} — ${p.summary}\n` +
+            `  wispcrew approvals allow ${String(p.id).slice(0, 8)}\n`,
+        );
+      }
+    }
+
+    entries = (await ctx.client.call<Record<string, unknown>[]>('getTranscript', [roomId])).slice(
+      before,
+    );
+
+    const replies = entries.filter((e) => e.kind === 'message' && e.role === 'assistant');
+    const signature = replies.map((e) => `${e.id}:${String(e.content ?? '').length}`).join('|');
+
+    /*
+     * Wait for the text to stop growing, not merely to appear.
+     *
+     * Replies stream, so the first chunk is not the answer. Two identical
+     * samples mean the turn has settled.
+     */
+    if (replies.length > 0) {
+      stable = signature === previous ? stable + 1 : 0;
+      if (stable >= 2) break;
+    }
+    previous = signature;
+  }
+
+  const replies = entries.filter((e) => e.kind === 'message' && e.role === 'assistant');
+  const errors = entries.filter((e) => e.kind === 'notice' && e.level === 'error');
+
+  if (replies.length === 0 && errors.length > 0) {
+    // A failed turn must not look like a quiet one: exit non-zero with the
+    // reason, so a script can tell them apart.
+    throw new Error(String(errors[0]!.text ?? 'The turn failed.'));
+  }
+
+  const answer = replies.map((e) => String(e.content ?? '')).join('\n\n');
+
+  return {
+    value: {
+      agent: agent.name,
+      answer,
+      // Reported rather than hidden: a caller that got an answer AND an error
+      // deserves to know a tool failed along the way.
+      errors: errors.map((e) => e.text),
+      timedOut: replies.length === 0,
+    },
+    lines: answer ? [answer] : ['No reply within the timeout.'],
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* approvals                                                           */
+/* ------------------------------------------------------------------ */
+
+export async function approvalsList(ctx: CommandContext): Promise<Rendered> {
+  const pending = await ctx.client.call<Record<string, unknown>[]>('listApprovals');
+
+  const lines =
+    pending.length === 0
+      ? ['Nothing is waiting for approval.']
+      : table(
+          pending.map((p) => [
+            String(p.id).slice(0, 8),
+            String(p.agentName),
+            String(p.tool),
+            String(p.summary).slice(0, 50),
+          ]),
+          ['ID', 'AGENT', 'TOOL', 'WHAT'],
+        );
+
+  return { value: pending, lines };
+}
+
+export async function approvalsAnswer(
+  ctx: CommandContext,
+  allowed: boolean,
+): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) {
+    throw new Error(
+      `Which request? Usage: wispcrew approvals ${allowed ? 'allow' : 'deny'} <id>`,
+    );
+  }
+
+  const pending = await ctx.client.call<Record<string, unknown>[]>('listApprovals');
+
+  /*
+   * A short id is enough, because nobody wants to type a UUID.
+   *
+   * An ambiguous prefix is refused rather than resolved: allowing the wrong
+   * request would run a command the user did not look at, which is the exact
+   * failure the approval layer exists to prevent.
+   */
+  const matches = pending.filter((p) => String(p.id).startsWith(wanted));
+  if (matches.length === 0) {
+    throw new Error(`No pending approval starts with "${wanted}".`);
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      `"${wanted}" matches ${matches.length} requests. Use more characters:\n` +
+        matches.map((p) => `  ${String(p.id).slice(0, 12)}  ${p.tool}`).join('\n'),
+    );
+  }
+
+  const target = matches[0]!;
+  await ctx.client.call('resolveApproval', [target.id, allowed]);
+
+  return {
+    value: { ok: true, id: target.id, allowed },
+    lines: [`${allowed ? 'Allowed' : 'Denied'}: ${target.tool} for ${target.agentName}.`],
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* helpers                                                             */
 /* ------------------------------------------------------------------ */
 

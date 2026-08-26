@@ -23,6 +23,10 @@
     "./cli-output": {
       "types": "./dist/cli-output.d.ts",
       "default": "./dist/cli-output.js"
+    },
+    "./pending-approvals": {
+      "types": "./dist/pending-approvals.d.ts",
+      "default": "./dist/pending-approvals.js"
     }
   },
   "bin": {

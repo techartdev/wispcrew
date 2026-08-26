@@ -70,6 +70,7 @@ import {
   updateSkill,
   writeSettings,
 } from '@wispcrew/runtime';
+import { listPending, resolve as resolveApprovalRequest, touchApprovalListener } from './pending-approvals.js';
 import { handleFor } from '@wispcrew/shared';
 
 export type MethodTable = Record<string, (...args: never[]) => unknown>;
@@ -374,10 +375,42 @@ export function nodeMethods(): MethodTable {
      * perform these against its own engine, and the node then sees the
      * result through the shared store.
      */
-    resolveApproval: () => {
-      throw new Error(
-        'Approvals are answered by the client that is attached, not by the node.',
-      );
+    /*
+     * Pending approvals, for a client that can ask a person.
+     *
+     * These belong to whoever is at the machine the tool would run on, and
+     * `wispcrew approvals` is that someone.
+     */
+    listApprovals: () => {
+      /*
+       * Asking counts as watching.
+       *
+       * A client that polls this is, by definition, one that intends to
+       * answer — so listing registers interest and keeps it alive for a
+       * while afterwards. Requiring a separate "I am watching" call would
+       * mean a script that polls approvals still gets them denied, which is
+       * a distinction nobody would guess.
+       */
+      touchApprovalListener();
+      return listPending();
+    },
+
+    resolveApproval: (id: never, allowed: never) => {
+      /*
+       * Answerable now, where this used to throw.
+       *
+       * The old message said approvals belong to the attached client, which
+       * was right when the only client was a desktop running its own engine.
+       * A CLI attached to THIS node is a person sitting at this machine —
+       * precisely who should decide whether a command runs on it.
+       *
+       * Still not a bypass: an unanswered request times out as a denial.
+       */
+      const settled = resolveApprovalRequest(String(id), Boolean(allowed));
+      if (!settled) {
+        throw new Error('That approval is unknown, already answered, or expired.');
+      }
+      return { ok: true };
     },
     oauthSignIn: () => {
       throw new Error(

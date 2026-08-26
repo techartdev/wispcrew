@@ -134,8 +134,19 @@ console.log('\n[secrets stay put] a key saved to the node stays on the node');
 
 console.log('\n[interactive] a node refuses what it cannot do, and says why');
 {
+  /*
+   * `resolveApproval` was in this list, and is deliberately no longer.
+   *
+   * It refused everything, reasoning that approvals belong to the attached
+   * client — correct when the only client was a desktop running its own
+   * engine. A CLI attached to this node is a person sitting at the machine
+   * the tool would run on, which is precisely who should decide, so the node
+   * answers now instead of refusing.
+   *
+   * `test:pending-approvals` covers the new behaviour, including the
+   * invariant that keeps it safe: an unanswered request is denied.
+   */
   for (const [method, expect] of [
-    ['resolveApproval', /client that is attached/i],
     ['oauthSignIn', /browser/i],
     ['oauthImportFromCli', /this machine|node itself/i],
   ]) {

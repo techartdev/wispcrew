@@ -10,6 +10,7 @@
  * building it first would bake assumptions into a protocol before the seam
  * had been exercised.
  */
+import { askAndWait, hasApprovalListener } from './pending-approvals.js';
 import {
   createAgentWithRoom,
   closeAllMcp,
@@ -98,6 +99,8 @@ export interface RunningDaemon {
 export async function serve(options: ServeOptions): Promise<RunningDaemon> {
   setHost(options.host);
 
+
+
   /*
    * Refuse to start if another daemon already owns this profile.
    *
@@ -154,6 +157,27 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
    * see, rather than one the daemon makes on their behalf.
    */
   setApprovalAsker(async (agentId, req) => {
+    /*
+     * Unless somebody IS attached.
+     *
+     * "Nobody to ask" was true when the only clients were remote. A CLI on
+     * this machine running `wispcrew approvals` is a person standing where
+     * the tool would run — precisely who should decide.
+     *
+     * The default above is unchanged: a parked request that nobody answers
+     * times out as a denial. This adds a way to say yes, not a way to skip
+     * asking.
+     */
+    if (hasApprovalListener()) {
+      const agent = listAgents().find((a) => a.id === agentId);
+      return askAndWait({
+        agentId,
+        agentName: agent?.name ?? agentId,
+        tool: req.toolName,
+        summary: req.summary,
+      });
+    }
+
     fileLog('[daemon] denied unattended approval', agentId, req.toolName);
     emitEngineEvent({
       type: 'notice',

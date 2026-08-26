@@ -23,6 +23,9 @@ import {
   agentsCreate,
   agentsDelete,
   agentsList,
+  approvalsAnswer,
+  approvalsList,
+  ask,
   agentsShow,
   configure,
   roomsList,
@@ -44,6 +47,10 @@ wispcrew — run agents without a window open
                                create an agent HERE, on this machine
   wispcrew agents delete <name> --yes
                                remove an agent and its conversation
+  wispcrew ask <agent> "..."   send a message and wait for the reply
+  wispcrew approvals           what is waiting for permission
+  wispcrew approvals allow <id>
+  wispcrew approvals deny <id>
   wispcrew rooms               list conversations
   wispcrew configure           set the provider, model and key
   wispcrew settings            show the current provider settings
@@ -128,6 +135,11 @@ const CONNECTED: Record<string, (ctx: CommandContext) => Promise<Rendered>> = {
   'agents show': agentsShow,
   'agents create': agentsCreate,
   'agents delete': agentsDelete,
+  ask,
+  approvals: approvalsList,
+  'approvals list': approvalsList,
+  'approvals allow': (ctx) => approvalsAnswer(ctx, true),
+  'approvals deny': (ctx) => approvalsAnswer(ctx, false),
   rooms: roomsList,
   configure,
   settings: settingsShow,

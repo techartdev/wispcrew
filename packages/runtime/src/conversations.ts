@@ -125,6 +125,21 @@ export function deleteConversation(id: string): void {
   saveConversations(listConversations().filter((c) => c.id !== id));
 }
 
+/*
+ * Delete an agent's room along with the agent.
+ *
+ * Registered here rather than called from `store.ts`, which cannot import
+ * this module without creating a cycle. An agent's own room shares its id,
+ * so this removes exactly that one — a room the agent merely participates in
+ * belongs to whoever created it and is left alone.
+ *
+ * Without this a deleted agent left a conversation nobody could answer:
+ * it rendered in the sidebar, accepted messages, and did nothing with them.
+ */
+store.setAgentDeletedHook((agentId) => {
+  deleteConversation(agentId);
+});
+
 /**
  * Record something that happened to the room.
  *
