@@ -224,12 +224,25 @@ export function App() {
           you the handle exists. Hidden entirely for a room with one agent,
           which is still the common case and needs no explanation.
         */}
-        {room && room.participants.filter((p) => p.kind === 'agent').length > 1 && (
+        {room && (
           <div className="room-strip">
-            <span className="muted small">In this room:</span>
-            {room.participants
-              .filter((p) => p.kind === 'agent')
-              .map((p) => (
+            {room.participants.filter((p) => p.kind === 'agent').length > 1 ? (
+              <span className="muted small">In this room:</span>
+            ) : (
+              /*
+               * One agent: say what the button is FOR.
+               *
+               * Listing a single handle would be noise, but hiding the strip
+               * entirely made Members unreachable — and Members is how the
+               * second agent gets added. So the row stays and explains
+               * itself instead.
+               */
+              <span className="muted small">Add an agent to work together in this conversation.</span>
+            )}
+            {room.participants.filter((p) => p.kind === 'agent').length > 1 &&
+              room.participants
+                .filter((p) => p.kind === 'agent')
+                .map((p) => (
                 <button
                   key={p.id}
                   type="button"

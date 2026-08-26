@@ -272,6 +272,21 @@ export function useWispcrew() {
       async createAgent(patch: Partial<AgentRecord> = {}) {
         try {
           const created = await api.createAgent(patch);
+
+          /*
+           * Add it to the roster in the same tick as selecting it.
+           *
+           * The roster is authoritative and arrives by `agents-changed`, but
+           * that event lands a moment later. Selecting first left
+           * `agents.find(...)` empty in between, so the chat pane rendered
+           * "No agents yet" beside a sidebar that plainly had agents in it.
+           *
+           * Guarded against duplication: if the event has already arrived,
+           * this is a no-op rather than a second copy.
+           */
+          setAgents((current) =>
+            current.some((a) => a.id === created.id) ? current : [...current, created],
+          );
           setSelectedId(created.id);
           return created;
         } catch (err) {

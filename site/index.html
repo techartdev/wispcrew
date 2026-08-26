@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WispCrew — your AI crew, across your machines</title>
+
+<meta name="description" content="Free, MIT-licensed, local-first AI agents that run on the machines you own and stay reachable from anywhere. Bring your own model.">
+<link rel="canonical" href="https://wispcrew.app/">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://wispcrew.app/">
+<meta property="og:title" content="WispCrew — your AI crew, across your machines">
+<meta property="og:description" content="Free, MIT-licensed, local-first AI agents. No account, no subscription, no cloud.">
+<meta property="og:image" content="https://wispcrew.app/og.png">
+<meta name="twitter:card" content="summary_large_image">
+
+<style>
+/*
+ * One stylesheet, no build step, no framework.
+ *
+ * The site describes a project whose whole argument is that you can read its
+ * code; a landing page needing a toolchain to change a heading would be a
+ * poor advertisement for that.
+ */
+:root {
+  --bg: #0e1218;
+  --panel: #151b24;
+  --line: #232c39;
+  --ink: #e8edf4;
+  --muted: #97a3b4;
+  --wisp: #7fd8ff;
+  --wisp-dim: #4aa8f0;
+  --radius: 12px;
+  --measure: 62ch;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--wisp); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, pre, .mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.wrap { width: min(1080px, 92vw); margin: 0 auto; }
+
+/* ---------- header ---------- */
+
+header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(14, 18, 24, 0.86);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+}
+
+.bar strong { font-size: 17px; letter-spacing: -0.01em; }
+.bar nav { margin-left: auto; display: flex; gap: 22px; align-items: center; }
+.bar nav a { color: var(--muted); font-size: 14.5px; }
+.bar nav a:hover { color: var(--ink); text-decoration: none; }
+
+/* ---------- hero ---------- */
+
+.hero { padding: 88px 0 64px; text-align: center; }
+
+h1 {
+  margin: 0 0 18px;
+  font-size: clamp(30px, 5.4vw, 52px);
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+}
+
+/* The slogan is the product's one-line argument, so it carries the accent. */
+h1 .accent {
+  background: linear-gradient(180deg, #eaf9ff, var(--wisp-dim));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.lede {
+  margin: 0 auto 12px;
+  max-width: var(--measure);
+  font-size: clamp(16.5px, 2vw, 19px);
+  color: var(--muted);
+}
+
+.tagline { color: var(--muted); font-size: 15px; margin: 0 auto 34px; }
+
+.cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+.btn {
+  display: inline-block;
+  padding: 11px 22px;
+  border-radius: 9px;
+  font-weight: 600;
+  font-size: 15px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+.btn:hover { border-color: var(--wisp-dim); text-decoration: none; }
+
+.btn-primary {
+  background: linear-gradient(180deg, var(--wisp), var(--wisp-dim));
+  border-color: transparent;
+  color: #08121c;
+}
+.btn-primary:hover { filter: brightness(1.08); }
+
+/* ---------- the room diagram ---------- */
+
+.room {
+  margin: 52px auto 0;
+  max-width: 640px;
+  padding: 24px 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+.room pre {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre;
+}
+.room .hl { color: var(--wisp); }
+
+/* ---------- sections ---------- */
+
+section { padding: 64px 0; border-top: 1px solid var(--line); }
+
+h2 {
+  margin: 0 0 10px;
+  font-size: clamp(22px, 3vw, 28px);
+  letter-spacing: -0.02em;
+}
+
+.sub { margin: 0 0 34px; color: var(--muted); max-width: var(--measure); }
+
+.grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+}
+
+.card {
+  padding: 22px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.card h3 { margin: 0 0 8px; font-size: 16.5px; }
+.card p { margin: 0; color: var(--muted); font-size: 15px; }
+
+/* ---------- code blocks ---------- */
+
+pre.code {
+  margin: 0;
+  padding: 18px 20px;
+  background: #0a0e14;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink);
+}
+pre.code .c { color: #5f6b7d; }
+pre.code .p { color: var(--wisp); }
+
+/* ---------- addressing table ---------- */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+th, td {
+  text-align: left;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+th { color: var(--muted); font-weight: 600; font-size: 13.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+td:first-child { white-space: nowrap; }
+td code { color: var(--wisp); }
+
+/* ---------- honesty section ---------- */
+
+.gaps { max-width: var(--measure); }
+.gaps li { margin-bottom: 10px; color: var(--muted); }
+.gaps strong { color: var(--ink); }
+
+/* ---------- footer ---------- */
+
+footer {
+  padding: 44px 0 60px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+}
+.footlinks { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 16px; }
+
+@media (max-width: 620px) {
+  .hero { padding: 56px 0 44px; }
+  section { padding: 48px 0; }
+  .bar nav { gap: 14px; }
+  .bar nav a.hide-sm { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <svg width="22" height="22" viewBox="0 0 256 256" aria-hidden="true">
+      <defs>
+        <linearGradient id="w" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#7fd8ff"/>
+          <stop offset="55%" stop-color="#4aa8f0" stop-opacity="0.92"/>
+          <stop offset="100%" stop-color="#2b6fd0" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path fill="url(#w)" d="M74 178C62 158 58 140 62 130A13 13 0 0 1 86 130C90 140 86 158 74 178Z"/>
+      <path fill="url(#w)" d="M124 200C102 168 96 136 103 122A22 22 0 0 1 145 122C152 136 146 168 124 200Z"/>
+      <path fill="url(#w)" d="M180 186C166 162 162 142 167 131A15 15 0 0 1 193 131C198 142 194 162 180 186Z"/>
+    </svg>
+    <strong>WispCrew</strong>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#start" class="hide-sm">Get started</a>
+      <a href="#honest" class="hide-sm">Honest gaps</a>
+      <a href="https://github.com/techartdev/wispcrew">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap hero">
+  <h1>Your AI crew,<br><span class="accent">across your machines,</span><br>reachable from anywhere.</h1>
+
+  <p class="lede">
+    Agents that read files, run commands and do real work — on the computers you
+    own, with the model you choose.
+  </p>
+  <p class="tagline">Free and MIT-licensed. No account, no subscription, no cloud component.</p>
+
+  <div class="cta">
+    <a class="btn btn-primary" href="#start">Get started</a>
+    <a class="btn" href="https://github.com/techartdev/wispcrew">View source</a>
+  </div>
+
+  <!--
+    The diagram is the argument. "Several agents, several machines, several
+    doors onto one conversation" is hard to convey in a sentence and obvious
+    as a picture.
+  -->
+  <div class="room">
+<pre>            Room: <span class="hl">"Cross-platform release"</span>
+                        │
+    ┌───────────────────┼───────────────────┐
+    │                   │                   │
+   <span class="hl">You</span>             <span class="hl">@windows</span>            <span class="hl">@linux</span>
+    │                (this PC)            (a VPS)
+ ┌──┴───┐
+ │      │
+Desktop Telegram</pre>
+  </div>
+</div>
+
+<section id="how">
+  <div class="wrap">
+    <h2>Three ideas</h2>
+    <p class="sub">What makes this different from a chat window with tools.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>A conversation is a room</h3>
+        <p>
+          Not a thread with one bot. It has participants — you, a colleague,
+          any number of agents. Everyone sees every message; who <em>answers</em>
+          depends on how you address them.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Agents live on your machines</h3>
+        <p>
+          An agent belongs to one node: your laptop, a home server, a VPS.
+          Its workspace, its files and its provider key stay there. The Linux
+          agent runs on Linux because that is where it is.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Reachable from anywhere</h3>
+        <p>
+          The desktop app is one door. Telegram is another. A reply typed on a
+          train is <em>your own turn</em> in the same conversation — not a
+          message to a side-channel bot with separate memory.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Addressing a room</h2>
+    <p class="sub">
+      Add an agent, and a strip shows who is present. Then you simply type.
+    </p>
+
+    <table>
+      <thead>
+        <tr><th>You type</th><th>What happens</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>@coder check the build</code></td><td>Only that agent answers</td></tr>
+        <tr><td><code>@coder @reviewer compare</code></td><td>Both answer, concurrently</td></tr>
+        <tr><td><code>@all what do you think?</code></td><td>Everyone answers</td></tr>
+        <tr><td><code>and the tests?</code></td><td>Continues with whoever <em>you</em> last addressed</td></tr>
+      </tbody>
+    </table>
+
+    <p class="sub" style="margin-top:26px">
+      <strong>Agents do not reply to each other by default.</strong> Two helpful
+      agents answering each other is an unbounded loop that costs real money, so
+      an agent acts because it was <em>addressed</em>. A hard budget stops a long
+      chain to check with you.
+    </p>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <h2>Get started</h2>
+    <p class="sub">Requires Node.js 20 or newer.</p>
+
+<pre class="code"><span class="c"># clone and run</span>
+git clone https://github.com/techartdev/wispcrew
+<span class="p">cd</span> wispcrew
+npm install
+npm run desktop</pre>
+
+    <p class="sub" style="margin-top:24px">
+      On first launch open <strong>Settings</strong>, pick a provider and paste
+      an API key — or choose Ollama or LM Studio and skip the key entirely. If
+      you want to try it for nothing,
+      <a href="https://build.nvidia.com/">build.nvidia.com</a> has a free tier.
+    </p>
+
+    <div class="grid" style="margin-top:34px">
+      <div class="card">
+        <h3>Any provider</h3>
+        <p>
+          DeepSeek, OpenAI, Anthropic, Groq, OpenRouter, Ollama, LM Studio,
+          NVIDIA NIM, or any OpenAI-compatible endpoint.
+        </p>
+      </div>
+      <div class="card">
+        <h3>While you are away</h3>
+        <p>
+          Cron routines, self-scheduled follow-ups and filesystem triggers, run
+          by a background daemon whether or not the window is open.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Permission, per door</h3>
+        <p>
+          Every write or command asks first. An agent trusted to run unattended
+          at your desk still asks when the request arrives from your phone —
+          those are different risks.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Small models are a first-class case</h2>
+    <p class="sub">
+      Self-hosting is a real reason to choose this, so the design assumes models
+      that follow instructions loosely.
+    </p>
+    <p class="sub">
+      The principle: <strong>make the wrong choice unavailable rather than
+      discouraged.</strong> Measured on Llama&nbsp;3.3&nbsp;70B, an agent
+      delegated <em>"what is 3 + 4?"</em> to another agent instead of answering.
+      Three separate prompt edits did not fix it — a tool that is offered gets
+      used — so the tool was withdrawn instead. That costs a strong model
+      nothing and is the difference between working and not on a small one.
+    </p>
+  </div>
+</section>
+
+<section id="honest">
+  <div class="wrap">
+    <h2>Honest gaps</h2>
+    <p class="sub">
+      Stated here rather than discovered later. This project is young.
+    </p>
+    <ul class="gaps">
+      <li><strong>macOS and Linux are not verified on real hardware.</strong>
+        CI builds, tests and boots the app there, but cannot judge window
+        chrome or native dialogs.</li>
+      <li><strong>Installers are unsigned</strong>, so your OS will warn about
+        an unknown publisher.</li>
+      <li><strong>Cross-machine rooms need a connected desktop.</strong> There
+        is no room host or peer replication yet — single-machine agents and
+        routines are unaffected.</li>
+      <li><strong>A command-line client is designed but not built.</strong>
+        See <a href="https://github.com/techartdev/wispcrew/blob/main/docs/CLI.md">docs/CLI.md</a>.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="footlinks">
+      <a href="https://github.com/techartdev/wispcrew">GitHub</a>
+      <a href="https://github.com/techartdev/wispcrew/blob/main/docs/ARCHITECTURE.md">Architecture</a>
+      <a href="https://github.com/techartdev/wispcrew/blob/main/docs/CONVERSATIONS.md">The room model</a>
+      <a href="https://github.com/techartdev/wispcrew/blob/main/CONTRIBUTING.md">Contributing</a>
+    </div>
+    <p style="margin:0">
+      MIT licensed. WispCrew is an independent project — not affiliated with,
+      endorsed by, or derived from any commercial AI assistant product.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

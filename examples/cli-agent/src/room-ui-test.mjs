@@ -153,6 +153,32 @@ console.log('\n[mode] the three settings are offered and explained');
 
 fs.rmSync(outfile, { force: true });
 
+console.log('\n[discoverability] a one-agent room can still reach Members');
+{
+  /*
+   * The strip used to be hidden unless a room already had two agents, on the
+   * reasoning that a single-agent chat needs no explanation. That was wrong
+   * in a way testing with pre-built rooms could not show: **Members is how
+   * you add the second agent**, so hiding it until there are two made
+   * multi-agent rooms undiscoverable.
+   *
+   * Reported by the user as "I lack members tab".
+   */
+  const solo = room({
+    participants: [
+      { kind: 'human', id: 'human:local', name: 'You', channels: ['desktop'] },
+      { kind: 'agent', id: 'a_win', handle: 'windows' },
+    ],
+  });
+
+  const html = render(solo);
+  // The panel itself must work for one agent — it is the way out of one.
+  check('the panel renders for one agent', html.includes('Windows builder'));
+  check('and offers the others', html.includes('Linux builder'));
+  // Removing the only agent would leave a conversation nobody can answer.
+  check('but will not let it be removed', /disabled/.test(html));
+}
+
 console.log('');
 if (failures) {
   console.error(`ROOM-UI TEST FAILED — ${failures} assertion(s)\n`);
