@@ -34,6 +34,7 @@ import {
   createNodeCrypto,
   initGrants,
   installNotifySender,
+  setRemoteRunner,
   migrateAgentsToConversations,
   installScheduler,
   runPrompt,
@@ -61,7 +62,12 @@ import { electronHost } from './electron-host.js';
 import { handoffIsCurrent, writeDaemonSecrets } from './secrets-handoff.js';
 import { linkToDaemon, type DaemonLink } from './daemon-link.js';
 import { startDesktopNotifications } from './desktop-notify.js';
-import { closeNodeLinks, connectKnownNodes, routeForCall } from './node-links.js';
+import {
+  closeNodeLinks,
+  connectKnownNodes,
+  existingLink,
+  routeForCall,
+} from './node-links.js';
 import * as store from '@wispcrew/runtime';
 import {
   attachWindowEventSink,
@@ -371,6 +377,24 @@ app.whenReady().then(async () => {
    * finds nothing to do. Either host may start first.
    */
   migrateAgentsToConversations();
+  /*
+   * Carry room traffic between machines.
+   *
+   * An agent belongs to one node; its workspace, files and provider key are
+   * there. When a room holds agents from several machines, this process is
+   * the only one that can reach them all — nodes do not know about each
+   * other and there is no coordinator.
+   *
+   * The consequence is stated rather than hidden: a multi-node room needs a
+   * connected client and pauses without one. Single-node agents and routines
+   * are unaffected, because they never needed the relay.
+   */
+  setRemoteRunner(async (nodeId, agentId, text) => {
+    const link = existingLink(nodeId);
+    if (!link) throw new Error('not connected');
+    await link.call('sendPrompt', [agentId, text]);
+  });
+
   installNotifySender();
   installScheduler();
   /*

@@ -20,6 +20,7 @@ export * from './schedule-host.js';
 export * from './conversations.js';
 export * from './approval-policy.js';
 export * from './floor.js';
+export * from './room-dispatch.js';
 export * from './room-turn.js';
 export * from './turns.js';
 export * from './channel-bindings.js';

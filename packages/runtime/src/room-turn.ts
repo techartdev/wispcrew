@@ -23,6 +23,7 @@ import { fileLog } from './filelog.js';
 import { rememberAddressee, routeHumanMessage } from './floor.js';
 import * as store from './store.js';
 import { claimTurn, updateTurn } from './turns.js';
+import { placeSpeakers, runRemote } from './room-dispatch.js';
 
 export interface RoomTurnInput {
   conversationId: string;
@@ -199,11 +200,78 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
    * the first would be arbitrary, and they are usually on different machines
    * doing unrelated work.
    */
+  /*
+   * An agent belongs to exactly one node.
+   *
+   * Its workspace, its files and its provider key live there, so running it
+   * here would give it none of them. The client relays: local agents run in
+   * this process, remote ones on their own machine.
+   *
+   * A test that injects `run` keeps everything local — the seam exists to
+   * avoid a provider call, not to model placement.
+   */
+  const placement = input.run ? { local: routing.speakers, remote: [], unreachable: [] }
+    : placeSpeakers(routing.speakers);
+
+  /*
+   * Say when an agent could not be reached.
+   *
+   * Silence here is the worst outcome: the user tagged @windows, nothing
+   * happened, and nothing explains why. Naming the machine is what makes it
+   * actionable — the laptop is asleep, or the node was never paired.
+   */
+  for (const agent of placement.unreachable) {
+    store.upsertTranscriptEntry(conversation.id, {
+      kind: 'notice',
+      id: store.newId('note'),
+      level: 'error',
+      text: `@${agent.handle} runs on another machine, which is not connected.`,
+      createdAt: Date.now(),
+    });
+  }
+
   const started: string[] = [];
   const failures: NonNullable<RoomTurnResult['failures']> = [];
 
-  await Promise.all(
-    routing.speakers.map(async (agent) => {
+  /*
+   * Remote agents, claimed the same way.
+   *
+   * The claim lives on THIS machine because the room does. A remote node
+   * runs its own turn and keeps its own record; what this prevents is the
+   * client relaying the same message twice.
+   */
+  const remoteWork = placement.remote.flatMap(({ nodeId, agents }) =>
+    agents.map(async (agent) => {
+      const turn = claimTurn({
+        conversationId: conversation.id,
+        triggerEntryId,
+        agentId: agent.id,
+        replayed: input.entryId !== undefined,
+      });
+      if (!turn) return;
+
+      started.push(agent.id);
+      updateTurn(turn.id, { state: 'running' });
+
+      const error = await runRemote(nodeId, agent, text);
+      if (error) {
+        updateTurn(turn.id, { state: 'failed', detail: error });
+        store.upsertTranscriptEntry(conversation.id, {
+          kind: 'notice',
+          id: store.newId('note'),
+          level: 'error',
+          text: `@${agent.handle} could not be reached: ${error}`,
+          createdAt: Date.now(),
+        });
+      } else {
+        updateTurn(turn.id, { state: 'completed' });
+      }
+    }),
+  );
+
+  await Promise.all([
+    ...remoteWork,
+    ...placement.local.map(async (agent) => {
       /*
        * Claim before running.
        *
@@ -267,7 +335,7 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
         });
       }
     }),
-  );
+  ]);
 
   return { ran: started, ...(failures.length ? { failures } : {}) };
 }
