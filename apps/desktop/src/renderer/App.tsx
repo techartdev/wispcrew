@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWispcrew } from './useWispcrew';
 import { Sidebar, WispMark } from './Sidebar';
 import { Chat } from './Chat';
+import { RoomPane } from './RoomPane';
 import {
   AgentPanel,
   McpPanel,
@@ -138,6 +139,15 @@ export function App() {
   const [draftMention, setDraftMention] = useState<string | null>(null);
 
   /*
+   * The side panel, open by default.
+   *
+   * Not hidden until asked for: a panel nobody knows about is a panel nobody
+   * uses, and its content — who is working, what is scheduled — is exactly
+   * what someone wants without having to think to look.
+   */
+  const [paneOpen, setPaneOpen] = useState(true);
+
+  /*
    * Ask again when the Machines panel opens.
    *
    * Reachability is knowable only from a live link, and links are opened in
@@ -192,6 +202,13 @@ export function App() {
       />
 
       <main className="main">
+        {/*
+          The conversation column: header, membership strip, transcript and
+          composer, stacked. The side panel is its sibling, which is why the
+          wrapper starts HERE and not after the header — leaving the header
+          outside it put the title in the middle of the window.
+        */}
+        <div className="chat-column">
         <header className="topbar">
           <div className="topbar-title">
             <strong>{selected?.name ?? 'WispCrew'}</strong>
@@ -280,6 +297,19 @@ export function App() {
             <button type="button" className="btn" onClick={() => setPanel('room')}>
               Members
             </button>
+            {/*
+              Toggling the pane, rather than only ever hiding it. Its close
+              button leaves no way back otherwise, which is the small trap
+              that makes people stop using a panel.
+            */}
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setPaneOpen((open) => !open)}
+              title={paneOpen ? 'Hide the side panel' : 'Show who is here and what is scheduled'}
+            >
+              {paneOpen ? 'Hide panel' : 'Panel'}
+            </button>
           </div>
         )}
 
@@ -329,6 +359,27 @@ export function App() {
           onCreateAgent={() => setPanel('new-agent')}
           hasProvider={hasProvider}
         />
+        </div>
+
+        {/*
+          Who is here, and what is scheduled for them.
+          
+          Shown for a single agent too: a routine belongs to ONE agent, and
+          hiding the pane for a one-member room would hide the only thing
+          worth showing — which is the same mistake as hiding the members
+          strip, made once already.
+        */}
+        {room && paneOpen && (
+          <RoomPane
+            room={room}
+            agents={agents}
+            routines={routines}
+            runStates={runStates}
+            onMention={(handle) => setDraftMention(`@${handle}`)}
+            onOpenRoutines={() => setPanel('routines')}
+            onClose={() => setPaneOpen(false)}
+          />
+        )}
       </main>
 
       {toast && (
