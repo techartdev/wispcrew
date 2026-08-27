@@ -70,3 +70,4 @@ client-persistence.json
 .agentch-test.mjs
 .room-test.mjs
 .cp-test.mjs
+.dsh-recover/

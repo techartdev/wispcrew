@@ -990,7 +990,15 @@ body {
 .field-row {
   display: flex;
   gap: 10px;
-  align-items: flex-end;
+  /*
+   * Aligned by their TOPS, so the labels line up.
+   *
+   * `flex-end` looked identical while every field was the same height and
+   * broke the moment one grew: a hint added under Provider made that column
+   * taller, and Model — pinned to the row's bottom — slid down out of line
+   * with it. Labels are what a person scans, so the tops must agree.
+   */
+  align-items: flex-start;
 }
 
 .field-row > .field {
