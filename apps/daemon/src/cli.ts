@@ -17,6 +17,7 @@ import {
   listRoutines,
   parseAddress,
   readSecrets,
+  initFileLog,
   setHost,
 } from '@wispcrew/runtime';
 import {
@@ -342,6 +343,15 @@ async function runConnectedCommand(
 }
 
 async function main(): Promise<void> {
+  /*
+   * `WISPCREW_LOG` works for the CLI too.
+   *
+   * A command failing against a real machine is exactly when someone wants
+   * the protocol log, and the variable silently did nothing outside the
+   * desktop — no file written, and no warning that it had been ignored.
+   */
+  initFileLog();
+
   const [command = 'serve', ...rest] = process.argv.slice(2);
   const args = parseArgs(rest);
 

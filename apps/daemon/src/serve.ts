@@ -15,6 +15,7 @@ import {
   createAgentWithRoom,
   closeAllMcp,
   defaultSettings,
+  initFileLog,
   emitEngineEvent,
   fileLog,
   initGrants,
@@ -122,6 +123,18 @@ function loadOrCreateNetworkToken(dataDir: string): string {
 }
 
 export async function serve(options: ServeOptions): Promise<RunningDaemon> {
+  /*
+   * Open the log before anything can want to write to it.
+   *
+   * `WISPCREW_LOG` is documented as a debug hook and did nothing here: only
+   * the desktop called `initFileLog`, so setting the variable for a daemon
+   * produced no file and no warning that it had been ignored.
+   *
+   * Headless is where a protocol log matters most — there is no window to
+   * watch, and the alternative is guessing.
+   */
+  initFileLog();
+
   setHost(options.host);
 
 

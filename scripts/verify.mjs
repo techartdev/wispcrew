@@ -291,6 +291,32 @@ check('LICENSE exists', fs.existsSync(path.join(repo, 'LICENSE')));
 }
 
 /*
+ * No secret reaches a log.
+ *
+ * A log file is the easiest place for a credential to end up somewhere it
+ * should not: written by default in some setups, pasted into bug reports,
+ * read by whoever asked for one.
+ */
+{
+  let logsOk = true;
+  let detail = '';
+  try {
+    execFileSync(process.execPath, [path.join(repo, 'scripts', 'check-secret-logging.cjs')], {
+      cwd: repo,
+      stdio: 'pipe',
+    });
+  } catch (err) {
+    logsOk = false;
+    detail = String(err.stdout ?? '')
+      .split('\n')
+      .filter((line) => line.includes('FAIL'))
+      .map((line) => line.trim())
+      .join('; ');
+  }
+  check('no secret reaches a log', logsOk, detail);
+}
+
+/*
  * Boot the app and confirm the window actually paints.
  *
  * The most valuable thing CI does, and it works locally too — this machine
