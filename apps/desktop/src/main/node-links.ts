@@ -34,7 +34,55 @@ const AGENT_SCOPED = new Set([
   // conversation that never happened here.
   'listHistory',
   'restoreHistory',
+
+  /*
+   * Room methods, which this list predated.
+   *
+   * `sendPrompt` was here and `sendToRoom` was not, so a message to an agent
+   * on another machine ran against the LOCAL daemon — which has no room for
+   * it. The call succeeded, wrote nothing, and returned: the message never
+   * appeared in the conversation and nothing reported a failure, because
+   * `sendToRoom` is deliberately fire-and-forget.
+   *
+   * Reported as "I type a message and nothing happens", which is exactly how
+   * it looks from the outside.
+   *
+   * All of these take a conversation id first, and an agent's own room
+   * shares its id — so the existing routing works unchanged.
+   */
+  'sendToRoom',
+  'addRoomAgent',
+  'removeRoomParticipant',
+  'setRoomMode',
+  'listTurns',
+  'cancelTurn',
 ]);
+
+/**
+ * Which providers a particular machine can actually use.
+ *
+ * `getPresets` reports what is *configured*, and the Configure panel filters
+ * its model list by exactly that — so for an agent on another machine it
+ * offered this one's providers. A ChatGPT subscription model was selectable
+ * for an agent on a VPS that has only Ollama, LM Studio and an NVIDIA key: a
+ * choice that looks valid, saves cleanly, and cannot work.
+ *
+ * `getPresets` takes no arguments and the renderer fetches it once at
+ * startup, so it cannot be routed by the ordinary rule. This asks a specific
+ * node instead, and the panel calls it when editing a remote agent.
+ */
+export async function presetsForNode(nodeId: string): Promise<unknown[] | null> {
+  const link = existingLink(nodeId);
+  if (!link) return null;
+
+  try {
+    return await link.call<unknown[]>('getPresets');
+  } catch {
+    // A machine that cannot answer is one the user should be told about
+    // rather than silently given this machine's list for.
+    return null;
+  }
+}
 
 interface Link {
   client: NodeClient;

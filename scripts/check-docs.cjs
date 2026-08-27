@@ -33,7 +33,6 @@ for (const doc of [
   'docs/ARCHITECTURE.md',
   'docs/DEVELOPMENT.md',
   'docs/STATUS.md',
-  'docs/HANDOVER.md',
   'AGENTS.md',
 ]) {
   const text = read(doc);
@@ -99,7 +98,7 @@ for (const doc of [
   const pkg = JSON.parse(read('examples/cli-agent/package.json'));
   const actual = pkg.scripts.test.split('&&').filter((s) => s.includes('test:')).length;
 
-  for (const doc of ['AGENTS.md', 'README.md', 'docs/DEVELOPMENT.md', 'docs/HANDOVER.md']) {
+  for (const doc of ['AGENTS.md', 'README.md', 'docs/DEVELOPMENT.md']) {
     const text = read(doc);
     for (const claim of text.matchAll(/(\d+) offline suites?/g)) {
       if (Number(claim[1]) !== actual) {

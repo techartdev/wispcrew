@@ -116,7 +116,7 @@ check('no vendored trees', vendored.length === 0, vendored.join(', '));
   const actual = cliPkg.scripts.test.split('&&').filter((s) => s.includes('test:')).length;
 
   const stale = [];
-  for (const file of ['AGENTS.md', 'README.md', 'docs/DEVELOPMENT.md', 'docs/HANDOVER.md']) {
+  for (const file of ['AGENTS.md', 'README.md', 'docs/DEVELOPMENT.md']) {
     const text = fs.readFileSync(path.join(repo, file), 'utf8');
     for (const match of text.matchAll(/(\d+) offline suites?/g)) {
       if (Number(match[1]) !== actual) stale.push(`${file}: ${match[1]} (actual ${actual})`);

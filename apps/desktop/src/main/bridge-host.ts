@@ -60,7 +60,7 @@ import { runRoutineNow, refreshNextRunTime, refreshNextRunTimes } from '@wispcre
 import { abortSession, clearSession, seedSessionHistory } from '@wispcrew/runtime';
 import { prefixBefore, prefixThrough, rebuildHistory } from '@wispcrew/runtime';
 import { isClientOnlyMethod } from '@wispcrew/shared';
-import { existingLink, linkToNode } from './node-links.js';
+import { existingLink, linkToNode, presetsForNode } from './node-links.js';
 import {
   addEventSink,
   addNode,
@@ -1131,6 +1131,16 @@ export function registerBridge(context: BridgeContext): void {
     }
   });
 
+  /*
+   * What the OTHER machine can run.
+   *
+   * The Configure panel filters models by which providers are configured,
+   * and answering that locally offered providers the target machine does not
+   * have. Returns null when it cannot be reached, so the caller says so
+   * rather than falling back to the wrong list.
+   */
+  handle('presetsForNode', (nodeId: string) => presetsForNode(nodeId));
+
   handle('listConversations', () => listConversations());
 
   handle('addRoomAgent', (conversationId: string, agentId: string) => {
@@ -1173,6 +1183,31 @@ export function registerBridge(context: BridgeContext): void {
   });
 
   handle('sendToRoom', async (conversationId: string, text: string, attachmentPaths?: string[]) => {
+    /*
+     * Reached only for a room this machine owns.
+     *
+     * When the room belongs to an agent on another node, `routeForCall`
+     * sends the whole call there instead. This guard exists because that
+     * routing was missing: the call ran here, `runRoomTurn` self-healed a
+     * room that did not exist, and the message vanished into a conversation
+     * nobody was watching. No error, because the send is fire-and-forget.
+     *
+     * Reported as "I type a message and nothing happens".
+     */
+    const owner = store.getAgent(conversationId);
+    if (owner?.nodeId) {
+      pushTranscript(conversationId, {
+        kind: 'notice',
+        id: store.newId('note'),
+        level: 'error',
+        text:
+          `${owner.name} runs on another machine, which is not connected. ` +
+          'Check it under Machines.',
+        createdAt: Date.now(),
+      });
+      return;
+    }
+
     const paths = Array.isArray(attachmentPaths)
       ? attachmentPaths.filter((p) => typeof p === 'string')
       : [];

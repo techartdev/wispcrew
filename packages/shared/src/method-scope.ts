@@ -56,6 +56,13 @@ export const CLIENT_ONLY_METHODS = [
    * whichever engine answered, which is the opposite of the intent.
    */
   'configureNode',
+
+  /*
+   * Same reason, reading rather than writing: it asks a NAMED machine what
+   * it can run. Forwarded, it would answer for whichever engine received it
+   * — which is precisely the bug it exists to fix.
+   */
+  'presetsForNode',
 ] as const;
 
 export type ClientOnlyMethod = (typeof CLIENT_ONLY_METHODS)[number];

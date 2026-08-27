@@ -380,7 +380,6 @@ These record decisions and their reasoning, including what is *not* solved:
 - [docs/GROUP-CHAT.md](docs/GROUP-CHAT.md) — who speaks when several agents share a room
 - [docs/DISTRIBUTED.md](docs/DISTRIBUTED.md) — nodes, pairing, and where keys live
 - [docs/CLI.md](docs/CLI.md) — the planned `wispcrew` binary
-- [docs/HANDOVER.md](docs/HANDOVER.md) — an honest account of what is verified and what is not
 
 ## Known gaps
 

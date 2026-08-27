@@ -1015,6 +1015,36 @@ export function AgentPanel({
   const [baseUrl, setBaseUrl] = useState(agent.baseUrl ?? '');
   const [nodeId, setNodeId] = useState(agent.nodeId ?? '');
   const [workspaceRoot, setWorkspaceRoot] = useState(agent.workspaceRoot ?? '');
+
+  /*
+   * What the machine this agent runs on can actually use.
+   *
+   * `null` means "asked and could not reach it", which is different from
+   * "not asked yet" — the first deserves a warning, the second does not.
+   */
+  const [remotePresets, setRemotePresets] = useState<PresetView[] | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!nodeId) {
+      setRemotePresets(undefined);
+      return;
+    }
+    let cancelled = false;
+    void window.wispcrew.presetsForNode(nodeId).then((list) => {
+      if (!cancelled) setRemotePresets(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [nodeId]);
+
+  /*
+   * Fall back to this machine's list when the other one cannot be reached,
+   * and say so beside the field — an empty list would look like a broken
+   * panel rather than a disconnected machine.
+   */
+  const shownPresets = nodeId && remotePresets ? remotePresets : presets;
+  const nodeName = nodes.find((n) => n.id === nodeId)?.name;
   const [policy, setPolicy] = useState<ApprovalPolicy | ''>(agent.approvalPolicy ?? '');
   /*
    * undefined means "follow the global setting"; an array overrides it,
@@ -1116,17 +1146,29 @@ export function AgentPanel({
               <option value="">Inherit from Settings</option>
               {/*
                 Marking unconfigured providers matters: picking one with no
-                key produces a failure at the first message, and the reason
-                (a key was never entered for *this* provider) is not obvious
-                when another provider is working fine.
+                key fails at the first message, and the reason — a key was
+                never entered for *this* provider — is not obvious when
+                another provider works fine.
+
+                For an agent on another machine, "configured" has to mean
+                configured THERE. Showing this machine's list let a ChatGPT
+                subscription model be chosen for a VPS that has only Ollama
+                and an NVIDIA key: valid-looking, saveable, and unusable.
               */}
-              {presets.map((p) => (
+              {shownPresets.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
                   {p.configured ? '' : ' — not configured'}
                 </option>
               ))}
             </select>
+            {nodeId && (
+              <span className="hint small">
+                {remotePresets === null
+                  ? 'That machine is not connected — this is your own list, which may not match it.'
+                  : `As configured on ${nodeName ?? 'that machine'}.`}
+              </span>
+            )}
           </label>
           <label className="field">
             <span>Model</span>

@@ -320,6 +320,19 @@ export interface WispBridge {
     settings: { presetId?: string; model?: string; baseUrl?: string; apiKey?: string },
   ): Promise<{ ok: boolean; error?: string }>;
 
+  /**
+   * Which providers a paired machine can actually use.
+   *
+   * `getPresets` answers for whichever engine receives it, so an agent that
+   * lives elsewhere was offered THIS machine's providers — a ChatGPT
+   * subscription model could be chosen for a VPS holding only Ollama and an
+   * NVIDIA key. Valid-looking, saveable, and unusable.
+   *
+   * Returns `null` when that machine is unreachable, so a caller can say so
+   * rather than quietly falling back to the wrong list.
+   */
+  presetsForNode(nodeId: string): Promise<PresetView[] | null>;
+
   /** Forget a node and delete its token. */
   forgetNode(nodeId: string): Promise<NodeSummary[]>;
 
