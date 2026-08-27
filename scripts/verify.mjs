@@ -205,6 +205,33 @@ check('LICENSE exists', fs.existsSync(path.join(repo, 'LICENSE')));
 }
 
 /*
+ * Every method a CLI command calls must exist on the node.
+ *
+ * This failure is invisible locally: the command typechecks, builds, and
+ * appears in `capabilities`. It fails only when somebody runs it against a
+ * real machine, with "Unknown method" — which is how `test provider` was
+ * found broken on a VPS after it had already shipped.
+ */
+{
+  let methodsOk = true;
+  let detail = '';
+  try {
+    execFileSync(process.execPath, [path.join(repo, 'scripts', 'check-cli-methods.cjs')], {
+      cwd: repo,
+      stdio: 'pipe',
+    });
+  } catch (err) {
+    methodsOk = false;
+    detail = String(err.stdout ?? '')
+      .split('\n')
+      .filter((line) => line.trim() && !line.includes(':'))
+      .map((line) => line.trim())
+      .join(', ');
+  }
+  check('CLI methods exist on the node', methodsOk, detail);
+}
+
+/*
  * Boot the app and confirm the window actually paints.
  *
  * The most valuable thing CI does, and it works locally too — this machine

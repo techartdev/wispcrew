@@ -71,6 +71,12 @@ import {
   writeSettings,
   listTurns,
   updateTurn,
+  rewindConversation,
+  branchConversation,
+  testConnection,
+  testTelegram,
+  TELEGRAM_TOKEN_KEY,
+  getSecret,
 } from '@wispcrew/runtime';
 import { listPending, resolve as resolveApprovalRequest, touchApprovalListener } from './pending-approvals.js';
 import { handleFor } from '@wispcrew/shared';
@@ -383,6 +389,68 @@ export function nodeMethods(): MethodTable {
      * These belong to whoever is at the machine the tool would run on, and
      * `wispcrew approvals` is that someone.
      */
+    /*
+     * Editing a conversation, from either host.
+     *
+     * The logic lives in the runtime rather than here, because the desktop
+     * needs identical behaviour and two copies of transcript editing would
+     * drift — this project has already had two functions that looked the
+     * same and quietly did not.
+     *
+     * No session hooks are passed: a node has no live view to keep in step,
+     * and the next turn rebuilds its history from the transcript anyway.
+     */
+    rewindConversation: (agentId: never, entryId: never, mode: never) =>
+      rewindConversation(
+        String(agentId),
+        String(entryId),
+        (mode as unknown as 'through' | 'before') ?? 'through',
+      ),
+
+    branchConversation: (agentId: never, entryId: never, name: never) =>
+      branchConversation(String(agentId), String(entryId), name ? String(name) : undefined),
+
+    /*
+     * Does the configured provider actually answer?
+     *
+     * The difference between "configured" and "working", and it matters most
+     * here: a headless machine has no settings panel to show a red dot, so
+     * the first symptom would otherwise be an agent producing nothing.
+     */
+    testConnection: async (cfg: never) => {
+      const settings = readSettings(host().dataDir, defaultSettings()) as Record<string, unknown>;
+      const given = (cfg ?? {}) as Record<string, unknown>;
+
+      return testConnection({
+        presetId: String(given.presetId ?? settings.presetId ?? 'deepseek'),
+        apiKey: given.apiKey as string | undefined,
+        model: (given.model ?? settings.model) as string | undefined,
+        baseUrl: (given.baseUrl ?? settings.baseUrl) as string | undefined,
+      });
+    },
+
+    /*
+     * Does Telegram accept a message from this machine?
+     *
+     * Same reasoning as `testConnection`, for the other credential a
+     * headless node depends on. The runtime already had the function; only
+     * the node's table was missing it, so the CLI's `test telegram` failed
+     * with "Unknown method" on a real server.
+     */
+    testTelegram: async () => {
+      const dataDir = host().dataDir;
+      const token = getSecret(dataDir, TELEGRAM_TOKEN_KEY);
+      if (!token) return { ok: false, error: 'No bot token saved on this machine.' };
+
+      const settings = readSettings(dataDir, defaultSettings()) as {
+        channels?: { telegram?: { chatId?: string } };
+      };
+      const chatId = settings.channels?.telegram?.chatId;
+      if (!chatId) return { ok: false, error: 'No chat id configured on this machine.' };
+
+      return testTelegram({ token, chatId });
+    },
+
     /*
      * Turns, as tasks an external caller can follow.
      *
