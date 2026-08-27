@@ -232,6 +232,40 @@ check('LICENSE exists', fs.existsSync(path.join(repo, 'LICENSE')));
 }
 
 /*
+ * The documents describe the software that exists.
+ *
+ * A public repository is read by people who cannot check the claims, so a
+ * stale sentence is worse than a missing one: it sends someone down a path
+ * that is not there, and teaches them to distrust the rest. The README said
+ * the CLI was "planned, not built" while shipping fifty commands.
+ */
+{
+  let docsOk = true;
+  let detail = '';
+  try {
+    const output = execFileSync(
+      process.execPath,
+      [path.join(repo, 'scripts', 'check-docs.cjs')],
+      { cwd: repo, encoding: 'utf8' },
+    );
+    const problems = /(\d+) thing\(s\) to look at/.exec(output);
+    if (problems && Number(problems[1]) > 0) {
+      docsOk = false;
+      detail = output
+        .split('\n')
+        .filter((line) => line.trim().startsWith('-'))
+        .map((line) => line.trim().slice(2))
+        .slice(0, 3)
+        .join('; ');
+    }
+  } catch (err) {
+    docsOk = false;
+    detail = err?.message ?? 'the check itself failed';
+  }
+  check('documents match the code', docsOk, detail);
+}
+
+/*
  * Boot the app and confirm the window actually paints.
  *
  * The most valuable thing CI does, and it works locally too — this machine

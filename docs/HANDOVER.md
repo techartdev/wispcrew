@@ -1,36 +1,41 @@
 # Handover
 
-Written at the end of the build-out. This is the honest state of the project:
-what is verified, what is assumed, and what to do first.
+The honest state of the project: what is verified, what is assumed, and what
+to do next. Updated as things change — the earlier version of this file told
+whoever read it to push the repository to GitHub, months after it had been
+pushed, which is exactly the failure a handover document exists to avoid.
 
 ## What WispCrew is
 
-A free, MIT-licensed, local-first desktop AI agent. The user brings their own
-model — DeepSeek, OpenAI, Anthropic, Groq, OpenRouter, Ollama, LM Studio, or
-any OpenAI-compatible endpoint. No account, no subscription, no cloud
-component. Conversations and API keys stay on the user's machine.
+A free, MIT-licensed, local-first system for running AI agents on machines
+you own. The user brings their own model — DeepSeek, OpenAI, Anthropic, Groq,
+OpenRouter, Ollama, LM Studio, NVIDIA NIM, or any OpenAI-compatible endpoint.
+No account, no subscription, no cloud component. Conversations and API keys
+stay on the user's machines.
 
-## Two things to do first
+Three clients speak to one engine: the **Electron desktop**, the **`wispcrew`
+CLI** (50 commands, for servers and for other coding agents), and
+**Telegram**. The engine itself lives in `packages/runtime` and imports no
+Electron, which is what makes that possible.
 
-1. **Push to GitHub.** The repository is initialised and committed but has
-   never been pushed. The remote is not configured.
+## Where it stands
 
-   ```bash
-   git remote add origin https://github.com/techartdev/wispcrew.git
-   git push -u origin main
-   ```
+- **Public** at `github.com/techartdev/wispcrew`, MIT licensed.
+- **106+ commits**, 58 offline suites, `npm run verify` green.
+- Verified on **Windows** and a real **Hetzner VPS**; macOS and Linux are
+  built and booted by CI but never run on real hardware.
 
-2. **Destroy the test key.** A live OpenAI key was used throughout
-   development. It is gitignored and was never committed (verified before
-   every commit), but it exists in two places on this machine:
+## Two things to do next
 
-   - `testkey.txt` in the repository root
-   - `%APPDATA%\WispCrew\wispcrew-secrets.enc` (encrypted, but recoverable
-     by this OS user)
+1. **Run CI once after 1 September.** The Actions quota was exhausted during
+   development, so nothing has run since commit 59. The only thing it judges
+   that a local machine cannot is macOS and Linux.
 
-   It also sat in **plaintext** in the settings file briefly during round 2,
-   before that bug was found and fixed. **Treat it as compromised and revoke
-   it at platform.openai.com**, rather than merely deleting the files.
+2. **Rotate any key used during development.** Keys live encrypted in
+   `%APPDATA%\WispCrew\wispcrew-secrets.enc`, and a Telegram bot token
+   appears in development transcripts. Neither was committed — the credential
+   guard in `verify` checks every staged diff — but treat anything used for
+   testing as spent.
 
 ## Verified, with evidence
 
@@ -44,6 +49,9 @@ working tree — during the final round.
 | Packages | `npm run pack` → 325 MB, no `vendor/` in the output |
 | Packaged app runs | Boots on a **fresh profile**, renders the first-run screen |
 | Live provider | Tool call executed and the model used the real result |
+| The CLI on a real server | `wispcrew configure`, `agents create`, `ask`, `approvals allow` run on a Hetzner VPS, using SSH only to type the command |
+| Headless approval | An agent on the VPS asked for the shell, a person allowed it from a second terminal, and the answer came back |
+| Pairing survives a restart | Node restarted with no pairing window open; the desktop reconnected with the credential it already held |
 | No vendored code | No `vendor/` at any depth; no proprietary identifiers |
 | Licensing | Only React, React-DOM, Electron reach users — all MIT. No GPL/AGPL/SSPL anywhere in the tree |
 | Secrets | The key string appears in no committed file; absent from a fresh clone |

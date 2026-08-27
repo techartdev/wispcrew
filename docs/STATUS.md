@@ -1,13 +1,14 @@
 # Status & Roadmap
 
-Last verified: **2026-08-24**, from a clean build on Windows 11 with a live
-OpenAI key.
+Last verified: **2026-08-26**, from a clean build on Windows 11 and a real
+Hetzner VPS.
 
 
-## Planned: a real CLI
+## Shipped: a real CLI
 
-A `wispcrew` binary, as a third client of the daemon alongside the desktop
-and the Telegram host. See [CLI.md](CLI.md).
+A `wispcrew` binary, a third client of the daemon alongside the desktop and
+the Telegram host. **50 commands**, verified on a real headless server. See
+[CLI.md](CLI.md).
 
 The reason is not that headless machines lack a window, though they do. It is
 that **every coding agent already knows how to run a shell command** — so a
@@ -16,9 +17,13 @@ plugin or integration work. And a WispCrew agent's shell tool can invoke
 those same binaries, which makes the relationship composable rather than
 competitive.
 
-`WispBridge` is already transport-independent: it mentions Electron in a
-comment and a version string, and the daemon already implements 41 of its 56
-methods over NDJSON. The CLI is a third transport, not a second engine.
+It is a third transport, not a second engine: no command touches the store
+directly, because two writers on one JSON store lose updates.
+
+`scripts/cli-gap.cjs` measures how complete it is by comparing every bridge
+method against what a command reaches. Nine capabilities are GUI-only by
+nature — a browser sign-in, a file dialog, window chrome — and nine more are
+unbuilt, each named in `CLI.md` with its reason.
 
 
 ## Verified working
@@ -51,6 +56,12 @@ inspection, or a passing assertion — not by reading the code.
 | First run on a clean profile | Verified with an empty userData dir: onboarding banner, guided composer, and a missing key reported as "needs an API key", never as "rejected" |
 | Accessibility | Live-region announcements, `aria-expanded` tool cards, modal focus trap with focus restore, visible focus rings |
 | ChatGPT subscription sign-in | Browser OAuth verified end to end: sign-in, token exchange, streaming, tool call, refresh with rotation |
+| The CLI, on a real server | `wispcrew configure`, `agents create`, `ask`, `rooms`, `tasks`, `capabilities` run on a Hetzner VPS over SSH only to type the command |
+| Headless approval | `wispcrew ask` on the VPS raised a shell request, `approvals allow` answered it from a second terminal, and the agent returned `Linux 6.8.0-101-generic x86_64` |
+| A node survives restarting | Paired, restarted the node with no pairing window open, and the desktop reconnected with the credential it already held |
+| Pairing without a desktop | `wispcrew pair` attached this laptop to the VPS from the command line; re-pairing the same machine replaces its record rather than duplicating it |
+| An agent created on another machine | Created from the desktop with a `nodeId`, appeared on the VPS under the same id, and stayed routable |
+| A machine-readable command surface | A script read `capabilities --json`, chose a command from it, ran it, and the result matched the declared return shape |
 | Claude subscription sign-in | Token endpoint confirmed by a real grant exchange (new access token + rotated refresh). Authentication proven (valid 429 vs invalid 401). The **browser half** and Claude inference remain unverified — the test account is rate-limited |
 | Borrowed CLI credentials | Stored without their refresh token by design: refreshing one rotates it and would sign the user out of their own CLI. Verified the CLI's file is left byte-identical |
 | Subscription credentials | Stored DPAPI-encrypted (`v10`), absent from the ciphertext and from settings; verified through the real app's IPC handlers |

@@ -169,6 +169,7 @@ connected — single-machine agents and routines keep running regardless.
 | **Reachable anywhere** | Desktop and Telegram are doors onto the same room, not separate chats |
 | **Remote machines** | Paired nodes over TLS with pinned fingerprints; keys never leave their node |
 | **Background daemon** | Agents and routines survive closing the window |
+| **A real CLI** | 50 commands — everything the desktop does, plus `--json` for scripts and other agents |
 | **Durable agents** | Named teammates with their own instructions, model, workspace and permissions |
 | **Real tools** | Shell, file read/write/edit, grep, directory listing, web fetch and search |
 | **Attachments** | Drop in images and files — images go to vision models, text is inlined |
@@ -210,9 +211,13 @@ packages/
   mcp/              MCP stdio client
 
 apps/desktop/       Electron app — the deliverable
-apps/daemon/        headless host: keeps agents alive with the window closed
+apps/daemon/        headless host, and the wispcrew CLI
+                    serve.ts       the engine, running with no window
+                    methods.ts     what a client may ask this node to do
+                    cli.ts         command dispatch and argument parsing
+                    cli-commands.ts every command, and the schema describing them
 
-examples/cli-agent/ headless CLI and the offline test suites
+examples/cli-agent/ a minimal example agent, and the offline test suites
 ```
 
 The engine lives in `packages/runtime` and imports no Electron, so the desktop
@@ -224,21 +229,57 @@ A message flows **renderer → preload → bridge → room routing → engine �
 provider**, with tool calls gated by the approval policy and results streamed
 back as events. There is no polling and no hidden network path.
 
-### Terminal use
+## The command line
 
-The agent core runs headless today:
+Everything the desktop can do, a terminal can do too — the CLI lacks a
+window, not features. That matters for a server with no screen, and for
+another coding agent: every one of them already knows how to run a shell
+command, so a CLI is the whole integration.
 
 ```bash
-WISPCREW_PROVIDER=openai WISPCREW_API_KEY=sk-... \
-  npm run agent --workspace @wispcrew/examples-cli -- "summarize the files here"
+wispcrew serve                       # run the engine on this machine
+wispcrew configure --provider nvidia --key <key>
+wispcrew agents create Builder --description "You build things here"
+wispcrew ask Builder "what changed in the last commit?"
 ```
 
-Omit the prompt for an interactive REPL.
+Set up a headless machine without a desktop anywhere:
 
-A proper `wispcrew` binary is **planned but not built** — see
-[docs/CLI.md](docs/CLI.md) for the design and why it matters: every coding
-agent already knows how to run a shell command, so a CLI is how Claude Code,
-Codex or a CI job could drive WispCrew without any integration work.
+```bash
+# on the server
+wispcrew serve --listen --network --pair     # prints a code and a fingerprint
+
+# on your laptop
+wispcrew pair <address> <code> --fingerprint <value>
+```
+
+**Approvals work headlessly.** When an agent needs permission for something,
+the request waits for a person rather than being refused:
+
+```
+$ wispcrew ask Linux "check the disk usage"
+waiting for approval: shell — Run command: df -h
+  wispcrew approvals allow cd071d8f
+```
+
+An unanswered request is **denied** after five minutes, so the safe default
+is unchanged.
+
+**For scripts and other agents**, every command takes `--json`:
+
+```bash
+wispcrew capabilities --json    # the whole command surface, with arguments
+wispcrew agents --json          # exactly one JSON array on stdout
+wispcrew tasks wait <id>        # blocks; exits non-zero if the task failed
+```
+
+`wispcrew capabilities --json` describes all 50 commands — what each takes,
+what it returns, and when *not* to use it. A program can learn the tool from
+that alone, without parsing help prose that changes whenever the wording is
+improved.
+
+See [docs/CLI.md](docs/CLI.md) for the full surface and the handful of
+capabilities a terminal genuinely cannot offer.
 
 ## Subscription sign-in (optional — read this first)
 

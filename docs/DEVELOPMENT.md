@@ -21,15 +21,46 @@ npm run desktop # build everything and launch
 | `npm run build` | Builds packages (tsc) and desktop bundles (esbuild + Vite) |
 | `npm run test --workspace @wispcrew/examples-cli` | All 58 offline suites |
 | `npm run desktop` | Build + launch Electron |
-| `npm run agent --workspace @wispcrew/examples-cli -- "…"` | Headless CLI (needs a key) |
+| `npm run agent --workspace @wispcrew/examples-cli -- "…"` | A minimal example agent, for trying the loop in isolation (needs a key) |
 | `npm run dist:win` / `dist:mac` / `dist:linux` | Installers |
 | `npm run icons` | Regenerate app icons from `build/icon.svg` |
+| `npm run verify` | **Everything above plus the guards** — run this before finishing |
 
-Run typecheck, build, and the offline suites before finishing any change.
+`npm run verify` is the one to remember: typecheck, build, every offline
+suite, encoding, the provenance and credential guards, a check that the
+README describes what exists, a check that every CLI command reaches a method
+the node serves, and a headless boot that fails if the window does not paint.
+About two minutes.
+
+## Working on the CLI
+
+```bash
+npm run build --workspace @wispcrew/daemon
+
+# a throwaway profile, so nothing touches your real one
+node apps/daemon/dist/cli.js serve --listen --data-dir /tmp/probe &
+node apps/daemon/dist/cli.js agents --data-dir /tmp/probe
+```
+
+Installed, those are `wispcrew serve` and `wispcrew agents`. During
+development the built entry point is easier than reinstalling after a change.
+
+Two scripts keep it honest, both run by `verify`:
+
+- `scripts/check-cli-methods.cjs` — every method a command calls must exist
+  on the node. This failure is otherwise invisible until someone runs the
+  command on a real machine and gets `Unknown method`.
+- `scripts/cli-gap.cjs` — how much of the desktop's surface the CLI reaches.
+  A report rather than a gate; the number is meant to be checked.
+
+A new command must also appear in `COMMAND_SCHEMA` with its arguments and
+return shape, or `test:cli-schema` fails. That is deliberate: an undocumented
+command is a capability nobody discovers.
 
 ## The offline test suites
 
-Six suites, none of which need an API key or network access:
+58 suites, none of which need an API key or network access. A few worth
+knowing about:
 
 | Suite | Covers |
 |---|---|
@@ -39,6 +70,10 @@ Six suites, none of which need an API key or network access:
 | `test:memory` | Multi-turn history + interrupt safety |
 | `test:cron` | Cron parsing, POSIX day rules, timezones, DST, `nextRun` |
 | `test:markdown` | Markdown rendering **and XSS resistance** |
+| `test:single-writer` | Two engines on one store lose data — this proves it, and proves the refusal |
+| `test:cli-parsing` | A flag's value never becomes a positional argument |
+| `test:pending-approvals` | An unanswered approval is denied, never allowed |
+| `test:node-token` | A node keeps its network token across a restart |
 
 They are plain scripts with a small assertion helper — no test framework. To
 add one, drop a file in `examples/cli-agent/src/`, give it a `test:*` script,

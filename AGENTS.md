@@ -68,12 +68,17 @@ apps/desktop/            Electron app (the deliverable)
   src/preload/preload.ts the ONLY renderer<->main surface
   src/renderer/          React UI (App, Chat, Sidebar, Panels, Markdown)
 
-apps/daemon/             headless host — keeps agents alive with the UI closed
-  src/cli.ts             `serve` / `status`
-  src/methods.ts         the node's method table
+apps/daemon/             headless host, and the `wispcrew` CLI
+  src/serve.ts           the engine running with no window
+  src/methods.ts         the node's method table — what a client may ask for
+  src/cli.ts             command dispatch, argument parsing, usage
+  src/cli-commands.ts    every command, and the schema that describes them
+  src/cli-connect.ts     reaching the engine over the protocol, never the store
+  src/cli-output.ts      text for people, `--json` for programs
+  src/pending-approvals.ts a headless node can ask, if somebody is listening
 
-examples/cli-agent/      headless CLI + the offline test suites
-docs/CLI.md              the planned `wispcrew` binary, and why it matters
+examples/cli-agent/      a minimal example agent + the offline test suites
+docs/CLI.md              the `wispcrew` binary: what it does and what it will not
 docs/CONVERSATIONS.md    where the conversation model is going
 docs/GROUP-CHAT.md       who speaks when several agents share a chat
 ```
@@ -110,7 +115,25 @@ npm run build                                   # packages + desktop bundles
 npm run test --workspace @wispcrew/examples-cli # every offline suite (no key, no network)
 npm run desktop                                 # build + launch
 npm run dist:win | dist:mac | dist:linux        # installers
+npm run verify                                  # everything above, plus the guards
 ```
+
+**The CLI is the third client**, alongside the desktop and the Telegram host.
+Fifty commands, all through the daemon protocol:
+
+```bash
+wispcrew serve                    # the engine, with no window
+wispcrew agents                   # what lives on this machine
+wispcrew ask Builder "..."        # send a message, wait for the reply
+wispcrew approvals allow <id>     # a headless node can ask a person
+wispcrew capabilities --json      # the whole surface, for another agent
+```
+
+Two scripts keep it honest, both run by `verify`:
+`scripts/check-cli-methods.cjs` (every method a command calls must exist on
+the node — otherwise it fails only on a real machine, with `Unknown method`)
+and `scripts/cli-gap.cjs` (how much of the desktop's surface the CLI
+reaches).
 
 **Run `npm run verify` before finishing.** It performs every check CI does
 that a local machine can: typecheck, build, all offline suites, encoding, and

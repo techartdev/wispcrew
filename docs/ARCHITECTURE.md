@@ -22,38 +22,68 @@ correcting rather than leaving as a comfortable half-truth.
 
 ## Process layout
 
+**One engine, three clients.** The engine lives in `packages/runtime` and
+imports no Electron, so the same code runs behind a window or on a server
+with no screen. Everything above it is a client of the same protocol.
+
 ```
-+---------------------------- Electron ----------------------------+
-|                                                                  |
-|  Renderer (sandboxed)                Main (Node)                 |
-|  +------------------------+          +------------------------+  |
-|  | App.tsx                |          | main.ts                |  |
-|  |  |- Sidebar (roster)   |          |  |- runPrompt()        |  |
-|  |  |- Chat (transcript)  |          |  |- runRoutine()       |  |
-|  |  +- Panels (settings)  |          |  +- window / menu      |  |
-|  | useWispcrew.ts (state) |          | bridge-host.ts (IPC)   |  |
-|  +-----------+------------+          | store.ts (persistence) |  |
-|              |                       | scheduler.ts + cron.ts |  |
-|      window.wispcrew                 | agent-sessions.ts      |  |
-|              |                       | mcp-manager.ts         |  |
-|  +-----------v------------+          | secrets-store.ts       |  |
-|  | preload.ts             |<-------->+-----------+------------+  |
-|  | (the only IPC surface) |  gb:* / gb:event     |               |
-|  +------------------------+                      |               |
-+---------------------------------------------------+--------------+
-                                                    |
-                    +-------------------------------v--------------+
-                    | @wispcrew/core   Agent loop                  |
-                    | @wispcrew/llm    provider adapters           |
-                    | @wispcrew/tools  shell/files/edit/grep/web   |
-                    | @wispcrew/mcp    MCP stdio client            |
-                    | @wispcrew/shared types (no dependencies)     |
-                    +-------------------+--------------------------+
-                                        | HTTPS
-                                +-------v--------+
-                                | LLM provider   |
-                                +----------------+
+  CLIENTS                          THE NODE                    
+                                                               
+  Electron desktop  ─┐                                         
+    renderer         │            +---------------------------+
+    preload.ts       │            |  apps/daemon              |
+    bridge-host.ts   ├─ NDJSON ──>|    serve.ts   the engine  |
+                     │  over a    |    methods.ts what a      |
+  wispcrew CLI      ─┤  socket,   |               client may  |
+    cli.ts           │  pipe,     |               ask for     |
+    cli-commands.ts  │  or TLS    +-------------+-------------+
+                     │                          |             
+  Telegram          ─┘                          |             
+    telegram-host.ts                            |             
+                                                v             
+                              +---------------------------------+
+                              | packages/runtime  THE ENGINE    |
+                              |   engine.ts    runPrompt        |
+                              |   store.ts     durable JSON     |
+                              |   scheduler.ts cron + follow-ups|
+                              |   room-turn.ts who speaks       |
+                              +----------------+----------------+
+                                               |               
+                              +----------------v----------------+
+                              | core    the agent loop          |
+                              | llm     provider adapters       |
+                              | tools   shell/files/edit/web    |
+                              | mcp     MCP stdio client        |
+                              | shared  types, no dependencies  |
+                              +----------------+----------------+
+                                               | HTTPS         
+                                       +-------v--------+      
+                                       | your provider  |      
+                                       +----------------+      
 ```
+
+The desktop does not run the engine itself: it **links to a detached
+daemon**, spawning one if none is running, so agents and routines survive
+the window closing. A paired machine is the same picture again — its own
+node, its own store, its own keys — reached over TLS instead of a local
+socket.
+
+### One writer, several readers
+
+**No client touches the store directly.** Two engines on one JSON store lose
+updates — measured, not assumed, which is why `single-writer` is a suite and
+why the desktop refuses to run its own scheduler when a daemon owns the
+profile.
+
+The CLI obeys the same rule, and it is the reason it is a genuine peer
+rather than a second implementation: `wispcrew agents` asks the node, exactly
+as the window does. A CLI that read `agents.json` would reintroduce the
+two-writer problem intermittently, which is worse than doing it always.
+
+The one deliberate exception is **client-side state**: the registry of paired
+machines records who *this* machine trusts, and no node can answer that for
+it. `wispcrew pair` and `wispcrew machines` therefore read and write locally,
+and nothing else does.
 
 ## The IPC contract
 
@@ -69,10 +99,11 @@ is a single typed interface rather than loose channel strings, which means:
 `{ok, value} | {ok, failure}` envelopes; whenever a shape drifted the UI
 silently rendered nothing. A rejected promise cannot be misread.
 
-**Streaming is pushed, not polled.** Main sends `gb:event` frames; the
-renderer upserts transcript entries by id. The assistant message keeps one
-stable id and is rewritten as tokens arrive, so the UI updates in place at
-token speed with no polling interval to tune.
+**Streaming is pushed, not polled.** The engine sends `wc:event` frames; a
+client upserts transcript entries by id. The assistant message keeps one
+stable id and is rewritten as tokens arrive, so a window updates in place at
+token speed with no polling interval to tune — and the CLI's `--output
+ndjson` is the same frames, one JSON object per line.
 
 ## A message, end to end
 
