@@ -30,6 +30,7 @@ import {
 import { ToolRegistry } from '@wispcrew/tools';
 
 import * as store from './store.js';
+import { claimTurn, updateTurn } from './turns.js';
 import { host } from './host.js';
 import { getConversation } from './conversations.js';
 import { downgradeNotice, resolvePolicy } from './approval-policy.js';
@@ -786,14 +787,45 @@ export async function runRoutine(routine: RoutineRecord): Promise<void> {
     createdAt: Date.now(),
   });
   /*
-   * Unattended by definition.
+   * Recorded as a task, so the run can be found afterwards.
    *
-   * A routine fires whether or not anyone is looking, so `notify_user` is
-   * the only way it can report — which is exactly why it is withheld from
-   * turns a person typed.
+   * Turns were claimed only by room turns, which meant scheduled work left
+   * no trace an operator could query — `wispcrew tasks` showed what a
+   * person had started and nothing that happened while they slept. Exactly
+   * the wrong way round for a headless machine.
+   *
+   * The trigger id is the routine's, so several firings of the same routine
+   * are distinguishable from one another.
    */
-  await runPrompt(routine.agentId, routine.prompt, [], undefined, undefined, undefined, {
-    unattended: true,
+  const turn = claimTurn({
+    conversationId: routine.agentId,
+    triggerEntryId: `routine_${routine.id}_${Date.now()}`,
+    agentId: routine.agentId,
   });
+
+  if (turn) updateTurn(turn.id, { state: 'running' });
+
+  try {
+    /*
+     * Unattended by definition.
+     *
+     * A routine fires whether or not anyone is looking, so `notify_user` is
+     * the only way it can report — which is exactly why it is withheld from
+     * turns a person typed.
+     */
+    await runPrompt(routine.agentId, routine.prompt, [], undefined, undefined, undefined, {
+      unattended: true,
+    });
+
+    if (turn) updateTurn(turn.id, { state: 'completed' });
+  } catch (err) {
+    /*
+     * A failed routine must be visible as failed, not merely absent. An
+     * operator looking for why nothing happened needs the reason, and the
+     * transcript alone does not survive a trimmed conversation.
+     */
+    if (turn) updateTurn(turn.id, { state: 'failed', detail: (err as Error).message });
+    throw err;
+  }
 }
 

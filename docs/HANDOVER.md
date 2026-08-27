@@ -21,7 +21,7 @@ Electron, which is what makes that possible.
 ## Where it stands
 
 - **Public** at `github.com/techartdev/wispcrew`, MIT licensed.
-- **106+ commits**, 60 offline suites, `npm run verify` green.
+- **106+ commits**, 61 offline suites, `npm run verify` green.
 - Verified on **Windows** and a real **Hetzner VPS**; macOS and Linux are
   built and booted by CI but never run on real hardware.
 
@@ -45,7 +45,7 @@ working tree — during the final round.
 | Claim | Evidence |
 |---|---|
 | Clean clone builds | `git clone` → `npm ci` → `typecheck` → `build`, all exit 0 |
-| Tests pass | 60 offline suites, no API key, no network |
+| Tests pass | 61 offline suites, no API key, no network |
 | Packages | `npm run pack` → 325 MB, no `vendor/` in the output |
 | Packaged app runs | Boots on a **fresh profile**, renders the first-run screen |
 | Live provider | Tool call executed and the model used the real result |
