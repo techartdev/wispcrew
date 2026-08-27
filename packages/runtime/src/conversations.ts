@@ -138,6 +138,26 @@ export function deleteConversation(id: string): void {
  */
 store.setAgentDeletedHook((agentId) => {
   deleteConversation(agentId);
+
+  /*
+   * And out of every room it merely joined.
+   *
+   * Removing the agent's own room was not enough: it stayed listed as a
+   * participant in shared rooms, so the strip still offered `@handle` and a
+   * message addressed to it reached nobody. The room looked willing to
+   * answer and silently would not — the same shape as the missing-room bug
+   * above, one level out.
+   *
+   * Found by deleting one of two agents in a room and then checking the
+   * other room's membership.
+   *
+   * The room itself survives: it belongs to whoever created it, and may hold
+   * other agents and a transcript the user still wants.
+   */
+  for (const room of listConversations()) {
+    if (!(room.participants ?? []).some((p) => p.id === agentId)) continue;
+    removeParticipant(room.id, agentId, LOCAL_HUMAN_ID, 'You');
+  }
 });
 
 /**

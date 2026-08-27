@@ -85,6 +85,18 @@ console.log('\n[shared room] survives, because it is not the agent\u2019s own');
   check('the shared room survives', Boolean(survivor));
   check('and still holds the other agent',
     (survivor?.participants ?? []).some((p) => p.id === host.id));
+
+  /*
+   * But the deleted agent is out of it.
+   *
+   * Removing only its own room left it listed as a participant elsewhere, so
+   * the room strip still offered `@guest` and a message addressed to it
+   * reached nobody — the room looked willing to answer and silently would
+   * not. The same shape as the missing-room bug, one level out.
+   */
+  check('and the deleted one is not',
+    !(survivor?.participants ?? []).some((p) => p.id === guest.id),
+    JSON.stringify((survivor?.participants ?? []).map((p) => p.handle ?? p.name)));
 }
 
 console.log('\n[transcript] removed too, so a recreated id starts clean');
