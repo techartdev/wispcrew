@@ -298,6 +298,31 @@ export function emitMcp(): void {
  * process — deliberately not persisted, so a standing grant cannot outlive
  * the session that granted it without the user knowing.
  */
+/**
+ * Settle an approval this process is waiting on.
+ *
+ * Shared by the bridge handler and the short-circuit in `invoke`, which
+ * cannot call the handler: `methods` holds the wrapped invoke, so going
+ * through it recursed until the stack blew.
+ */
+function resolveLocalApproval(requestId: string, resolution: ApprovalResolution): void {
+  const resolve = pendingApprovals.get(requestId);
+  if (!resolve) return;
+  pendingApprovals.delete(requestId);
+
+  // "Always allow" records a standing grant for this agent + tool. Only an
+  // explicit allow-always does so — a denial never creates a grant.
+  if (resolution === 'allow-always') {
+    const meta = pendingMeta.get(requestId);
+    if (meta) {
+      grant(meta.agentId, meta.toolName);
+      emitEvent({ type: 'grants-changed', grants: listGrants() });
+    }
+  }
+
+  resolve(resolution !== 'deny');
+}
+
 export function requestApproval(
   agentId: string,
   req: {
@@ -489,7 +514,28 @@ export function registerBridge(context: BridgeContext): void {
        * a node has no screen, and forwarding them would open a dialog
        * nobody can see, or report a stranger's app version.
        */
-      if (!isClientOnlyMethod(name)) {
+      /*
+     * An approval this process is waiting on is answered HERE.
+     *
+     * A node asked over the wire and is parked on that `ask` frame; it has
+     * never heard of a `resolveApproval` call and would answer "that
+     * approval is unknown, already answered, or expired" — which is what it
+     * did, leaving the card on screen and the agent blocked.
+     *
+     * The resolver lives in this process because this process was asked.
+     */
+    if (name === 'resolveApproval' && typeof args[0] === 'string' && pendingApprovals.has(args[0])) {
+      /*
+       * Settled directly, NOT through `methods`.
+       *
+       * `methods` holds the wrapped invoke — the very function running now —
+       * so calling it here recursed until the stack blew.
+       */
+      resolveLocalApproval(args[0], args[1] as ApprovalResolution);
+      return undefined as T;
+    }
+
+    if (!isClientOnlyMethod(name)) {
         /*
          * An agent's work happens on the node it belongs to.
          *
@@ -791,22 +837,9 @@ export function registerBridge(context: BridgeContext): void {
     return branch;
   });
 
-  handle('resolveApproval', (requestId: string, resolution: ApprovalResolution) => {
-    const resolve = pendingApprovals.get(requestId);
-    if (!resolve) return;
-    pendingApprovals.delete(requestId);
-
-    // "Always allow" records a standing grant for this agent + tool. Only an
-    // explicit allow-always does so — a denial never creates a grant.
-    if (resolution === 'allow-always') {
-      const meta = pendingMeta.get(requestId);
-      if (meta) {
-        grant(meta.agentId, meta.toolName);
-        emitEvent({ type: 'grants-changed', grants: listGrants() });
-      }
-    }
-    resolve(resolution !== 'deny');
-  });
+  handle('resolveApproval', (requestId: string, resolution: ApprovalResolution) =>
+    resolveLocalApproval(requestId, resolution),
+  );
 
   /* -- subscription sign-in ------------------------------------ */
 

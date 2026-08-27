@@ -96,8 +96,11 @@ docs/GROUP-CHAT.md       who speaks when several agents share a chat
    provider. Transcript entries are **pushed** back as `wc:event` frames and
    upserted by id, so streaming updates in place.
 4. Tool calls hit the approval policy: `readonly` denies, `auto` allows, `ask`
-   raises an approval card and waits for `resolveApproval`. **A daemon denies**
-   anything needing approval — there is nobody to ask.
+   raises an approval card and waits for `resolveApproval`. **A daemon asks
+   whoever is attached** — a desktop over TLS, or a CLI on its own machine —
+   through the `ask`/`decision` frames, and denies only when nobody is
+   connected. An unanswered request is still a denial, and so is a
+   disconnect mid-request.
 5. An agent can also be woken with nobody watching: a cron routine, a one-shot
    follow-up it scheduled itself, or a file change under its workspace. It
    reports back through the channels the user enabled.
@@ -247,7 +250,7 @@ OpenAI-compatible endpoint keeps chat-completions. `test:attachments` pins the
 routing, including that a local server borrowing an OpenAI model name is not
 rerouted.
 
-**Test coverage**: 65 offline suites — no API key, no network.
+**Test coverage**: 66 offline suites — no API key, no network.
 Several caught real bugs when written, and a few caught bugs that had already
 shipped; keep them green. Notable ones: `single-writer` (two engines on one
 store), `shell-timeout` (a killed process emits `exit` with no `close` on
