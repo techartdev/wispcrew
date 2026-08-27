@@ -18,6 +18,8 @@ can close; a gap glossed is a gap the next person rediscovers.
 | **An approval from the CLI** | An agent on the VPS asked for the shell, `approvals allow` answered from a second terminal, and the command ran |
 | **A paired VPS** | Paired from the desktop and from the CLI; an agent created there stays routable |
 | **Node restart** | Restarted with no pairing window open; the desktop reconnected with the credential it already held |
+| **Daemon restart** | Agents, task history, routines, settings and the stored key all intact — 5 tasks before, 5 after |
+| **`WISPCREW_LOG` headlessly** | Writes a real file, and a canary key configured through the CLI never appears in it: `[keys] stored key for nvidia` |
 | **A wrong API key** | "NVIDIA NIM rejected the API key. Open Settings and check the key is correct and still active" |
 | **A retired model** | HTTP 410 surfaced with the provider's own explanation, not a stack trace |
 | **An unreachable node** | Named the machine and said it was not connected, rather than failing silently |
