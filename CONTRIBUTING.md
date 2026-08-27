@@ -38,33 +38,49 @@ your machine, which still has stale `dist/` output, looks fine.
 
 ## Before you open a pull request
 
-Run these three. All must pass:
+Run one command:
 
 ```bash
-npm run typecheck
-npm run build
-npm run test --workspace @wispcrew/examples-cli
+npm run verify
 ```
 
-The test suite is fully offline — it needs no API key and makes no external
-network calls, so it runs the same way on your machine and in CI.
+About two minutes. It does everything CI does that a local machine can:
+typecheck, build, all 60 offline suites, encoding, the provenance and
+credential guards, and four checks that the documentation still describes the
+software — including that every CLI command reaches a method the node
+actually serves, which otherwise fails only when someone runs it on a real
+machine.
+
+The suites are fully offline — no API key, no network — so they behave the
+same on your machine and in CI.
 
 If you touched anything under `apps/desktop`, also launch it once
-(`npm run desktop`) and confirm the app still boots and chats.
+(`npm run desktop`) and confirm the app still boots and chats. `verify` boots
+it headlessly and checks the window paints, which catches a blank screen but
+not a broken interaction.
 
 ## Repository layout
 
+**One engine, three clients.** The engine is in `packages/runtime` and imports
+no Electron, which is why the same code runs behind a window, on a headless
+server, or under the CLI.
+
 | Path | What lives there |
 |---|---|
-| `apps/desktop/src/main` | Electron main: IPC bridge, agent runs, scheduler, storage, secrets |
-| `apps/desktop/src/preload` | The single IPC surface exposed to the renderer |
-| `apps/desktop/src/renderer` | React UI |
+| `packages/runtime` | **The engine** — agent runs, storage, scheduler, nodes, secrets |
 | `packages/shared` | Types shared by everything; **no dependencies** |
 | `packages/llm` | Provider adapters and presets |
 | `packages/core` | The agent loop and personas |
 | `packages/tools` | Built-in tools |
 | `packages/mcp` | MCP stdio client |
-| `examples/cli-agent` | Headless CLI + the offline test suites |
+| `apps/desktop/src/main` | Electron main: the IPC bridge, node routing, the daemon link |
+| `apps/desktop/src/preload` | The single IPC surface exposed to the renderer |
+| `apps/desktop/src/renderer` | React UI |
+| `apps/daemon` | The headless host **and the `wispcrew` CLI** |
+| `examples/cli-agent` | A minimal example agent + the offline test suites |
+
+The name `examples/cli-agent` predates the real CLI and is a little
+confusing: the binary people use lives in `apps/daemon`.
 
 ## Things worth knowing
 

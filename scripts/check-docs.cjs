@@ -14,6 +14,8 @@ const path = require('path');
 process.chdir(path.resolve(__dirname, '..'));
 
 const problems = [];
+
+/* A quickstart is the first thing a stranger runs, so it has its own gate. */
 const note = (file, what) => problems.push({ file, what });
 
 const read = (file) => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '');

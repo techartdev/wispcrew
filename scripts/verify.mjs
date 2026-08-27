@@ -266,6 +266,31 @@ check('LICENSE exists', fs.existsSync(path.join(repo, 'LICENSE')));
 }
 
 /*
+ * The quickstart works.
+ *
+ * It is the first thing a stranger runs, so a wrong command there is worse
+ * than anywhere else: its failure is their first impression of the project.
+ */
+{
+  let quickOk = true;
+  let detail = '';
+  try {
+    execFileSync(process.execPath, [path.join(repo, 'scripts', 'check-quickstart.cjs')], {
+      cwd: repo,
+      stdio: 'pipe',
+    });
+  } catch (err) {
+    quickOk = false;
+    detail = String(err.stdout ?? '')
+      .split('\n')
+      .filter((line) => line.includes('FAIL'))
+      .map((line) => line.trim())
+      .join('; ');
+  }
+  check('the quickstart is runnable', quickOk, detail);
+}
+
+/*
  * Boot the app and confirm the window actually paints.
  *
  * The most valuable thing CI does, and it works locally too — this machine

@@ -58,6 +58,10 @@ you created, or a node you own.
 
 ## Getting started
 
+**[QUICKSTART.md](QUICKSTART.md)** walks through it in fifteen minutes, with
+a troubleshooting section built from failures that actually happened. The
+short version:
+
 Requires **Node.js 20+**.
 
 ```bash
