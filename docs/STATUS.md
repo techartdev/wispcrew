@@ -26,6 +26,9 @@ nature — a browser sign-in, a file dialog, window chrome — and nine more are
 unbuilt, each named in `CLI.md` with its reason.
 
 
+See [SCENARIOS.md](SCENARIOS.md) for paths exercised end to end, including
+what could not be verified and why.
+
 ## Verified working
 
 Everything below was confirmed by running it — screenshots, transcript
