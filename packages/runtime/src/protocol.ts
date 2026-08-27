@@ -77,6 +77,17 @@ export interface AskFrame {
   agentName: string;
   tool: string;
   summary: string;
+  /**
+   * The id of the approval entry the NODE wrote in its own transcript.
+   *
+   * The card a person clicks renders from that entry, and for a remote
+   * agent the conversation on screen is the node's — so the entry has to
+   * live there. Carrying its id lets the client's Allow button resolve the
+   * request that the card actually belongs to, instead of a local copy
+   * nobody is looking at.
+   */
+  requestId: string;
+  detail?: string;
 }
 
 /**

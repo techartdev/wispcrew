@@ -138,6 +138,14 @@ export async function linkToNode(
           (await onAsk?.(request.agentId, {
             toolName: request.tool,
             summary: request.summary,
+            detail: request.detail,
+            /*
+             * The node already wrote the card into its own transcript, so
+             * the desktop must resolve THAT id and must not write a second
+             * entry into a store the conversation is not reading from.
+             */
+            requestId: request.requestId,
+            alreadyShown: true,
           }))
             ? 'allow-once'
             : 'deny',
@@ -194,11 +202,29 @@ const nodeNames = new Map<string, string>();
  * timing out.
  */
 let onAsk:
-  | ((agentId: string, req: { toolName: string; summary: string }) => Promise<boolean>)
+  | ((
+      agentId: string,
+      req: {
+        toolName: string;
+        summary: string;
+        detail?: string;
+        requestId?: string;
+        alreadyShown?: boolean;
+      },
+    ) => Promise<boolean>)
   | null = null;
 
 export function setNodeApprovalAsker(
-  asker: (agentId: string, req: { toolName: string; summary: string }) => Promise<boolean>,
+  asker: (
+    agentId: string,
+    req: {
+      toolName: string;
+      summary: string;
+      detail?: string;
+      requestId?: string;
+      alreadyShown?: boolean;
+    },
+  ) => Promise<boolean>,
 ): void {
   onAsk = asker;
 }

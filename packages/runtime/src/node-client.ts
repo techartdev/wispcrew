@@ -40,6 +40,8 @@ export interface NodeClientOptions {
     agentName: string;
     tool: string;
     summary: string;
+    requestId: string;
+    detail?: string;
   }) => Promise<'allow-once' | 'allow-always' | 'deny'> | 'allow-once' | 'allow-always' | 'deny';
   onClose?: (reason: string) => void;
 }
@@ -141,6 +143,8 @@ export function connectNode(options: NodeClientOptions): Promise<NodeClient> {
                 agentName: ask.agentName,
                 tool: ask.tool,
                 summary: ask.summary,
+                requestId: ask.requestId,
+                detail: ask.detail,
               }),
             )
               .then((resolution) =>

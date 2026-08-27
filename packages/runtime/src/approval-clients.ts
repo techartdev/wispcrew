@@ -20,6 +20,14 @@ export interface ApprovalRequest {
   agentName: string;
   tool: string;
   summary: string;
+  /**
+   * The approval entry the node wrote in its own transcript.
+   *
+   * The card renders from that entry, so the client must resolve the same
+   * id rather than inventing one nobody is looking at.
+   */
+  requestId: string;
+  detail?: string;
 }
 
 type Asker = (request: ApprovalRequest) => Promise<ApprovalResolution>;

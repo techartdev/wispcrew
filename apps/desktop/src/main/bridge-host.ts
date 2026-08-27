@@ -300,37 +300,79 @@ export function emitMcp(): void {
  */
 export function requestApproval(
   agentId: string,
-  req: { toolName: string; summary: string; detail?: string },
+  req: {
+    toolName: string;
+    summary: string;
+    detail?: string;
+    /**
+     * Set when a NODE asked and already wrote the card in its own
+     * transcript.
+     *
+     * Writing a second entry here would put it in this machine's store
+     * while the conversation on screen is the node's — the card would be
+     * invisible, which is exactly what happened before this existed.
+     */
+    requestId?: string;
+    alreadyShown?: boolean;
+  },
 ): Promise<boolean> {
   // A standing grant the user made earlier, in this session or a previous
   // one. Persisted grants are listed and revocable in Settings — a permission
   // the user cannot see or withdraw would be worse than asking every time.
   if (isGranted(agentId, req.toolName)) return Promise.resolve(true);
 
-  const requestId = store.newId('appr');
-  const entry: TranscriptEntry = {
-    kind: 'approval',
-    id: requestId,
+  const requestId = req.requestId ?? store.newId('appr');
+
+  if (!req.alreadyShown) {
+    const entry: TranscriptEntry = {
+      kind: 'approval',
+      id: requestId,
+      requestId,
+      toolName: req.toolName,
+      summary: req.summary,
+      detail: req.detail,
+      status: 'pending',
+      createdAt: Date.now(),
+    };
+    pushTranscript(agentId, entry);
+    emitEvent({ type: 'run-state', agentId, state: 'awaiting-approval' });
+  }
+
+  emitEvent({
+    type: 'approval',
+    agentId,
     requestId,
     toolName: req.toolName,
     summary: req.summary,
     detail: req.detail,
-    status: 'pending',
-    createdAt: Date.now(),
-  };
-  pushTranscript(agentId, entry);
-  emitEvent({ type: 'run-state', agentId, state: 'awaiting-approval' });
-  emitEvent({ type: 'approval', agentId, requestId, ...req });
+  });
 
   pendingMeta.set(requestId, { agentId, toolName: req.toolName });
 
   return new Promise<boolean>((resolve) => {
     pendingApprovals.set(requestId, (approved) => {
       pendingMeta.delete(requestId);
-      pushTranscript(agentId, {
-        ...entry,
-        status: approved ? 'approved' : 'denied',
-      });
+
+      /*
+       * Only update a card this machine wrote.
+       *
+       * When a node asked, the card lives in ITS transcript and the node
+       * records the outcome there — writing here would put a stray entry in
+       * a store the conversation is not reading from.
+       */
+      if (!req.alreadyShown) {
+        pushTranscript(agentId, {
+          kind: 'approval',
+          id: requestId,
+          requestId,
+          toolName: req.toolName,
+          summary: req.summary,
+          detail: req.detail,
+          status: approved ? 'approved' : 'denied',
+          createdAt: Date.now(),
+        });
+      }
+
       resolve(approved);
     });
   });

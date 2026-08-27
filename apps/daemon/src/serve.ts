@@ -16,6 +16,8 @@ import {
   closeAllMcp,
   defaultSettings,
   initFileLog,
+  newId,
+  upsertTranscriptEntry,
   hasApprovalClient,
   askApprovalClients,
   emitEngineEvent,
@@ -233,12 +235,54 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
      * an allow when nobody answers, so the denial still applies.
      */
     if (hasApprovalClient()) {
+      /*
+       * Written HERE, in the node's own transcript, before anyone is asked.
+       *
+       * The card a person clicks renders from an approval entry, and for a
+       * remote agent the conversation on screen is this machine's. Writing
+       * it on the client instead put the card in a store nobody was
+       * looking at: the request arrived, the answer path worked, and
+       * nothing was ever displayed.
+       */
+      const requestId = newId('appr');
+      upsertTranscriptEntry(agentId, {
+        kind: 'approval',
+        id: requestId,
+        requestId,
+        toolName: req.toolName,
+        summary: req.summary,
+        detail: req.detail,
+        status: 'pending',
+        createdAt: Date.now(),
+      });
+      emitEngineEvent({ type: 'run-state', agentId, state: 'awaiting-approval' });
+
       const decision = await askApprovalClients({
         agentId,
         agentName: agent?.name ?? agentId,
         tool: req.toolName,
         summary: req.summary,
+        requestId,
+        detail: req.detail,
       });
+
+      /*
+       * Record the outcome on the same entry, so the card stops looking
+       * pending — including when nobody answered and the denial below
+       * applies.
+       */
+      upsertTranscriptEntry(agentId, {
+        kind: 'approval',
+        id: requestId,
+        requestId,
+        toolName: req.toolName,
+        summary: req.summary,
+        detail: req.detail,
+        status:
+          decision === 'allow-once' || decision === 'allow-always' ? 'approved' : 'denied',
+        createdAt: Date.now(),
+      });
+      emitEngineEvent({ type: 'run-state', agentId, state: 'thinking' });
       /*
        * The engine wants a yes or no, not the vocabulary.
        *
