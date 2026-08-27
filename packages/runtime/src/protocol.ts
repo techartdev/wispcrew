@@ -58,6 +58,42 @@ export interface EventFrame {
 }
 
 /**
+ * The node asking a connected client for permission.
+ *
+ * This is the one frame the node initiates and waits on, and it exists
+ * because approvals could not cross the wire at all: an agent on a VPS that
+ * needed the shell had nobody to ask, so the request parked until it timed
+ * out as a denial and the conversation hung with no card and no explanation.
+ *
+ * Deliberately shaped like a request in reverse — `id` correlates the
+ * answer, exactly as `RequestFrame` does — so both directions are one
+ * mechanism rather than two that drift.
+ */
+export interface AskFrame {
+  t: 'ask';
+  /** Correlates the decision; unique per connection. */
+  id: number;
+  agentId: string;
+  agentName: string;
+  tool: string;
+  summary: string;
+}
+
+/**
+ * A client's decision.
+ *
+ * `deny` is the only safe default, so anything that is not an explicit
+ * allow is treated as one — including an unknown value from a client
+ * speaking a newer dialect, and a connection that drops before answering.
+ */
+export interface DecisionFrame {
+  t: 'decision';
+  id: number;
+  /** The engine's own vocabulary, so nothing has to be translated. */
+  resolution: 'allow-once' | 'allow-always' | 'deny';
+}
+
+/**
  * The first frame a client sends.
  *
  * Authentication happens before anything else, and an unauthenticated
@@ -113,16 +149,25 @@ export interface PairFailedFrame {
   message: string;
 }
 
-export type ClientFrame = HelloFrame | RequestFrame | PairFrame;
+export type ClientFrame = HelloFrame | RequestFrame | PairFrame | DecisionFrame;
 export type NodeFrame =
   | WelcomeFrame
   | ResponseFrame
   | ErrorFrame
   | EventFrame
+  | AskFrame
   | PairedFrame
   | PairFailedFrame;
 
-/** Bumped when a change would break an older client. */
+/**
+ * Bumped when a change would break an older client.
+ *
+ * Still 1 after adding `ask`/`decision`: an older client never sends a
+ * decision, and an older node never asks. Both sides ignore a frame they do
+ * not know, and the node's timeout still denies — so a version mismatch
+ * degrades to exactly the behaviour that existed before, rather than
+ * breaking a connection that otherwise works.
+ */
 export const PROTOCOL_VERSION = 1;
 
 /** Serialise a frame for the wire. */

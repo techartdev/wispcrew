@@ -20,8 +20,9 @@
  */
 import type { Server, Socket } from 'node:net';
 import { timingSafeEqual } from 'node:crypto';
-import type { BridgeEvent } from '@wispcrew/shared';
+import type { ApprovalResolution, BridgeEvent } from '@wispcrew/shared';
 import { addEventSink } from './engine-events.js';
+import { registerApprovalClient } from './approval-clients.js';
 import type { PairingWindow } from './pairing.js';
 import { fileLog } from './filelog.js';
 import {
@@ -30,6 +31,7 @@ import {
   PROTOCOL_VERSION,
   type RequestFrame,
   type HelloFrame,
+  type DecisionFrame,
 } from './protocol.js';
 
 /** Handles one bridge method call. */
@@ -102,6 +104,17 @@ export function serveNode(options: NodeServerOptions): { close(): Promise<void> 
     let buffered = '';
     let detachEvents: (() => void) | null = null;
 
+    /*
+     * Approval requests this connection has been asked and not yet answered.
+     *
+     * Each resolver MUST be settled: a request left hanging blocks the agent
+     * forever. So a disconnect denies every one of them below — the safe
+     * answer, and the same one a timeout gives.
+     */
+    let detachAsker: (() => void) | null = null;
+    const pendingAsks = new Map<number, (resolution: ApprovalResolution) => void>();
+    let nextAskId = 1;
+
     const send = (frame: Parameters<typeof encodeFrame>[0]) => {
       if (!socket.destroyed) socket.write(encodeFrame(frame));
     };
@@ -109,6 +122,19 @@ export function serveNode(options: NodeServerOptions): { close(): Promise<void> 
     const shutdown = () => {
       detachEvents?.();
       detachEvents = null;
+
+      /*
+       * A client that vanishes has denied everything it was asked.
+       *
+       * Every resolver must settle or the agent waits forever, and there is
+       * only one safe way to settle an unanswered permission request. This
+       * is the same answer a timeout gives, arrived at sooner.
+       */
+      detachAsker?.();
+      detachAsker = null;
+      for (const [, resolve] of pendingAsks) resolve('deny');
+      pendingAsks.clear();
+
       connections.delete(socket);
       if (!socket.destroyed) socket.destroy();
     };
@@ -119,7 +145,9 @@ export function serveNode(options: NodeServerOptions): { close(): Promise<void> 
       buffered = rest;
 
       for (const raw of frames) {
-        const frame = raw as HelloFrame | RequestFrame;
+        // `DecisionFrame` too, now that a node can ask a client for
+        // permission and needs to recognise the answer.
+        const frame = raw as HelloFrame | RequestFrame | DecisionFrame;
 
         if (!authenticated) {
           /*
@@ -175,6 +203,40 @@ export function serveNode(options: NodeServerOptions): { close(): Promise<void> 
           detachEvents = addEventSink((event: BridgeEvent) => {
             send({ t: 'evt', event });
           });
+
+          /*
+           * And only now can it be asked for permission.
+           *
+           * Registered after authentication for the obvious reason: a
+           * connection that has not proved itself must not be offered a say
+           * over whether this machine runs a shell command.
+           */
+          detachAsker = registerApprovalClient(async (request) => {
+            const id = nextAskId++;
+            return new Promise((resolve) => {
+              pendingAsks.set(id, resolve);
+              send({ t: 'ask', id, ...request });
+            });
+          });
+          continue;
+        }
+
+        /*
+         * A client's decision on something this node asked about.
+         *
+         * Anything that is not an explicit allow resolves as a denial — an
+         * unknown resolution from a newer client included.
+         */
+        if (frame?.t === 'decision' && typeof frame.id === 'number') {
+          const resolve = pendingAsks.get(frame.id);
+          if (resolve) {
+            pendingAsks.delete(frame.id);
+            resolve(
+              frame.resolution === 'allow-once' || frame.resolution === 'allow-always'
+                ? frame.resolution
+                : 'deny',
+            );
+          }
           continue;
         }
 

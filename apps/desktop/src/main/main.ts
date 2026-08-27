@@ -65,6 +65,7 @@ import { startDesktopNotifications } from './desktop-notify.js';
 import {
   closeNodeLinks,
   connectKnownNodes,
+  setNodeApprovalAsker,
   existingLink,
   routeForCall,
 } from './node-links.js';
@@ -406,6 +407,15 @@ app.whenReady().then(async () => {
   startDesktopNotifications(userDataDir);
   attachWindowEventSink();
   setApprovalAsker((agentId, req) => requestApproval(agentId, req));
+
+  /*
+   * The same person, asked by a machine across the network.
+   *
+   * A node with an agent that needs a tool now reaches whoever is driving
+   * this desktop, instead of parking the request until it times out as a
+   * denial with no card ever shown.
+   */
+  setNodeApprovalAsker((agentId, req) => requestApproval(agentId, req));
 
   /*
    * Share this profile's credentials with a background daemon.

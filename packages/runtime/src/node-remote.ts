@@ -19,7 +19,7 @@
  *    sent, so a substituted certificate never sees the token.
  */
 import tls from 'node:tls';
-import { connectNode, type NodeClient } from './node-client.js';
+import { connectNode, type NodeClient, type NodeClientOptions } from './node-client.js';
 import { fingerprintMatches } from './pairing.js';
 import { decodeFrames, encodeFrame, type NodeFrame } from './protocol.js';
 
@@ -116,6 +116,14 @@ export async function connectRemoteNode(
   options: {
     clientName?: string;
     onEvent?: (event: unknown) => void;
+    /**
+     * Answer a node asking this client for permission.
+     *
+     * Passed straight through to the client. Without it a node with an
+     * agent that needs a tool has nobody to ask, and the request parks
+     * until it times out as a denial.
+     */
+    onAsk?: NodeClientOptions['onAsk'];
     onClose?: (reason: string) => void;
     timeoutMs?: number;
   } = {},
@@ -136,6 +144,7 @@ export async function connectRemoteNode(
     token: target.token,
     clientName: options.clientName,
     onEvent: options.onEvent,
+    onAsk: options.onAsk,
     onClose: options.onClose,
   });
 }

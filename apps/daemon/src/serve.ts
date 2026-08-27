@@ -16,6 +16,8 @@ import {
   closeAllMcp,
   defaultSettings,
   initFileLog,
+  hasApprovalClient,
+  askApprovalClients,
   emitEngineEvent,
   fileLog,
   initGrants,
@@ -206,14 +208,47 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
      * times out as a denial. This adds a way to say yes, not a way to skip
      * asking.
      */
+    const agent = listAgents().find((a) => a.id === agentId);
+
     if (hasApprovalListener()) {
-      const agent = listAgents().find((a) => a.id === agentId);
       return askAndWait({
         agentId,
         agentName: agent?.name ?? agentId,
         tool: req.toolName,
         summary: req.summary,
       });
+    }
+
+    /*
+     * Or a connected client, which is also a person.
+     *
+     * "Nobody to ask" was only ever true of a node with no clients. A
+     * desktop attached over TLS is somebody driving this machine, and until
+     * approvals could cross the wire they had no way to answer: an agent on
+     * a VPS asked, nobody heard, the request timed out as a denial, and the
+     * conversation hung with no card and no explanation.
+     *
+     * The default below is untouched. This adds a way to say yes, never a
+     * way to skip asking — and `askApprovalClients` returns null rather than
+     * an allow when nobody answers, so the denial still applies.
+     */
+    if (hasApprovalClient()) {
+      const decision = await askApprovalClients({
+        agentId,
+        agentName: agent?.name ?? agentId,
+        tool: req.toolName,
+        summary: req.summary,
+      });
+      /*
+       * The engine wants a yes or no, not the vocabulary.
+       *
+       * "Always" is recorded as a standing grant by whoever asked; here the
+       * only question is whether this call proceeds. `null` means nobody
+       * answered, which falls through to the denial below rather than being
+       * read as a no from a person — the outcome is the same, the reason is
+       * not, and the notice explains it.
+       */
+      if (decision) return decision === 'allow-once' || decision === 'allow-always';
     }
 
     fileLog('[daemon] denied unattended approval', agentId, req.toolName);

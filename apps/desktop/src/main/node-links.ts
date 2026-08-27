@@ -120,6 +120,28 @@ export async function linkToNode(
       {
         clientName: 'wispcrew-desktop',
         onEvent,
+
+        /*
+         * A node asking this desktop for permission.
+         *
+         * Before this, an agent on another machine that needed a tool had
+         * nobody to ask: the node parked the request until it timed out as
+         * a denial, and the conversation hung with no card and no
+         * explanation. Measured — asking the VPS agent to run `date`
+         * produced only run-state events and zero approval cards.
+         *
+         * Routed through the same function a local request uses, so the
+         * card, the standing grants and "always allow" stay one
+         * implementation rather than two that drift.
+         */
+        onAsk: async (request) =>
+          (await onAsk?.(request.agentId, {
+            toolName: request.tool,
+            summary: request.summary,
+          }))
+            ? 'allow-once'
+            : 'deny',
+
         onClose: () => {
           // Drop the link so the next call reconnects rather than writing
           // into a dead socket.
@@ -163,6 +185,23 @@ export function existingLink(nodeId: string): NodeClient | null {
  * improve an error message is the wrong trade.
  */
 const nodeNames = new Map<string, string>();
+
+/**
+ * Who answers when a node asks this desktop for permission.
+ *
+ * Set once at startup. Null until then, and a node that asks before it is
+ * set gets a denial — the safe answer, and the same one it would reach by
+ * timing out.
+ */
+let onAsk:
+  | ((agentId: string, req: { toolName: string; summary: string }) => Promise<boolean>)
+  | null = null;
+
+export function setNodeApprovalAsker(
+  asker: (agentId: string, req: { toolName: string; summary: string }) => Promise<boolean>,
+): void {
+  onAsk = asker;
+}
 
 export function routeForCall(
   agentNodeOf: (agentId: string) => string | undefined,

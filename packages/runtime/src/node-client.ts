@@ -26,6 +26,21 @@ export interface NodeClientOptions {
   /** Identifies this client in node logs. */
   clientName?: string;
   onEvent?: (event: unknown) => void;
+
+  /**
+   * Answer a node asking this client for permission.
+   *
+   * Optional on purpose: a client with nobody watching — a script, a relay —
+   * should not silently become the thing that approves shell commands.
+   * Without it the client denies immediately, which is what the node would
+   * have concluded anyway, five minutes later.
+   */
+  onAsk?: (request: {
+    agentId: string;
+    agentName: string;
+    tool: string;
+    summary: string;
+  }) => Promise<'allow-once' | 'allow-always' | 'deny'> | 'allow-once' | 'allow-always' | 'deny';
   onClose?: (reason: string) => void;
 }
 
@@ -44,7 +59,7 @@ export interface NodeClient {
  * rather than on the first method call.
  */
 export function connectNode(options: NodeClientOptions): Promise<NodeClient> {
-  const { socket, token, clientName = 'wispcrew-desktop', onEvent, onClose } = options;
+  const { socket, token, clientName = 'wispcrew-desktop', onEvent, onAsk, onClose } = options;
 
   return new Promise((resolve, reject) => {
     let buffered = '';
@@ -103,6 +118,38 @@ export function connectNode(options: NodeClientOptions): Promise<NodeClient> {
           case 'evt':
             onEvent?.(frame.event);
             break;
+
+          /*
+           * The node asking THIS client for permission.
+           *
+           * The only frame a node initiates. With no `onAsk` handler there
+           * is nobody here to decide, so deny at once rather than leaving
+           * the node waiting for its timeout — the outcome is identical and
+           * the agent is unblocked immediately instead of in five minutes.
+           */
+          case 'ask': {
+            const ask = frame;
+
+            if (!onAsk) {
+              socket.write(encodeFrame({ t: 'decision', id: ask.id, resolution: 'deny' }));
+              break;
+            }
+
+            void Promise.resolve(
+              onAsk({
+                agentId: ask.agentId,
+                agentName: ask.agentName,
+                tool: ask.tool,
+                summary: ask.summary,
+              }),
+            )
+              .then((resolution) =>
+                socket.write(encodeFrame({ t: 'decision', id: ask.id, resolution: resolution ?? 'deny' })),
+              )
+              // A handler that throws is not an allow. Nothing is.
+              .catch(() => socket.write(encodeFrame({ t: 'decision', id: ask.id, resolution: 'deny' })));
+            break;
+          }
         }
       }
     });
