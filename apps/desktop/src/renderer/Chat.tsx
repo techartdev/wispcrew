@@ -29,6 +29,17 @@ interface ChatProps {
    * as well as messages.
    */
   members: { id: string; handle: string; name: string }[];
+
+  /**
+   * Panels `/` can open.
+   *
+   * Only panels that genuinely exist are offered — an action listing
+   * something the app cannot do would be the same lie as a status nothing
+   * emits.
+   */
+  onOpenRoutines(): void;
+  onOpenHistory(): void;
+  onOpenRoom(): void;
   onSend(prompt: string, attachmentPaths?: string[]): void;
   /**
    * Text to append to the draft, e.g. a handle the user clicked.
@@ -241,6 +252,9 @@ export function Chat({
   runState,
   skills,
   members,
+  onOpenRoutines,
+  onOpenHistory,
+  onOpenRoom,
   onSend,
   insertText,
   onInsertConsumed,
@@ -414,11 +428,37 @@ export function Chat({
     return m ? (m[1] ?? '') : null;
   }, [draft]);
 
-  const skillMatches = useMemo(() => {
+  /*
+   * Everything `/` can reach: skills, then actions.
+   *
+   * Skills first because they are the agent's own vocabulary and what a
+   * person is usually reaching for; actions are a shortcut to a panel that
+   * already has a button. Both are real — no action is listed that does not
+   * open something that exists.
+   */
+  const slashMatches = useMemo(() => {
     if (slashQuery === null) return [];
     const q = slashQuery.toLowerCase();
-    return skills.filter((s) => s.enabled && s.name.toLowerCase().startsWith(q)).slice(0, 6);
-  }, [skills, slashQuery]);
+
+    const skillItems = skills
+      .filter((s) => s.enabled && s.name.toLowerCase().startsWith(q))
+      .map((s) => ({
+        key: s.id,
+        token: `/${s.name}`,
+        detail: s.description ?? 'Skill',
+      }));
+
+    const actionItems = [
+      { name: 'settings', detail: 'Open Settings', run: onOpenSettings },
+      { name: 'routines', detail: 'Scheduled work for this agent', run: onOpenRoutines },
+      { name: 'history', detail: 'Earlier versions of this conversation', run: onOpenHistory },
+      { name: 'members', detail: 'Who is in this room', run: onOpenRoom },
+    ]
+      .filter((a) => a.name.startsWith(q))
+      .map((a) => ({ key: `action_${a.name}`, token: `/${a.name}`, detail: a.detail, run: a.run }));
+
+    return [...skillItems, ...actionItems].slice(0, 7);
+  }, [skills, slashQuery, onOpenSettings, onOpenRoutines, onOpenHistory, onOpenRoom]);
 
   /*
    * Mention completion, anywhere in the message.
@@ -488,15 +528,23 @@ export function Chat({
       };
     }
 
-    if (skillMatches.length > 0) {
+    if (slashMatches.length > 0) {
       return {
-        kind: 'skill' as const,
-        items: skillMatches.map((s) => ({
-          key: s.id,
-          token: `/${s.name}`,
-          detail: s.description ?? '',
-        })),
-        accept: (item: { token: string }) => {
+        kind: 'slash' as const,
+        items: slashMatches,
+        accept: (item: { token: string; run?: () => void }) => {
+          /*
+           * An action happens; a skill is inserted.
+           *
+           * `/settings` should open Settings, not type the word into a
+           * message — an action that only wrote its own name would be a
+           * worse way to reach a panel than the button already there.
+           */
+          if (item.run) {
+            item.run();
+            setDraft('');
+            return;
+          }
           setDraft(`${item.token} `);
           textareaRef.current?.focus();
         },
@@ -504,7 +552,7 @@ export function Chat({
     }
 
     return empty;
-  }, [dismissed, mentionMatches, skillMatches, insertMention]);
+  }, [dismissed, mentionMatches, slashMatches, insertMention]);
 
   /*
    * The highlight resets whenever the list changes.

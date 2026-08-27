@@ -355,6 +355,9 @@ export function App() {
                   }))
               : []
           }
+          onOpenRoutines={() => setPanel('routines')}
+          onOpenHistory={() => setPanel('history')}
+          onOpenRoom={() => setPanel('room')}
           onSend={send}
           insertText={draftMention}
           onInsertConsumed={() => setDraftMention(null)}

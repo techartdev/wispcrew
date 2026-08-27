@@ -81,7 +81,8 @@ console.log('\n[one menu] both kinds share the same machinery');
    * differently. The keyboard handler should not know which kind is open.
    */
   check('a single menu object exists', chat.includes('const menu = useMemo'));
-  check('with a kind', /kind:\s*'mention'/.test(chat) && /kind:\s*'skill'/.test(chat));
+  // `slash` rather than `skill`: that menu carries actions as well now.
+  check('with a kind', /kind:\s*'mention'/.test(chat) && /kind:\s*'slash'/.test(chat));
   check('and one accept path', (chat.match(/menu\.accept\(/g) ?? []).length >= 2);
 
   // Rendered from the same object, so click and keyboard cannot disagree.
@@ -119,6 +120,41 @@ console.log('\n[accessibility] a list a screen reader can follow');
   // And visible, not only announced.
   check('the highlight has a style', css.includes('.skill-hint.highlighted'));
   check('mouse and keyboard share it', chat.includes('onMouseEnter={() => setHighlight(i)}'));
+}
+
+console.log('\n[actions] / reaches panels that exist');
+{
+  /*
+   * `/settings` should OPEN Settings, not type the word into a message. An
+   * action that only wrote its own name would be a worse way to reach a
+   * panel than the button already on screen.
+   */
+  check('an action runs rather than inserting', /if \(item\.run\)/.test(chat));
+  check('and clears the draft afterwards', /item\.run\(\);\s*\n\s*setDraft\(''\)/.test(chat));
+
+  /*
+   * Every action must open something real. The app has six panels; these
+   * four are the ones a person reaches for mid-conversation.
+   */
+  const app = fs.readFileSync(path.join(repo, 'apps/desktop/src/renderer/App.tsx'), 'utf8');
+  const panels = new Set(
+    [...app.matchAll(/setPanel\('([a-z-]+)'/g)].map((m) => m[1]),
+  );
+
+  for (const [action, panel] of [
+    ['settings', 'settings'],
+    ['routines', 'routines'],
+    ['history', 'history'],
+    ['members', 'room'],
+  ]) {
+    check(`/${action} opens a real panel`, panels.has(panel), `panels: ${[...panels].join(', ')}`);
+    check(`and is offered`, chat.includes(`name: '${action}'`));
+  }
+
+  // Skills come first: they are the agent's own vocabulary, and an action is
+  // a shortcut to something that already has a button.
+  check('skills are listed before actions',
+    chat.indexOf('const skillItems') < chat.indexOf('const actionItems'));
 }
 
 console.log('\n[routing] a display filter must live where the call is answered');
