@@ -1,4 +1,4 @@
-﻿export * from './openai-compatible.js';
+export * from './openai-compatible.js';
 export * from './openai-responses.js';
 export * from './anthropic.js';
 export * from './presets.js';
@@ -21,6 +21,7 @@ export * as claudeOAuth from './oauth-flow.js';
 export * as chatgptOAuth from './chatgpt-oauth.js';
 export type { OAuthCredential } from './oauth-flow.js';
 export type { ChatGptCredential, PendingLogin } from './chatgpt-oauth.js';
+export * from './catalogue.js';
 
 import type { ChatProvider, ProviderConfig } from '@wispcrew/shared';
 import { OpenAICompatibleProvider, isOpenAiReasoningModel } from './openai-compatible.js';

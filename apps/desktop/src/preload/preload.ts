@@ -97,6 +97,9 @@ const bridge: WispBridge = {
   forgetNode: (nodeId: string) => ipcRenderer.invoke('wc:forgetNode', nodeId),
 
   // Recovering an earlier version of a conversation.
+  listProviderModels: (presetId: string, options?: unknown) =>
+    ipcRenderer.invoke('wc:listProviderModels', presetId, options),
+
   presetsForNode: (nodeId: string) => ipcRenderer.invoke('wc:presetsForNode', nodeId),
 
   configureNode: (nodeId: string, settings: unknown) =>

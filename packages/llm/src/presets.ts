@@ -139,9 +139,16 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
      * The Model field is a free-text combo box, so anything else in the
      * catalogue can still be typed in.
      */
-    defaultModel: 'meta/llama-3.3-70b-instruct',
+    /*
+     * `meta/llama-3.3-70b-instruct` was the default and was RETIRED
+     * mid-project — NVIDIA answered 410 Gone, so a fresh install picked a
+     * model that could never work. A curated list goes stale invisibly,
+     * which is why the full catalogue is now fetched live from the provider
+     * and these are only the ones marked as tested.
+     */
+    defaultModel: 'nvidia/nemotron-3.5-lightning-30b-a3b',
     models: [
-      'meta/llama-3.3-70b-instruct',
+      'nvidia/nemotron-3.5-lightning-30b-a3b',
       'nvidia/nemotron-3-ultra-550b-a55b',
       'nvidia/nemotron-3-super-120b-a12b',
       'meta/llama-3.1-70b-instruct',

@@ -11,6 +11,7 @@
 // through react-dom/server outside the Vite build). It is a no-op under the
 // automatic runtime Vite uses.
 import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useProviderModels } from './useProviderModels';
 import type {
   AgentRecord,
   ApprovalPolicy,
@@ -153,6 +154,13 @@ function NewAgentPanel({
   const [model, setModel] = useState('');
 
   const chosen = presets.find((p) => p.id === presetId);
+  /*
+   * Every model the provider reports, not only the six curated here.
+   *
+   * NVIDIA offers 84; the preset named six, so the field hid most of what
+   * a key already paid for. Tested ones stay first.
+   */
+  const liveModels = useProviderModels(presetId || defaultPresetId, chosen?.models ?? []);
   const fallback = presets.find((p) => p.id === defaultPresetId);
 
   const create = () => {
@@ -220,9 +228,9 @@ function NewAgentPanel({
             onChange={(e) => setModel(e.target.value)}
           />
           <datalist id="new-agent-models">
-            {chosen.models.map((m) => (
-              <option key={m} value={m} />
-            ))}
+              {liveModels.map((m) => (
+                <option key={m.id} value={m.id} label={m.tested ? 'verified with tools' : undefined} />
+              ))}
           </datalist>
         </label>
       )}
@@ -636,6 +644,8 @@ export function SettingsPanel({
   const [saving, setSaving] = useState(false);
 
   const preset = useMemo(() => presets.find((p) => p.id === presetId), [presets, presetId]);
+  /* Every model the provider reports, not only the curated few. */
+  const liveModels = useProviderModels(presetId, preset?.models ?? []);
 
   // Switching provider swaps in that provider's defaults rather than leaving
   // a model name from the previous provider that will 404.
@@ -783,8 +793,8 @@ export function SettingsPanel({
               spellCheck={false}
             />
             <datalist id="model-options">
-              {(preset?.models ?? []).map((m) => (
-                <option key={m} value={m} />
+              {liveModels.map((m) => (
+                <option key={m.id} value={m.id} label={m.tested ? 'verified with tools' : undefined} />
               ))}
             </datalist>
           </label>
@@ -1070,6 +1080,8 @@ export function AgentPanel({
   const effectivePolicy = policy || globalPolicy || 'ask';
 
   const preset = presets.find((p) => p.id === presetId);
+  /* Every model the provider reports, not only the curated few. */
+  const liveModels = useProviderModels(presetId || agent.presetId, preset?.models ?? []);
 
   const save = () => {
     onSave({
@@ -1179,8 +1191,8 @@ export function AgentPanel({
               onChange={(e) => setModel(e.target.value)}
             />
             <datalist id="agent-model-options">
-              {(preset?.models ?? []).map((m) => (
-                <option key={m} value={m} />
+              {liveModels.map((m) => (
+                <option key={m.id} value={m.id} label={m.tested ? 'verified with tools' : undefined} />
               ))}
             </datalist>
           </label>

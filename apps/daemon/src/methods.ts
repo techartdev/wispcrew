@@ -50,6 +50,7 @@ import {
   getConversation,
   listCheckpoints,
   listConversations,
+  listProviderModels,
   visibleParticipants,
   loadTranscript,
   removeParticipant,
@@ -290,6 +291,15 @@ export function nodeMethods(): MethodTable {
 
     /* providers — the catalogue is static, but `configured` is per node */
     getPresets: () => providerCatalogue(),
+
+    /*
+     * The full catalogue, asked of the provider rather than guessed.
+     *
+     * Served here as well as in the desktop because a headless machine has
+     * the same question and its own key — the answer differs per machine.
+     */
+    listProviderModels: (presetId: never, options: never) =>
+      listProviderModels(String(presetId), (options ?? {}) as { refresh?: boolean }),
     getPersonas: () => PERSONAS.map((p) => ({ id: p.id, label: p.label, description: p.description })),
 
     /*

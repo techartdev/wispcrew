@@ -112,6 +112,7 @@ export async function linkToNode(
     return null;
   }
 
+  nodeNames.set(nodeId, node.name);
   const { host, port } = parseAddress(node.address);
   try {
     const client = await connectRemoteNode(
@@ -151,6 +152,18 @@ export function existingLink(nodeId: string): NodeClient | null {
  * would make the whole UI wait on a sleeping Raspberry Pi. Connections are
  * established in the background by `connectKnownNodes`.
  */
+/**
+ * The name a person gave a machine, for an error they have to act on.
+ *
+ * "node_mtafffpj is not connected" tells nobody anything; "evtinsait-host1
+ * is not connected" names the thing they can go and check.
+ *
+ * Remembered when a link is attempted, because `routeForCall` has no
+ * `dataDir` to look one up with and threading one through every caller to
+ * improve an error message is the wrong trade.
+ */
+const nodeNames = new Map<string, string>();
+
 export function routeForCall(
   agentNodeOf: (agentId: string) => string | undefined,
   method: string,
@@ -178,8 +191,29 @@ export function routeForCall(
   if (typeof agentId !== 'string') return null;
 
   const nodeId = agentNodeOf(agentId);
-  if (!nodeId) return null; // local agent
-  return existingLink(nodeId);
+  if (!nodeId) return null; // genuinely local
+
+  const link = existingLink(nodeId);
+  if (link) return link;
+
+  /*
+   * The agent belongs to another machine, and that machine is not connected.
+   *
+   * Returning null here meant "run it locally", and the local daemon has no
+   * room for an agent that lives elsewhere — so `runRoomTurn` created one,
+   * the message went into a conversation nobody was looking at, and the
+   * composer cleared as though it had been sent. The user typed "hey",
+   * pressed Enter, and watched the text disappear.
+   *
+   * Failing is the only honest answer: an agent's conversation, files and
+   * keys live on its own machine, so a turn that cannot reach that machine
+   * has not happened. Silently doing it here would also write to the wrong
+   * store.
+   */
+  throw new Error(
+    `${nodeNames.get(nodeId) ?? 'That machine'} is not connected, so this agent cannot be reached. ` +
+      'Check it under Machines.',
+  );
 }
 
 /**

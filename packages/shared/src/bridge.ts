@@ -333,6 +333,22 @@ export interface WispBridge {
    */
   presetsForNode(nodeId: string): Promise<PresetView[] | null>;
 
+  /**
+   * Every model a provider reports, not only the ones this project curated.
+   *
+   * The preset lists six chosen by testing; NVIDIA offers 84. Hiding the
+   * rest meant a key paid for models the interface would not show, and a
+   * curated list goes stale invisibly — the NVIDIA default was retired
+   * mid-project.
+   *
+   * `tested` marks the ones actually seen calling a tool here, which is what
+   * matters for an agent.
+   */
+  listProviderModels(
+    presetId: string,
+    options?: { refresh?: boolean },
+  ): Promise<{ id: string; tested: boolean }[]>;
+
   /** Forget a node and delete its token. */
   forgetNode(nodeId: string): Promise<NodeSummary[]>;
 

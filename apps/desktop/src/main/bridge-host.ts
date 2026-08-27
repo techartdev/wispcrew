@@ -71,6 +71,7 @@ import {
   getConversation,
   listCheckpoints,
   listConversations,
+  listProviderModels,
   visibleParticipants,
   readCheckpoint,
   removeParticipant,
@@ -410,7 +411,31 @@ export function registerBridge(context: BridgeContext): void {
       throw new Error(`Bridge method "${name}" is registered twice.`);
     }
 
-    const invoke = async (...args: unknown[]): Promise<T> => {
+    /**
+   * Remove `nodeId` from anything sent TO a node.
+   *
+   * `nodeId` is this machine's private name for another machine. It means
+   * nothing on the node itself, and storing it there is actively harmful:
+   * the VPS's copy of an agent came to say `nodeId: node_mtafffpj` — the
+   * DESKTOP's name for the VPS — so the VPS decided its own agent lived on
+   * a foreign machine and refused every message with "@remote runs on
+   * another machine, which is not connected."
+   *
+   * The user saw a message vanish. The return path already corrected for
+   * this; the outbound path did not, so `updateAgent` wrote the id back
+   * every time the agent was edited.
+   *
+   * On a node, an agent it holds is always local. That is the invariant.
+   */
+  const stripClientNodeId = (args: unknown[]): unknown[] =>
+    args.map((arg) => {
+      if (!arg || typeof arg !== 'object' || Array.isArray(arg)) return arg;
+      if (!('nodeId' in arg)) return arg;
+      const { nodeId: _dropped, ...rest } = arg as Record<string, unknown>;
+      return rest;
+    });
+
+  const invoke = async (...args: unknown[]): Promise<T> => {
       /*
        * When an engine runs elsewhere, engine methods go to it.
        *
@@ -437,7 +462,7 @@ export function registerBridge(context: BridgeContext): void {
          */
         const agentNode = context.remoteForAgent?.(name, args);
         if (agentNode) {
-          const value = (await agentNode.call(name, args)) as T;
+          const value = (await agentNode.call(name, stripClientNodeId(args))) as T;
 
           /*
            * A node does not know its own id here.
@@ -874,6 +899,10 @@ export function registerBridge(context: BridgeContext): void {
     },
   );
 
+  handle('listProviderModels', (presetId: string, options?: { refresh?: boolean }) =>
+    listProviderModels(presetId, options ?? {}),
+  );
+
   handle('getPresets', () =>
     PROVIDER_PRESETS.map((preset) => ({
       ...preset,
@@ -1198,32 +1227,16 @@ export function registerBridge(context: BridgeContext): void {
     return updated;
   });
 
+  /*
+   * Reached only for a room this machine owns.
+   *
+   * A room belonging to an agent on another node is routed there by
+   * `routeForCall`, which throws if that machine is not connected. There is
+   * deliberately no check here: an earlier version refused whenever the
+   * agent had a `nodeId` at all, so a message to a REACHABLE machine was
+   * answered with "not connected" — the wrong answer, stated confidently.
+   */
   handle('sendToRoom', async (conversationId: string, text: string, attachmentPaths?: string[]) => {
-    /*
-     * Reached only for a room this machine owns.
-     *
-     * When the room belongs to an agent on another node, `routeForCall`
-     * sends the whole call there instead. This guard exists because that
-     * routing was missing: the call ran here, `runRoomTurn` self-healed a
-     * room that did not exist, and the message vanished into a conversation
-     * nobody was watching. No error, because the send is fire-and-forget.
-     *
-     * Reported as "I type a message and nothing happens".
-     */
-    const owner = store.getAgent(conversationId);
-    if (owner?.nodeId) {
-      pushTranscript(conversationId, {
-        kind: 'notice',
-        id: store.newId('note'),
-        level: 'error',
-        text:
-          `${owner.name} runs on another machine, which is not connected. ` +
-          'Check it under Machines.',
-        createdAt: Date.now(),
-      });
-      return;
-    }
-
     const paths = Array.isArray(attachmentPaths)
       ? attachmentPaths.filter((p) => typeof p === 'string')
       : [];
