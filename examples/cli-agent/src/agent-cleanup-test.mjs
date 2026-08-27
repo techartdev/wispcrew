@@ -22,6 +22,7 @@ import {
   initStore,
   listAgents,
   listConversations,
+  visibleParticipants,
   LOCAL_HUMAN_ID,
   setHost,
 } from '@wispcrew/runtime';
@@ -97,6 +98,44 @@ console.log('\n[shared room] survives, because it is not the agent\u2019s own');
   check('and the deleted one is not',
     !(survivor?.participants ?? []).some((p) => p.id === guest.id),
     JSON.stringify((survivor?.participants ?? []).map((p) => p.handle ?? p.name)));
+}
+
+console.log('\n[old rooms] a ghost written before the fix is not shown');
+{
+  /*
+   * The fix above stops NEW ghosts. It does nothing for a profile that
+   * already has one — which is what a real user has.
+   *
+   * Measured: a mention menu offering `@scenariob — agent_mtbbymlly9j4el`,
+   * an id where a name should be, for an agent that could never answer.
+   *
+   * So a dead participant is filtered on the way out too. Written directly
+   * to the store here, because the API no longer allows creating one.
+   */
+  const rooms = JSON.parse(fs.readFileSync(path.join(dir, 'conversations.json'), 'utf8'));
+  const target = rooms.find((r) => r.id === 'room_shared');
+  target.participants.push({ kind: 'agent', id: 'agent_gone', handle: 'ghost' });
+  fs.writeFileSync(path.join(dir, 'conversations.json'), JSON.stringify(rooms), 'utf8');
+
+  const stored = listConversations().find((c) => c.id === 'room_shared');
+
+  /*
+   * The store still has it, and must: `listConversations` is also how
+   * membership is MANAGED. Filtering there made `removeParticipant` unable
+   * to see the participant it was asked to remove — the conversation suite
+   * caught that within a minute of the wrong fix.
+   */
+  check('the store keeps the record',
+    (stored?.participants ?? []).some((p) => p.id === 'agent_gone'));
+
+  // The display path is where a dead member must not appear.
+  const shown = visibleParticipants(stored);
+  check('but it is not shown', !shown.some((p) => p.id === 'agent_gone'),
+    JSON.stringify(shown.map((p) => p.handle)));
+
+  const living = shown.filter((p) => p.kind === 'agent');
+  check('a real member survives', living.length === 1, JSON.stringify(living.map((p) => p.handle)));
+  check('so does the human', shown.some((p) => p.kind === 'human'));
 }
 
 console.log('\n[transcript] removed too, so a recreated id starts clean');

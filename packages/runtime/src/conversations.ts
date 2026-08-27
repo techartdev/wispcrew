@@ -46,7 +46,28 @@ export function localHuman(channels: ChannelId[] = ['app', 'desktop']): HumanPar
 /** Every room, newest first. */
 export function listConversations(): ConversationRecord[] {
   const all = store.readJson<ConversationRecord[]>(store.conversationsPath(), []);
-  return Array.isArray(all) ? [...all].sort((a, b) => b.updatedAt - a.updatedAt) : [];
+  if (!Array.isArray(all)) return [];
+
+  return [...all].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/**
+ * A room as a person should see it: without members who no longer exist.
+ *
+ * Deleting an agent now removes it from every room, but rooms written BEFORE
+ * that fix still carry the dead handle — and a stale profile is exactly what
+ * a real user has. The symptom was visible in the mention menu:
+ * `@scenariob — agent_mtbbymlly9j4el`, an id where a name should be, for an
+ * agent that could never answer.
+ *
+ * Deliberately NOT done inside `listConversations`. That function is also
+ * how membership is managed, and filtering there made `removeParticipant`
+ * unable to see the participant it was asked to remove — a suite caught it
+ * immediately. Reading is one concern; displaying is another.
+ */
+export function visibleParticipants(room: ConversationRecord): ConversationRecord['participants'] {
+  const live = new Set(store.listAgents().map((a) => a.id));
+  return (room.participants ?? []).filter((p) => p.kind !== 'agent' || live.has(p.id));
 }
 
 export function getConversation(id: string): ConversationRecord | undefined {

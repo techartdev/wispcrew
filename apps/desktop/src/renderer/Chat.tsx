@@ -13,12 +13,22 @@ import {
 } from 'react';
 import type { AgentRecord, AgentRunState, SkillRecord, TranscriptEntry } from '@wispcrew/shared';
 import { Markdown } from './Markdown';
+import { parseMention } from './mention';
 
 interface ChatProps {
   agent: AgentRecord | null;
   transcript: TranscriptEntry[];
   runState: AgentRunState;
   skills: SkillRecord[];
+
+  /**
+   * Who can be addressed in this room, for @-completion.
+   *
+   * Passed in rather than derived here: the room is the App's business, and
+   * a component that reached for it would have to know about conversations
+   * as well as messages.
+   */
+  members: { id: string; handle: string; name: string }[];
   onSend(prompt: string, attachmentPaths?: string[]): void;
   /**
    * Text to append to the draft, e.g. a handle the user clicked.
@@ -230,6 +240,7 @@ export function Chat({
   transcript,
   runState,
   skills,
+  members,
   onSend,
   insertText,
   onInsertConsumed,
@@ -245,6 +256,15 @@ export function Chat({
   hasProvider,
 }: ChatProps) {
   const [draft, setDraft] = useState('');
+
+  /*
+   * Where the caret is, so a mention can complete mid-sentence.
+   *
+   * The slash menu only ever needed the start of the draft; "@" does not —
+   * "ask @linux to check the disk" is the ordinary shape, and completing
+   * against the whole string would match the wrong word.
+   */
+  const [caret, setCaret] = useState(0);
 
   /*
    * A handle clicked in the room strip.
@@ -374,6 +394,8 @@ export function Chat({
     }
   }, [retryDraft, onRetryDraftConsumed]);
 
+  /* See `parseMention` below the component for the @-completion rules. */
+
   /* Slash-command completion for skills. */
   const slashQuery = useMemo(() => {
     const m = /^\/([\w-]*)$/.exec(draft);
@@ -385,6 +407,48 @@ export function Chat({
     const q = slashQuery.toLowerCase();
     return skills.filter((s) => s.enabled && s.name.toLowerCase().startsWith(q)).slice(0, 6);
   }, [skills, slashQuery]);
+
+  /*
+   * Mention completion, anywhere in the message.
+   *
+   * Unlike `/`, which only opens a message, an @mention belongs mid-sentence
+   * — "ask @linux to check the disk" is the ordinary shape. So this matches
+   * at the caret rather than at the start.
+   *
+   * `parseMention` is exported and tested separately: the rules about what
+   * does NOT open the menu (an email address, a price, a closed mention) are
+   * where this kind of feature goes wrong.
+   */
+  const mentionQuery = useMemo(() => parseMention(draft, caret), [draft, caret]);
+
+  const mentionMatches = useMemo(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    return members
+      .filter((m) => m.handle.toLowerCase().startsWith(q))
+      .slice(0, 6);
+  }, [members, mentionQuery]);
+
+  /** Replace the half-typed mention at the caret with a complete one. */
+  const insertMention = useCallback(
+    (handle: string) => {
+      const before = draft.slice(0, caret).replace(/@[\w-]*$/, '');
+      const after = draft.slice(caret);
+      const next = `${before}@${handle} ${after.startsWith(' ') ? after.slice(1) : after}`;
+
+      setDraft(next);
+      // Put the caret after the inserted handle, not at the end of the line —
+      // otherwise completing a mention mid-sentence jumps the cursor away
+      // from where the person was writing.
+      const at = before.length + handle.length + 2;
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+        textareaRef.current?.setSelectionRange(at, at);
+        setCaret(at);
+      });
+    },
+    [draft, caret],
+  );
 
   const submit = useCallback(() => {
     // No provider yet: send the user to Settings instead of letting the
@@ -421,9 +485,32 @@ export function Chat({
       e.preventDefault();
       submit();
     }
+    /*
+     * Tab completes whichever menu is open. Mentions take precedence
+     * because they are only ever open when the caret is inside one.
+     */
+    if (e.key === 'Tab' && mentionMatches.length > 0) {
+      e.preventDefault();
+      insertMention(mentionMatches[0]!.handle);
+      return;
+    }
     if (e.key === 'Tab' && skillMatches.length > 0) {
       e.preventDefault();
       setDraft(`/${skillMatches[0]!.name} `);
+    }
+
+    /*
+     * Escape dismisses the menu before it interrupts a run.
+     *
+     * Otherwise someone closing a completion they did not want would stop
+     * the agent instead — a destructive surprise from a key people press to
+     * mean "never mind". Dismissing moves the caret past the mention so the
+     * menu does not immediately reopen.
+     */
+    if (e.key === 'Escape' && mentionMatches.length > 0) {
+      e.preventDefault();
+      setCaret(-1);
+      return;
     }
     if (e.key === 'Escape' && busy) onInterrupt();
   };
@@ -619,7 +706,29 @@ export function Chat({
       )}
 
       <div className="composer">
-        {skillMatches.length > 0 && (
+        {/*
+          Who you can address, while you type the @.
+
+          Rendered above the skill hints and never at the same time: the two
+          are triggered by different characters, so showing both would mean
+          one of them is stale.
+        */}
+        {mentionMatches.length > 0 && (
+          <div className="skill-hints">
+            {mentionMatches.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                className="skill-hint"
+                onClick={() => insertMention(m.handle)}
+              >
+                <strong>@{m.handle}</strong>
+                <span className="muted"> — {m.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {mentionMatches.length === 0 && skillMatches.length > 0 && (
           <div className="skill-hints">
             {skillMatches.map((s) => (
               <button
@@ -678,8 +787,16 @@ export function Chat({
             }
             onChange={(e) => {
               setDraft(e.target.value);
+              setCaret(e.target.selectionStart ?? e.target.value.length);
               autosize(e.target);
             }}
+            /*
+             * Also track the caret when it moves without the text changing —
+             * clicking elsewhere or arrowing back into an earlier word.
+             * Without this the menu keeps completing against wherever the
+             * caret used to be.
+             */
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
             onKeyDown={onKeyDown}
             spellCheck
           />

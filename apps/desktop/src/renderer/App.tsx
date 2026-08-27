@@ -339,6 +339,22 @@ export function App() {
           transcript={transcript}
           runState={runState}
           skills={skills}
+          /*
+            Who can be addressed here. Empty for a room with one agent —
+            there is nobody to disambiguate between, and offering a mention
+            of the only participant is noise.
+          */
+          members={
+            room && room.participants.filter((p) => p.kind === 'agent').length > 1
+              ? room.participants
+                  .filter((p) => p.kind === 'agent')
+                  .map((p) => ({
+                    id: p.id,
+                    handle: (p as { handle: string }).handle,
+                    name: agents.find((a) => a.id === p.id)?.name ?? p.id,
+                  }))
+              : []
+          }
           onSend={send}
           insertText={draftMention}
           onInsertConsumed={() => setDraftMention(null)}

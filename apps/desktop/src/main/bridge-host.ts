@@ -71,6 +71,7 @@ import {
   getConversation,
   listCheckpoints,
   listConversations,
+  visibleParticipants,
   readCheckpoint,
   removeParticipant,
   runRoomTurn,
@@ -1141,7 +1142,22 @@ export function registerBridge(context: BridgeContext): void {
    */
   handle('presetsForNode', (nodeId: string) => presetsForNode(nodeId));
 
-  handle('listConversations', () => listConversations());
+  /*
+   * Rooms as a person should see them.
+   *
+   * A participant whose agent was deleted before that removal was wired up
+   * still sits in older rooms, and appeared in the mention menu as
+   * `@scenariob — agent_mtbbymlly9j4el`: an id where a name belongs, for an
+   * agent that could never answer.
+   *
+   * Filtered here rather than in `listConversations`, which is also how
+   * membership is MANAGED — filtering there made `removeParticipant` unable
+   * to see the participant it had been asked to remove, and a suite caught
+   * it within a minute.
+   */
+  handle('listConversations', () =>
+    listConversations().map((room) => ({ ...room, participants: visibleParticipants(room) })),
+  );
 
   handle('addRoomAgent', (conversationId: string, agentId: string) => {
     const agent = store.listAgents().find((a) => a.id === agentId);
