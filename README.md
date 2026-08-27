@@ -346,7 +346,7 @@ Ollama or LM Studio. You should never see a raw HTTP dump.
 ```bash
 npm run typecheck                               # everywhere
 npm run build                                   # all packages + desktop
-npm run test --workspace @wispcrew/examples-cli # 58 offline suites, no API key needed
+npm run test --workspace @wispcrew/examples-cli # 60 offline suites, no API key needed
 npm run desktop                                 # build + launch
 npm run verify                                  # everything CI does, locally
 ```
