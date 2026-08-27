@@ -266,6 +266,18 @@ export function Chat({
    */
   const [caret, setCaret] = useState(0);
 
+  /** Which completion row the keyboard is on. */
+  const [highlight, setHighlight] = useState(0);
+
+  /*
+   * Escape closed the menu, so it stays closed until the draft changes.
+   *
+   * A flag rather than nudging the caret out of the mention: that trick
+   * worked until any click or arrow key put the caret back, at which point
+   * the menu someone had just dismissed reappeared.
+   */
+  const [dismissed, setDismissed] = useState(false);
+
   /*
    * A handle clicked in the room strip.
    *
@@ -450,6 +462,66 @@ export function Chat({
     [draft, caret],
   );
 
+  /*
+   * Whichever completion menu is open, as one thing.
+   *
+   * The keyboard handler should not care which kind it is: arrowing,
+   * accepting and dismissing are identical for both, and writing them twice
+   * is how two menus drift into behaving differently.
+   *
+   * Only one is ever open — `@` and `/` are triggered by different
+   * characters in different positions.
+   */
+  const menu = useMemo(() => {
+    const empty = { kind: 'none' as const, items: [], accept: () => {} };
+    if (dismissed) return empty;
+
+    if (mentionMatches.length > 0) {
+      return {
+        kind: 'mention' as const,
+        items: mentionMatches.map((m) => ({
+          key: m.id,
+          token: `@${m.handle}`,
+          detail: m.name,
+        })),
+        accept: (item: { token: string }) => insertMention(item.token.slice(1)),
+      };
+    }
+
+    if (skillMatches.length > 0) {
+      return {
+        kind: 'skill' as const,
+        items: skillMatches.map((s) => ({
+          key: s.id,
+          token: `/${s.name}`,
+          detail: s.description ?? '',
+        })),
+        accept: (item: { token: string }) => {
+          setDraft(`${item.token} `);
+          textareaRef.current?.focus();
+        },
+      };
+    }
+
+    return empty;
+  }, [dismissed, mentionMatches, skillMatches, insertMention]);
+
+  /*
+   * The highlight resets whenever the list changes.
+   *
+   * Without this, narrowing a search leaves the highlight pointing past the
+   * end — so Enter accepts nothing, or worse, accepts whatever slid into
+   * that position while the person was still typing.
+   */
+  useEffect(() => {
+    setHighlight(0);
+  }, [menu.kind, menu.items.length]);
+
+  /** Typing again brings a dismissed menu back. */
+  useEffect(() => {
+    setDismissed(false);
+  }, [draft]);
+
   const submit = useCallback(() => {
     // No provider yet: send the user to Settings instead of letting the
     // message fail. A first-run dead end ("your API key was rejected" when
@@ -480,38 +552,52 @@ export function Chat({
   }, [onPickFiles, addFiles]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    /*
+     * An open menu owns the keyboard first.
+     *
+     * Every branch here runs BEFORE Enter sends, because a menu that a
+     * person is looking at should answer the keys they press at it. Enter
+     * used to send unconditionally, so pressing it on a highlighted handle
+     * sent "ask @lin" — the half-typed mention, not the one being chosen.
+     */
+    const open = menu.items.length > 0;
+
+    if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      const step = e.key === 'ArrowDown' ? 1 : -1;
+      // Wraps, so holding one arrow always reaches every entry rather than
+      // sticking silently at an end.
+      setHighlight((h) => (h + step + menu.items.length) % menu.items.length);
+      return;
+    }
+
+    // Enter and Tab both accept: Tab because completion menus use it, Enter
+    // because that is what people press at a highlighted row.
+    if (open && (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey))) {
+      e.preventDefault();
+      menu.accept(menu.items[highlight] ?? menu.items[0]!);
+      return;
+    }
+
+    /*
+     * Escape closes the menu before it interrupts a run.
+     *
+     * Otherwise dismissing a completion nobody wanted would stop the agent —
+     * a destructive surprise from the key people press to mean "never mind".
+     */
+    if (open && e.key === 'Escape') {
+      e.preventDefault();
+      setDismissed(true);
+      return;
+    }
+
     // Enter sends; Shift+Enter inserts a newline.
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       submit();
-    }
-    /*
-     * Tab completes whichever menu is open. Mentions take precedence
-     * because they are only ever open when the caret is inside one.
-     */
-    if (e.key === 'Tab' && mentionMatches.length > 0) {
-      e.preventDefault();
-      insertMention(mentionMatches[0]!.handle);
       return;
-    }
-    if (e.key === 'Tab' && skillMatches.length > 0) {
-      e.preventDefault();
-      setDraft(`/${skillMatches[0]!.name} `);
     }
 
-    /*
-     * Escape dismisses the menu before it interrupts a run.
-     *
-     * Otherwise someone closing a completion they did not want would stop
-     * the agent instead — a destructive surprise from a key people press to
-     * mean "never mind". Dismissing moves the caret past the mention so the
-     * menu does not immediately reopen.
-     */
-    if (e.key === 'Escape' && mentionMatches.length > 0) {
-      e.preventDefault();
-      setCaret(-1);
-      return;
-    }
     if (e.key === 'Escape' && busy) onInterrupt();
   };
 
@@ -707,41 +793,29 @@ export function Chat({
 
       <div className="composer">
         {/*
-          Who you can address, while you type the @.
+          One menu, whichever kind is open.
 
-          Rendered above the skill hints and never at the same time: the two
-          are triggered by different characters, so showing both would mean
-          one of them is stale.
+          Rendered from `menu` rather than from each source list, so the
+          highlight, the keyboard and the click all agree on what "the
+          current item" is. Two near-identical blocks is how they stop
+          agreeing.
         */}
-        {mentionMatches.length > 0 && (
-          <div className="skill-hints">
-            {mentionMatches.map((m) => (
+        {menu.items.length > 0 && (
+          <div className="skill-hints" role="listbox" aria-label="Completions">
+            {menu.items.map((item, i) => (
               <button
-                key={m.id}
+                key={item.key}
                 type="button"
-                className="skill-hint"
-                onClick={() => insertMention(m.handle)}
+                role="option"
+                aria-selected={i === highlight}
+                className={`skill-hint ${i === highlight ? 'highlighted' : ''}`}
+                // The pointer moves the highlight too, so clicking and
+                // arrowing never disagree about which row is current.
+                onMouseEnter={() => setHighlight(i)}
+                onClick={() => menu.accept(item)}
               >
-                <strong>@{m.handle}</strong>
-                <span className="muted"> — {m.name}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        {mentionMatches.length === 0 && skillMatches.length > 0 && (
-          <div className="skill-hints">
-            {skillMatches.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className="skill-hint"
-                onClick={() => {
-                  setDraft(`/${s.name} `);
-                  textareaRef.current?.focus();
-                }}
-              >
-                <strong>/{s.name}</strong>
-                {s.description && <span className="muted"> — {s.description}</span>}
+                <strong>{item.token}</strong>
+                {item.detail && <span className="muted"> — {item.detail}</span>}
               </button>
             ))}
           </div>

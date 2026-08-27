@@ -1793,3 +1793,11 @@ body {
   min-width: 0;
   min-height: 0;
 }
+
+/* The row the keyboard is on. Mouse and arrows share one highlight,
+   so hovering and arrowing never disagree about what Enter accepts. */
+.skill-hint.highlighted {
+  background: var(--bg-hover);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}

@@ -50,6 +50,7 @@ import {
   getConversation,
   listCheckpoints,
   listConversations,
+  visibleParticipants,
   loadTranscript,
   removeParticipant,
   runRoomTurn,
@@ -131,7 +132,21 @@ export function nodeMethods(): MethodTable {
     duplicateAgent: (id: never) => duplicateAgent(id),
 
     /* rooms — conversations with participants */
-    listConversations: () => listConversations(),
+    /*
+     * Rooms as a person should see them, without dead members.
+     *
+     * A participant whose agent was deleted before that removal was wired up
+     * still sits in older rooms, and appeared in the mention menu as
+     * `@scenariob — agent_mtbbymlly9j4el`: an id where a name belongs, for
+     * an agent that could never answer.
+     *
+     * It belongs HERE, not only in the desktop bridge. The desktop forwards
+     * to a daemon whenever one is connected, so a filter added only there
+     * ran in a handler that never executes — the ghost was still visible
+     * afterwards, which is how this was found.
+     */
+    listConversations: () =>
+      listConversations().map((room) => ({ ...room, participants: visibleParticipants(room) })),
 
     addRoomAgent: (conversationId: never, agentId: never) => {
       const id = conversationId as unknown as string;
