@@ -152,12 +152,42 @@ function parseNetwork(value: string | boolean): { host: string; port: number } {
   return { host: parsed.host, port: parsed.port };
 }
 
+/**
+ * Flags that never take a value.
+ *
+ * Without this list nothing can tell `--json Assistant` (a boolean flag
+ * followed by an argument) from `--model gpt-4o` (a flag taking a value), so
+ * the parser guessed and guessed wrong: `agents show --json Assistant` lost
+ * the agent name, and `agents --json Assistant` printed a TABLE to a caller
+ * who had asked for JSON — the exact failure `--json` exists to prevent.
+ *
+ * Declaring them is duller than inferring them and cannot be ambiguous.
+ */
+const BOOLEAN_FLAGS = new Set([
+  'json',
+  'quiet',
+  'yes',
+  'all',
+  'paused',
+  'no-interactive',
+  'help',
+  'verbose',
+  'listen',
+  'pair',
+]);
+
 function parseArgs(argv: string[]): Record<string, string | boolean> {
   const out: Record<string, string | boolean> = {};
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (!arg.startsWith('--')) continue;
     const name = arg.slice(2);
+
+    if (BOOLEAN_FLAGS.has(name)) {
+      out[name] = true;
+      continue;
+    }
+
     const next = argv[i + 1];
     if (next && !next.startsWith('--')) {
       out[name] = next;
@@ -266,7 +296,10 @@ function positionalArgs(argv: string[]): string[] {
       continue;
     }
 
-    // A flag followed by a non-flag consumed it as its value.
+    // A boolean flag takes nothing, so what follows stays positional.
+    if (BOOLEAN_FLAGS.has(arg.slice(2))) continue;
+
+    // Any other flag followed by a non-flag consumed it as its value.
     const next = argv[i + 1];
     if (next && !next.startsWith('--')) i++;
   }

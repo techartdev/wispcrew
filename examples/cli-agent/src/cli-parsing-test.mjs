@@ -49,6 +49,20 @@ console.log('\n[implementation] the CLI does not use the naive filter');
   check('a dedicated reader exists', source.includes('function positionalArgs'));
 }
 
+/*
+ * The CLI's own boolean-flag list, read from its source.
+ *
+ * Duplicating it here would let the two drift, and drift is the whole
+ * failure mode this file exists to catch.
+ */
+const BOOLEAN_FLAGS = new Set(
+  [
+    ...source
+      .slice(source.indexOf('const BOOLEAN_FLAGS'), source.indexOf(']);', source.indexOf('const BOOLEAN_FLAGS')))
+      .matchAll(/'([a-z-]+)'/g),
+  ].map((m) => m[1]),
+);
+
 /* Reimplement exactly what the CLI does, to test the behaviour itself. */
 const positionalArgs = (argv) => {
   const out = [];
@@ -58,6 +72,7 @@ const positionalArgs = (argv) => {
       out.push(arg);
       continue;
     }
+    if (BOOLEAN_FLAGS.has(arg.slice(2))) continue;
     const next = argv[i + 1];
     if (next && !next.startsWith('--')) i++;
   }
@@ -70,6 +85,10 @@ const parseArgs = (argv) => {
     const arg = argv[i];
     if (!arg.startsWith('--')) continue;
     const name = arg.slice(2);
+    if (BOOLEAN_FLAGS.has(name)) {
+      out[name] = true;
+      continue;
+    }
     const next = argv[i + 1];
     if (next && !next.startsWith('--')) {
       out[name] = next;
@@ -89,6 +108,26 @@ console.log('\n[the bug] a flag value never becomes positional');
   check('four positionals, not five', positional.length === 4, JSON.stringify(positional));
   check('the path is not among them', !positional.includes('C:\\tmp\\x'), JSON.stringify(positional));
   check('the prompt survives intact', positional[3] === 'Check the build', positional[3]);
+}
+
+console.log('\n[boolean flags] a value-less flag never eats an argument');
+{
+  /*
+   * The failure this list prevents, in the exact shape it was found.
+   */
+  const shown = positionalArgs(['show', '--json', 'Assistant']);
+  check('agents show --json <name> keeps the name',
+    shown.includes('Assistant'), JSON.stringify(shown));
+
+  const flags = parseArgs(['show', '--json', 'Assistant']);
+  check('and --json is a boolean, not a string', flags.json === true, JSON.stringify(flags));
+
+  // The list must be non-trivial, or reading it from source silently found
+  // nothing and every assertion above would pass for the wrong reason.
+  check('the list was read from the CLI', BOOLEAN_FLAGS.size >= 5,
+    `${BOOLEAN_FLAGS.size} flags`);
+  check('including the obvious ones',
+    BOOLEAN_FLAGS.has('json') && BOOLEAN_FLAGS.has('quiet') && BOOLEAN_FLAGS.has('yes'));
 }
 
 console.log('\n[agreement] both readers consume the same values');
@@ -115,21 +154,23 @@ console.log('\n[edge cases] the awkward shapes');
   check('trailing flag', JSON.stringify(positionalArgs(['a', '--json'])) === '["a"]');
 
   /*
-   * `--json --quiet name` — `name` is consumed as the value of `--quiet`.
+   * `--json --quiet name` — `name` stays positional.
    *
-   * Genuinely ambiguous: without a declared arity per flag, nothing can tell
-   * a boolean flag followed by a positional from a flag taking a value. The
-   * property that matters is that both readers make the SAME choice, so an
-   * argument is never both a flag value and a positional, nor neither.
+   * This was documented as "genuinely ambiguous" and it was not: declaring
+   * which flags take no value settles it. The earlier version pinned the
+   * WRONG behaviour and called it inherent, which is the more embarrassing
+   * kind of test — it would have defended the bug.
    *
-   * In practice flags come last, which is why this has not bitten anyone —
-   * and the shape is pinned here so a future change to one reader without
-   * the other fails loudly.
+   * Measured before the fix: `agents show --json Assistant` lost the agent
+   * name, and `agents --json Assistant` printed a table to a caller who had
+   * asked for JSON.
    */
   const two = positionalArgs(['--json', '--quiet', 'name']);
   const twoFlags = parseArgs(['--json', '--quiet', 'name']);
-  check('a boolean flag before a positional is ambiguous',
-    two.length === 0 && twoFlags.quiet === 'name', JSON.stringify(two));
+  check('boolean flags leave the positional alone',
+    two.length === 1 && two[0] === 'name', JSON.stringify(two));
+  check('and are still true', twoFlags.json === true && twoFlags.quiet === true,
+    JSON.stringify(twoFlags));
 
   // Nothing but flags.
   check('no positionals at all', positionalArgs(['--json']).length === 0);
