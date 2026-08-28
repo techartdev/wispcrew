@@ -116,7 +116,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
         `${versions?.length ?? 0} versions`);
 
       if (versions?.length) {
-        await call('wc:restoreHistory', scratch.id, versions[0].id ?? versions[0].file);
+        await call('wc:restoreHistory', scratch.id, versions[0].id);
         const restored = await call('wc:getTranscript', scratch.id);
         record('restore', restored.length >= entries.length ? 'pass' : 'FAIL',
           `back to ${restored.length}`);

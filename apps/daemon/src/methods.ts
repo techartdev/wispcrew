@@ -259,7 +259,35 @@ export function nodeMethods(): MethodTable {
     stopAgent: (id: never) => abortSession(id),
     // The UI calls this `interrupt`; same operation, kept under both names so
     // a client does not need to know which engine it is talking to.
-    interrupt: (id: never) => abortSession(id),
+    /*
+     * Stopping a run SAYS so.
+     *
+     * The notice was written only by the desktop bridge, and `interrupt` is
+     * routed to whichever engine owns the agent — so pressing Stop on a
+     * local agent aborted the run and left the conversation with no sign it
+     * had been stopped. The transcript simply ended, which reads as the
+     * agent giving up rather than as an answer to what the user just did.
+     *
+     * Only when something was actually running: a Stop pressed at an idle
+     * agent should do nothing, not narrate.
+     */
+    interrupt: (id: never) => {
+      const agentId = id as unknown as string;
+      const stopped = abortSession(agentId);
+
+      if (stopped) {
+        pushTranscript(agentId, {
+          kind: 'notice',
+          id: newId('note'),
+          level: 'info',
+          text: 'Run interrupted.',
+          createdAt: Date.now(),
+        });
+        emitEngineEvent({ type: 'run-state', agentId, state: 'idle' });
+      }
+
+      return stopped;
+    },
 
     /*
      * History recovery.
@@ -271,13 +299,29 @@ export function nodeMethods(): MethodTable {
     listHistory: (id: never) =>
       listCheckpoints(host().dataDir, id as unknown as string).map((point) => ({
         file: point.file,
+        /*
+         * The same value under the name every caller reaches for.
+         *
+         * A checkpoint is identified by its path, and the field was called
+         * `file` — so the CLI's `history restore`, the sweep, and anything
+         * else that said `version.id` passed undefined and got "That saved
+         * version could not be read." A record people treat as having an id
+         * should have one.
+         */
+        id: point.file,
         createdAt: point.createdAt,
         entries: point.entries,
         reason: point.reason,
       })),
     restoreHistory: (id: never, file: never) => {
       const agentId = id as unknown as string;
-      const entries = readCheckpoint(file as unknown as string);
+      const which = file as unknown as string;
+
+      if (!which) {
+        throw new Error('Which saved version? Pass the id from listHistory.');
+      }
+
+      const entries = readCheckpoint(which);
       if (!entries) throw new Error('That saved version could not be read.');
       // Checkpoint what is there now, so a mistaken restore is undoable too.
       saveTranscript(agentId, entries, 'before restore');

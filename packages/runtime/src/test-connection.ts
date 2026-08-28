@@ -102,8 +102,8 @@ export async function testConnection(cfg: {
     const check = provider.validate();
     if (!check.ok) return { ok: false, error: check.error };
 
-    let ok = false;
-    let error = 'No response from the endpoint.';
+    let sawDone = false;
+    let failure = '';
 
     // One tiny non-streaming request: enough to prove the endpoint answers
     // and authenticates, cheap enough to run whenever someone wonders.
@@ -112,13 +112,23 @@ export async function testConnection(cfg: {
       maxTokens: 8,
       stream: false,
     })) {
-      if (chunk.kind === 'done') {
-        ok = true;
-        error = '';
-      } else if (chunk.kind === 'error') {
-        error = chunk.message;
-      }
+      if (chunk.kind === 'done') sawDone = true;
+      else if (chunk.kind === 'error') failure = chunk.message;
     }
+
+    /*
+     * An error anywhere in the stream is a failure, even when `done`
+     * follows it.
+     *
+     * The old loop set `ok = true` on `done` and cleared the message — but
+     * closing a stream with `done` after an error is the normal way to end
+     * one, so the error was erased. That is how "The provider answered" was
+     * reported for a model returning 404: the configuration passed its own
+     * check and then failed every real turn, which is worse than no check
+     * at all.
+     */
+    const ok = sawDone && failure === '';
+    const error = failure || (sawDone ? '' : 'No response from the endpoint.');
 
     return { ok, error: error || undefined, latencyMs: Date.now() - started };
   } catch (err) {

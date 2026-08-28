@@ -146,14 +146,24 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
      * which is why the full catalogue is now fetched live from the provider
      * and these are only the ones marked as tested.
      */
-    defaultModel: 'nvidia/nemotron-3.5-lightning-30b-a3b',
+    /*
+     * BEING LISTED IS NOT BEING SERVABLE, and assuming otherwise cost a
+     * session. `nvidia/nemotron-3.5-lightning-30b-a3b` appears in
+     * `/v1/models`, was made the default here, and returns 404 to a real
+     * chat call — so every local turn failed while the same key worked
+     * elsewhere. The catalogue also carries embedding and vision models
+     * that can never chat.
+     *
+     * Each entry below answered a real `/chat/completions` request:
+     *   nemotron-3.5-lightning-30b-a3b  404  listed, not servable
+     *   meta/llama-3.1-70b-instruct     410  retired
+     *   nemotron-3-super-120b-a12b      ok
+     *   nemotron-3-nano-30b-a3b         ok
+     */
+    defaultModel: 'nvidia/nemotron-3-super-120b-a12b',
     models: [
-      'nvidia/nemotron-3.5-lightning-30b-a3b',
-      'nvidia/nemotron-3-ultra-550b-a55b',
       'nvidia/nemotron-3-super-120b-a12b',
-      'meta/llama-3.1-70b-instruct',
-      'meta/llama-3.1-8b-instruct',
-      'mistralai/mistral-large-2-instruct',
+      'nvidia/nemotron-3-nano-30b-a3b',
     ],
     keyHint: 'NVIDIA API key from build.nvidia.com (free tier available)',
   },
