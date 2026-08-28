@@ -122,6 +122,22 @@ console.log('\n[the daemon] asking a client never replaces the default');
   // The card is written where the conversation lives.
   check('the node writes the card itself', serve.includes("kind: 'approval'"));
   check('and records the outcome', /status:\s*[\s\S]{0,80}'approved' : 'denied'/.test(serve));
+
+  /*
+   * And ANNOUNCES it. `pushTranscript` writes AND emits; the bare store
+   * call only writes.
+   *
+   * Using the store call left the card invisible until something forced a
+   * reload: the agent sat at "waiting for you" with a tool call stuck on
+   * Running and no way to answer it. A polling probe reported success,
+   * because a fresh fetch sees what a live window never received — which is
+   * precisely how this passed a test and failed a person.
+   */
+  check('the card is announced, not only written',
+    /pushTranscript\(agentId, \{\s*kind: 'approval'/.test(serve));
+  // Matched as a CALL, not as prose — the comment explaining why the store
+  // call is wrong contains its name, and the first version failed on that.
+  check('no silent store write on this path', !/upsertTranscriptEntry\(/.test(serve));
 }
 
 console.log('');
