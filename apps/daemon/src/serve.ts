@@ -17,7 +17,7 @@ import {
   defaultSettings,
   initFileLog,
   newId,
-  upsertTranscriptEntry,
+  pushTranscript,
   hasApprovalClient,
   askApprovalClients,
   emitEngineEvent,
@@ -243,9 +243,16 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
        * it on the client instead put the card in a store nobody was
        * looking at: the request arrived, the answer path worked, and
        * nothing was ever displayed.
+       *
+       * `pushTranscript`, NOT `upsertTranscriptEntry` — it writes AND
+       * announces. Writing alone left the card invisible until something
+       * else forced a reload: the agent sat at "waiting for you" with a
+       * tool call stuck on Running and no way to answer it. A polling probe
+       * found the entry and reported success, because a fresh fetch sees
+       * what a live window never received.
        */
       const requestId = newId('appr');
-      upsertTranscriptEntry(agentId, {
+      pushTranscript(agentId, {
         kind: 'approval',
         id: requestId,
         requestId,
@@ -271,7 +278,7 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
        * pending — including when nobody answered and the denial below
        * applies.
        */
-      upsertTranscriptEntry(agentId, {
+      pushTranscript(agentId, {
         kind: 'approval',
         id: requestId,
         requestId,
