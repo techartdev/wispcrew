@@ -239,12 +239,30 @@ export function configFromPreset(
   overrides: Partial<Pick<ProviderConfig, 'apiKey' | 'model' | 'baseUrl'>> = {},
 ): ProviderConfig {
   const preset = getPreset(presetId) ?? PROVIDER_PRESETS[PROVIDER_PRESETS.length - 1]!;
+  /*
+   * Trimmed, because invisible whitespace is a real failure mode.
+   *
+   * A model name reached a stored profile as
+   * `"nvidia/nemotron-3-nano-30b-a3b\r"` — a carriage return picked up from
+   * a shell script written on Windows. Every request then 404'd, and the
+   * error named a model that looked exactly right on screen, because a `\r`
+   * renders as nothing. The same happens to anyone pasting a name with a
+   * trailing space.
+   *
+   * Trimmed on USE rather than only on save, so a profile that already
+   * holds a damaged value heals itself without a migration.
+   */
+  const clean = (value: string | undefined): string | undefined => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : undefined;
+  };
+
   return {
     id: preset.id,
     label: preset.label,
     kind: preset.kind,
-    baseUrl: overrides.baseUrl ?? preset.baseUrl,
+    baseUrl: clean(overrides.baseUrl) ?? preset.baseUrl,
     apiKey: overrides.apiKey,
-    model: overrides.model ?? preset.defaultModel,
+    model: clean(overrides.model) ?? preset.defaultModel,
   };
 }
