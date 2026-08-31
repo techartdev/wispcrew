@@ -492,6 +492,14 @@ export function createSkill(patch: Partial<SkillRecord>): SkillRecord {
     name: (patch.name ?? 'skill').trim().replace(/\s+/g, '-'),
     description: patch.description,
     body: patch.body ?? '',
+    /*
+     * Carried explicitly. This record is built field by field rather than
+     * spread, which is deliberate — it keeps unknown keys out of the store
+     * — but it also means a NEW field is silently dropped until it is added
+     * here. Sections were, and the skill installed with an index promising
+     * seven topics and none of them present.
+     */
+    sections: patch.sections,
     agentIds: patch.agentIds,
     enabled: patch.enabled ?? true,
     createdAt: ts,

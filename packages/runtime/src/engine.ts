@@ -12,6 +12,7 @@
  * a headless box at 3am. That last case is the one that matters: the engine
  * must behave identically with no observer.
  */
+import type { SkillRecord } from '@wispcrew/shared';
 import type {
   AgentRecord,
   Attachment,
@@ -32,7 +33,7 @@ import {
   PROVIDER_PRESETS,
   type UsageSnapshot,
 } from '@wispcrew/llm';
-import { ToolRegistry } from '@wispcrew/tools';
+import { ToolRegistry, readSkillTool } from '@wispcrew/tools';
 
 import * as store from './store.js';
 import { claimTurn, updateTurn } from './turns.js';
@@ -398,7 +399,39 @@ export function expandSkill(prompt: string): string {
     .find((s) => s.enabled && s.name.toLowerCase() === (m[1] ?? '').toLowerCase());
   if (!skill) return prompt;
   const rest = (m[2] ?? '').trim();
-  return rest ? `${skill.body}\n\n---\n\n${rest}` : skill.body;
+  const body = withSectionIndex(skill);
+  return rest ? `${body}\n\n---\n\n${rest}` : body;
+}
+
+/**
+ * The skill body, plus a menu of what else it knows.
+ *
+ * Names and one-line descriptions only. The point of sections is that a
+ * thorough skill stays affordable: a fifty-command CLI reference costs a
+ * few hundred tokens until somebody actually asks about pairing a machine,
+ * and then costs one section rather than all of them.
+ *
+ * The agent is told how to fetch them, because a list of topics with no
+ * stated way to open them invites a model to invent the contents instead.
+ */
+export function withSectionIndex(skill: SkillRecord): string {
+  if (!skill.sections?.length) return skill.body;
+
+  const index = skill.sections
+    .map((s) => `- \`${s.name}\` — ${s.description}`)
+    .join('\n');
+
+  return [
+    skill.body,
+    '',
+    `## More in this skill`,
+    '',
+    'Not included above. Read one with the `read_skill` tool when it applies',
+    `— \`read_skill(skill: "${skill.name}", section: "…")\`. Do not guess at`,
+    'their contents; the point of them is that they are exact.',
+    '',
+    index,
+  ].join('\n');
 }
 
 /**
@@ -638,6 +671,19 @@ export async function runPrompt(
   // depth limit (`makeAskAgentTool` returns null otherwise).
   const askAgent = makeAskAgentTool(agentId, chain, runDelegated);
   if (askAgent) tools.register(askAgent as never);
+
+  /*
+   * Only when a skill actually has sections to read.
+   *
+   * A tool that is offered gets used (hard rule 11), and an agent given
+   * `read_skill` with nothing to read will eventually call it — inventing a
+   * skill name to try. Registering it conditionally means the option does
+   * not exist rather than merely being pointless.
+   */
+  if (store.listSkills().some((s) => s.enabled && s.sections?.length)) {
+    tools.register(readSkillTool as never);
+  }
+
   for (const name of agent?.disabledTools ?? []) tools.unregister(name);
 
   /*

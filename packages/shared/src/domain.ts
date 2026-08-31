@@ -287,6 +287,22 @@ export interface RoutineRun {
  * shareable — no proprietary format. When invoked, the body is prepended to
  * the turn as additional guidance.
  */
+/**
+ * One sub-topic of a skill, read on demand.
+ *
+ * The `description` is the part that is always in context, so it has to be
+ * good enough to choose by: "every command for pairing and reaching another
+ * machine" earns its place, "more about nodes" does not.
+ */
+export interface SkillSection {
+  /** Referenced by the agent, e.g. "remote-machines". No spaces. */
+  name: string;
+  /** One line, shown in the index. This is what the choice is made on. */
+  description: string;
+  /** The material itself. Only this is charged for, and only when read. */
+  body: string;
+}
+
 export interface SkillRecord {
   id: string;
   /** Invocation token (no spaces), e.g. "changelog". */
@@ -294,6 +310,24 @@ export interface SkillRecord {
   description?: string;
   /** Markdown body injected when the skill is used. */
   body: string;
+  /**
+   * Deeper material, fetched only when the agent asks for it.
+   *
+   * A skill worth writing is usually too long to inject whole: everything
+   * in `body` is spent on every invocation, whether it was needed or not,
+   * and a thorough skill can crowd out the conversation it was meant to
+   * help with.
+   *
+   * So `body` carries the overview and the handful of facts always worth
+   * having, and these carry the rest. The agent is shown their names and
+   * descriptions — enough to know what exists — and reads a section with
+   * `read_skill` when it turns out to matter.
+   *
+   * The split is what makes a large skill affordable. A CLI reference of
+   * fifty commands costs a few hundred tokens until the moment somebody
+   * asks about pairing a machine.
+   */
+  sections?: SkillSection[];
   /** Agent ids allowed to use it; empty/undefined = all agents. */
   agentIds?: string[];
   enabled: boolean;

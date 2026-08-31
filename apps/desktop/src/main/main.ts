@@ -37,6 +37,8 @@ import {
   setRemoteRunner,
   migrateAgentsToConversations,
   installScheduler,
+  installSkillReader,
+  seedBuiltinSkills,
   runPrompt,
   runRoutine,
   setApprovalAsker,
@@ -398,6 +400,12 @@ app.whenReady().then(async () => {
 
   installNotifySender();
   installScheduler();
+  // Lets an agent read one section of a skill instead of being handed
+  // the whole thing on every invocation.
+  installSkillReader();
+  // Installed once, then the user's to edit or delete. A builtin that
+  // reappeared after being deleted would be a bug nobody could work around.
+  seedBuiltinSkills();
   /*
    * Deliver anything the daemon queued for us.
    *

@@ -17,6 +17,8 @@ export * from './store.js';
 export * from './checkpoints.js';
 export * from './notify-host.js';
 export * from './schedule-host.js';
+export * from './skill-host.js';
+export * from './builtin-skills.js';
 export * from './conversations.js';
 export * from './conversation-edit.js';
 export * from './test-connection.js';

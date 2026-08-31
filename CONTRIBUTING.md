@@ -45,7 +45,7 @@ npm run verify
 ```
 
 About two minutes. It does everything CI does that a local machine can:
-typecheck, build, all 69 offline suites, encoding, the provenance and
+typecheck, build, all 70 offline suites, encoding, the provenance and
 credential guards, and four checks that the documentation still describes the
 software — including that every CLI command reaches a method the node
 actually serves, which otherwise fails only when someone runs it on a real

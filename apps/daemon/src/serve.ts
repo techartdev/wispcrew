@@ -27,6 +27,8 @@ import {
   startTelegram,
   migrateAgentsToConversations,
   installScheduler,
+  installSkillReader,
+  seedBuiltinSkills,
   initStore,
   listAgents,
   createAgent,
@@ -185,6 +187,12 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
   // when the desktop is closed.
   startTelegram();
   installScheduler();
+  // Lets an agent read one section of a skill instead of being handed
+  // the whole thing on every invocation.
+  installSkillReader();
+  // Installed once, then the user's to edit or delete. A builtin that
+  // reappeared after being deleted would be a bug nobody could work around.
+  seedBuiltinSkills();
   initGrants(env.dataDir);
 
   /*
