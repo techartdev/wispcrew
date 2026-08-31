@@ -293,6 +293,15 @@ body {
   }
 }
 
+/* Settings and New agent, kept together at the end of the header row.
+   The head spaces its children apart, which stranded a lone third child
+   in the middle of the row instead of beside the one it belongs with. */
+.sidebar-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .sidebar-foot {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1203,11 +1212,124 @@ body {
   border-color: var(--accent);
 }
 
-.room-mode {
-  font-size: 12.5px;
-  padding: 3px 8px;
-  width: auto;
+/*
+ * A native <select> is the one element on this screen the app has no say
+ * over: it draws its own border, background and caret in the platform's
+ * taste, so it sat in a designed row looking like something pasted in.
+ *
+ * The wrapper takes over the appearance and the select goes transparent
+ * inside it. It stays a real <select> — three genuine options, with the
+ * platform's own keyboard handling and its popup on a touch device. A
+ * hand-built menu would have to reimplement all of that to look tidier.
+ */
+.room-mode-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
 }
+
+.room-mode-field:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+/* Says what the value MEANS. "Open" alone answers no question a person
+   was asking. */
+.room-mode-label {
+  color: var(--text-dim);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.room-mode {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 3px 2px;
+  width: auto;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+/* The select's own ring would be drawn around a transparent box, so the
+   wrapper wears it instead. */
+.room-mode:focus {
+  outline: none;
+}
+
+.room-mode-field:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/*
+ * A control that is only a glyph.
+ *
+ * Square, borderless until touched, and the same height as the buttons it
+ * sits beside so a mixed row still lines up. Every one of these carries an
+ * `aria-label` and a `title`, enforced by `test:icons-ui` — an unlabelled
+ * icon button is a guess, not a control.
+ */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.icon-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/*
+ * A toggle that is currently ON.
+ *
+ * Without this the panel button looked identical whether the panel was open
+ * or shut, so the only way to know what it would do was to press it.
+ */
+.icon-btn-on {
+  background: var(--bg-inset);
+  border-color: var(--border-strong);
+  color: var(--accent);
+}
+
 
 /* Settings groups. The panel had outgrown a single scroll, so its existing
    sections became tabs. */

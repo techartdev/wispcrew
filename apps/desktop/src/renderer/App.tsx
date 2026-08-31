@@ -6,7 +6,13 @@
  * All data lives in `useWispcrew`.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { IconSettings, IconHistory, IconTrash } from './Icons.js';
+import {
+  IconSettings,
+  IconHistory,
+  IconTrash,
+  IconPeople,
+  IconSidebar,
+} from './Icons.js';
 import { useWispcrew } from './useWispcrew';
 import { Sidebar, WispMark } from './Sidebar';
 import { Chat } from './Chat';
@@ -294,19 +300,45 @@ export function App() {
                 </button>
               ))}
             <span className="room-strip-spacer" />
-            <select
-              className="room-mode"
-              value={room.mode}
-              title="How much the room constrains who speaks"
-              onChange={(e) => void actions.setRoomMode(e.target.value)}
+
+            {/*
+              A real choice with three options, so it stays a select — but
+              wrapped, because a bare native control is the one element on
+              this screen the app has no say over. The wrapper draws the
+              border and the caret; the select itself goes transparent.
+            */}
+            <label className="room-mode-field" title="How much the room constrains who speaks">
+              <span className="room-mode-label">Who speaks</span>
+              <select
+                className="room-mode"
+                value={room.mode}
+                onChange={(e) => void actions.setRoomMode(e.target.value)}
+              >
+                <option value="directed">Directed</option>
+                <option value="open">Open</option>
+                <option value="free">Free</option>
+              </select>
+            </label>
+
+            {/*
+              Icon buttons from here on. These two are toggles a person
+              reaches for repeatedly and already understands — spending a
+              full outlined button on each crowded the row and left the
+              agent's own name competing with them for attention.
+
+              Icon-only means each carries its name for assistive tech and a
+              tooltip for everyone else.
+            */}
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => setPanel('room')}
+              title="Who is in this room"
+              aria-label="Who is in this room"
             >
-              <option value="directed">Directed</option>
-              <option value="open">Open</option>
-              <option value="free">Free</option>
-            </select>
-            <button type="button" className="btn" onClick={() => setPanel('room')}>
-              Members
+              <IconPeople />
             </button>
+
             {/*
               Toggling the pane, rather than only ever hiding it. Its close
               button leaves no way back otherwise, which is the small trap
@@ -314,11 +346,13 @@ export function App() {
             */}
             <button
               type="button"
-              className="btn"
+              className={`icon-btn${paneOpen ? ' icon-btn-on' : ''}`}
               onClick={() => setPaneOpen((open) => !open)}
               title={paneOpen ? 'Hide the side panel' : 'Show who is here and what is scheduled'}
+              aria-label={paneOpen ? 'Hide the side panel' : 'Show the side panel'}
+              aria-pressed={paneOpen}
             >
-              {paneOpen ? 'Hide panel' : 'Panel'}
+              <IconSidebar />
             </button>
           </div>
         )}

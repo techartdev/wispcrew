@@ -5,7 +5,7 @@
  * app's primary navigation: pinned agents first, then most-recently-updated.
  */
 import { useMemo, useState } from 'react';
-import { IconClock, IconSkill, IconPlug, IconMachine, IconSettings } from './Icons.js';
+import { IconPlus, IconClock, IconSkill, IconPlug, IconMachine, IconSettings } from './Icons.js';
 import type { AgentRecord, AgentRunState } from '@wispcrew/shared';
 
 /** Deterministic accent colour from the agent id, so avatars stay stable. */
@@ -76,9 +76,44 @@ export function Sidebar({
           <WispMark size={18} />
           <span>WispCrew</span>
         </div>
-        <button type="button" className="icon-btn" title="New agent" onClick={onCreate}>
-          +
+        {/*
+          A typed "+" became a drawn one, and gained the name it never had:
+          it had a tooltip, which a pointer reveals and a screen reader does
+          not, so this button announced itself as "button, plus".
+        */}
+        {/*
+          Settings lives up here, beside New agent.
+
+          It spent one build alone at the foot of the sidebar as a bare cog,
+          which made it the least findable control in the app — dim, small,
+          with no label and nothing near it to group with. These two are the
+          app-level actions, as opposed to the four panels below that belong
+          to whichever agent you are looking at.
+
+          Wrapped, because the header spaces its children apart: a third
+          child left the cog stranded in the middle of the row instead of
+          beside the button it belongs with.
+        */}
+        <div className="sidebar-head-actions">
+        <button
+          type="button"
+          className="icon-btn"
+          title="Settings"
+          aria-label="Settings"
+          onClick={onOpenSettings}
+        >
+          <IconSettings />
         </button>
+        <button
+          type="button"
+          className="icon-btn"
+          title="New agent"
+          aria-label="New agent"
+          onClick={onCreate}
+        >
+          <IconPlus />
+        </button>
+        </div>
       </div>
 
       {agents.length > 4 && (
@@ -156,10 +191,8 @@ export function Sidebar({
           <IconMachine />
           Machines
         </button>
-        <button type="button" className="foot-btn" onClick={onOpenSettings}>
-          <IconSettings />
-          Settings
-        </button>
+        {/* Settings moved to the header, beside New agent — see there. This
+            leaves four labelled panels in a clean two-by-two. */}
       </div>
     </aside>
   );

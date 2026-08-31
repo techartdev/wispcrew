@@ -60,6 +60,38 @@ console.log('\n[accessibility] an icon is never the only signal');
   const attach = chat.slice(chat.indexOf('btn-attach'), chat.indexOf('btn-attach') + 400);
   check('the attach button has an accessible name', attach.includes('aria-label="Attach files"'));
   check('and a tooltip', attach.includes('title="Attach files"'));
+
+  /*
+   * EVERY icon-only control, not just the ones I remembered.
+   *
+   * `.icon-btn` renders a glyph and nothing else, so without a name it is a
+   * button that announces itself as "button". This is the check the CSS
+   * comment claims exists — so it has to actually exist.
+   */
+  for (const file of ['App.tsx', 'Sidebar.tsx', 'Chat.tsx']) {
+    const source = read(file);
+
+    /*
+     * Taken as a WINDOW from the class to the closing tag, not by matching
+     * up to the first `>`.
+     *
+     * The obvious `<button[^>]*>` stops at the arrow in
+     * `onClick={() => …}` — an arrow function contains a `>`, so the match
+     * ended mid-element and reported correctly-labelled buttons as missing
+     * their labels.
+     */
+    const buttons = [...source.matchAll(/icon-btn/g)].map((m) => {
+      const end = source.indexOf('</button>', m.index);
+      return source.slice(m.index, end === -1 ? m.index + 400 : end);
+    });
+
+    for (const [i, button] of buttons.entries()) {
+      check(`${file}: icon button ${i + 1} has an accessible name`,
+        /aria-label[=[]/.test(button), button.replace(/\s+/g, ' ').slice(0, 90));
+      check(`${file}: icon button ${i + 1} has a tooltip`,
+        /title[=[]/.test(button), button.replace(/\s+/g, ' ').slice(0, 90));
+    }
+  }
 }
 
 console.log('\n[labels] every other icon has words beside it');
