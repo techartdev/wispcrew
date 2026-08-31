@@ -49,7 +49,16 @@ function main(): void {
 
     const model = describeHttpFailure(404, '{"error":{"message":"no model"}}', 'OpenAI', 'ghost-9');
     check('404 names the model', model.includes('ghost-9'));
-    check('404 suggests changing it', /pick a different model/i.test(model));
+
+    /*
+     * A 404 no longer says "pick a different model", because that is often
+     * the wrong advice: NVIDIA's free tier answers 404 when a model is
+     * BUSY, so the same name succeeds and fails minutes apart — measured at
+     * four failures in six identical requests. Telling someone to change a
+     * working model sends them to fix the wrong thing.
+     */
+    check('404 admits it may be temporary', /busy rather than missing/i.test(model));
+    check('404 still allows for a wrong name', /check the model name/i.test(model));
 
     const rate = describeHttpFailure(429, '', 'Groq', 'm');
     check('429 explains rate limiting', /rate-limit|quota/i.test(rate));

@@ -83,8 +83,9 @@ export function describeHttpFailure(
      */
     case 404:
       return (
-        `${label} would not serve the model "${model}" — it may be unavailable right now, ` +
-        `or the name may be wrong. Some free tiers answer this way when a model is busy${suffix}`
+        `${label} would not serve the model "${model}". It may be busy rather than missing — ` +
+        `some free tiers answer this way under load. Wait and try again, or check the model ` +
+        `name in Settings${suffix}`
       );
     case 429:
       return `${label} is rate-limiting or you are out of quota. Wait a moment, or check your billing and usage${suffix}`;

@@ -38,9 +38,26 @@ function main(): void {
     for (const status of [429, 500, 502, 503, 504]) {
       check(`${status} is retryable`, isRetryableStatus(status));
     }
+
+    /*
+     * 404 joined them, against the obvious reading.
+     *
+     * It normally means "no such thing", and this suite used to pin it as
+     * permanent. Then NVIDIA's free tier was measured answering 404 when a
+     * model is merely BUSY: four failures in six identical requests for
+     * `nemotron-3-super-120b-a12b`, while `nemotron-3-nano-30b-a3b`
+     * answered five of five. A conversation died mid-turn and told the user
+     * to change a model that works.
+     *
+     * Retrying a genuinely missing model costs a few hundred milliseconds
+     * before the same error. Not retrying cost a working feature.
+     */
+    check('404 is retryable, because it is not only "no such model"',
+      isRetryableStatus(404));
+
     // The important half. A retried 401 wastes the user's time and never
     // succeeds; a retried 400 repeats the same malformed request.
-    for (const status of [400, 401, 403, 404, 413, 422]) {
+    for (const status of [400, 401, 403, 413, 422]) {
       check(`${status} is NOT retryable`, !isRetryableStatus(status));
     }
   }
