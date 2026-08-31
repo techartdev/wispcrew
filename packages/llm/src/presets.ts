@@ -160,10 +160,18 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
      *   nemotron-3-super-120b-a12b      ok
      *   nemotron-3-nano-30b-a3b         ok
      */
-    defaultModel: 'nvidia/nemotron-3-super-120b-a12b',
+    /*
+     * `nano` is the default because it is the one that RELIABLY answers.
+     *
+     * Same six identical requests: `super-120b` returned 404 four times,
+     * `nano-30b` answered five of five. A free tier reuses 404 for "no
+     * capacity", so a bigger model that is busy half the time is a worse
+     * default than a smaller one that responds.
+     */
+    defaultModel: 'nvidia/nemotron-3-nano-30b-a3b',
     models: [
-      'nvidia/nemotron-3-super-120b-a12b',
       'nvidia/nemotron-3-nano-30b-a3b',
+      'nvidia/nemotron-3-super-120b-a12b',
     ],
     keyHint: 'NVIDIA API key from build.nvidia.com (free tier available)',
   },

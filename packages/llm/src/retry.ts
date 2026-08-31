@@ -31,8 +31,21 @@
  * inside the allowance; it does not rotate keys or work around the tier.
  */
 
-/** HTTP statuses worth retrying. Everything else fails immediately. */
-const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+/**
+ * HTTP statuses worth retrying. Everything else fails immediately.
+ *
+ * **404 is here on purpose.** It normally means "no such thing" and would
+ * be pointless to retry — but NVIDIA's free tier answers 404 when a model
+ * has no capacity, so the same name succeeds and fails minutes apart.
+ * Measured on identical requests: `nemotron-3-super-120b-a12b` failed four
+ * of six, while `nemotron-3-nano-30b-a3b` answered five of five.
+ *
+ * The cost of being wrong here is small and bounded — a genuinely
+ * misspelled model spends a few hundred milliseconds before reporting the
+ * same error. The cost of NOT retrying was a conversation that died
+ * mid-turn and advised the user to change a model that works.
+ */
+const RETRYABLE = new Set([404, 429, 500, 502, 503, 504]);
 
 export interface RetryOptions {
   /** Attempts after the first. Default 3. */

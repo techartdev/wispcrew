@@ -68,8 +68,24 @@ export function describeHttpFailure(
     case 401:
     case 403:
       return `${label} rejected the API key. Open Settings and check the key is correct and still active${suffix}`;
+    /*
+     * 404 is not only "no such model".
+     *
+     * NVIDIA's free tier answers 404 when a model has no capacity right
+     * now, so the same name succeeds and fails minutes apart — measured at
+     * 2 of 6 for `nemotron-3-super-120b-a12b` while `nemotron-3-nano-30b-a3b`
+     * was 5 of 5. Telling someone to pick a different model is the wrong
+     * advice for a model that works: they change a good setting and the
+     * next failure looks like a different bug.
+     *
+     * Retried before this is ever shown (see `withRetry`), so by the time
+     * it appears the endpoint has refused several times.
+     */
     case 404:
-      return `${label} does not recognise the model "${model}". Pick a different model in Settings${suffix}`;
+      return (
+        `${label} would not serve the model "${model}" — it may be unavailable right now, ` +
+        `or the name may be wrong. Some free tiers answer this way when a model is busy${suffix}`
+      );
     case 429:
       return `${label} is rate-limiting or you are out of quota. Wait a moment, or check your billing and usage${suffix}`;
     case 400:

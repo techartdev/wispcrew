@@ -112,8 +112,18 @@ console.log('\n[presets] no model is offered that cannot answer');
     check(`${dead} is not offered`, !presets.includes(`'${dead}'`));
   }
 
-  check('the default is one that answered',
-    presets.includes("defaultModel: 'nvidia/nemotron-3-super-120b-a12b'"));
+  /*
+   * And the default is the RELIABLE one. A free tier reuses 404 for "no
+   * capacity", so a bigger model that is busy half the time is a worse
+   * default than a smaller one that answers: `super-120b` failed four of
+   * six identical requests, `nano-30b` answered five of five.
+   */
+  check('the default is one that answers reliably',
+    presets.includes("defaultModel: 'nvidia/nemotron-3-nano-30b-a3b'"));
+
+  // 404 is retried, because it does not only mean "no such model".
+  const retry = fs.readFileSync(path.join(repo, 'packages/llm/src/retry.ts'), 'utf8');
+  check('a 404 is retried', /RETRYABLE = new Set\(\[404,/.test(retry));
 }
 
 console.log('');
