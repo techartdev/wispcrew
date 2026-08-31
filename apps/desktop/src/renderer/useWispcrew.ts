@@ -218,6 +218,19 @@ export function useWispcrew() {
           setSelectedId((prev) =>
             prev && event.agents.some((a) => a.id === prev) ? prev : (event.agents[0]?.id ?? null),
           );
+
+          /*
+           * The rooms changed too. Deleting an agent removes it from every
+           * conversation it had joined, so a sidebar that updated while the
+           * room pane still listed the departed agent would be half fixed.
+           *
+           * Re-read rather than carry the rooms in the event: one frame
+           * stays one fact, and the client asks for what that fact implies.
+           */
+          void api.listConversations().then(setConversations).catch(() => {
+            // A refresh that fails leaves the previous list, which is stale
+            // but coherent. The next event tries again.
+          });
           return;
         case 'mcp-changed':
           setMcpServers(event.servers);

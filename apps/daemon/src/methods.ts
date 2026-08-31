@@ -123,14 +123,47 @@ function settingsView(): unknown {
  * rather than a hang.
  */
 export function nodeMethods(): MethodTable {
+  /**
+   * Push the roster to every attached client, and pass the result through.
+   *
+   * Wrapping rather than emitting inside each handler: a fifth agent method
+   * added later gets this by being wrapped, and forgetting to wrap it is
+   * visible at the call site instead of buried in a function body.
+   *
+   * Only `agents-changed` is sent, and the client re-reads the room list
+   * when it arrives. Deleting an agent also removes it from every room it
+   * joined, so both do change — but a second frame would be new protocol
+   * surface for a fact the first one already implies, and every client
+   * would have to learn it.
+   */
+  const announceRoster = <T>(result: T): T => {
+    emitEngineEvent({ type: 'agents-changed', agents: listAgents() });
+    return result;
+  };
+
   return {
     /* agents */
     listAgents: () => listAgents(),
+
+    /*
+     * Every one of these ANNOUNCES the new roster.
+     *
+     * The `agents-changed` event was emitted only by the desktop bridge —
+     * but agent calls are routed to whichever engine owns the agent, and
+     * that is normally the daemon. So the store changed, the call returned
+     * successfully, and no window ever heard: a deleted agent stayed in the
+     * sidebar until the app was reloaded.
+     *
+     * Exactly the shape of the invisible approval card. A change made where
+     * a call is ANSWERED has to be announced from there too; announcing it
+     * in the desktop only covers the case where the desktop happens to be
+     * the one doing the work.
+     */
     // With its room: an agent that has none cannot be talked to.
-    createAgent: (patch: never) => createAgentWithRoom(patch),
-    updateAgent: (id: never, patch: never) => updateAgent(id, patch),
-    deleteAgent: (id: never) => deleteAgent(id),
-    duplicateAgent: (id: never) => duplicateAgent(id),
+    createAgent: (patch: never) => announceRoster(createAgentWithRoom(patch)),
+    updateAgent: (id: never, patch: never) => announceRoster(updateAgent(id, patch)),
+    deleteAgent: (id: never) => announceRoster(deleteAgent(id)),
+    duplicateAgent: (id: never) => announceRoster(duplicateAgent(id)),
 
     /* rooms — conversations with participants */
     /*
