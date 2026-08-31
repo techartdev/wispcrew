@@ -16,6 +16,7 @@
  */
 import { app } from 'electron';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileLog } from '@wispcrew/runtime';
 
@@ -101,8 +102,21 @@ function copyTree(from: string, to: string): number {
 
 function candidateOldDirs(): string[] {
   const appData = app.getPath('appData');
+  const home = os.homedir();
+
   return [
-    // The immediately previous name, which is what an existing user has.
+    /*
+     * The platform-specific homes WispCrew used before `~/.wispcrew`.
+     *
+     * These hold a CURRENT user's real profile — agents, conversations,
+     * keys — so they come first. Losing someone's roster to a tidier path
+     * would be an unforgivable trade for the tidiness.
+     */
+    path.join(appData, 'WispCrew'),
+    path.join(home, 'Library', 'Application Support', 'WispCrew'),
+    path.join(process.env.XDG_CONFIG_HOME ?? path.join(home, '.config'), 'WispCrew'),
+
+    // The immediately previous name, which is what an older user has.
     path.join(appData, 'GhostBot'),
     path.join(appData, 'ghostbot'),
     // Post-rebrand but pre-setName: builds that derived userData from the
@@ -172,7 +186,15 @@ export function migrateUserData(): string {
   // main.ts — Electron caches the userData path on first access, so setting
   // the name here would be too late and data would land in the
   // package-derived %APPDATA%\@wispcrew\desktop folder instead.
-  const userDataDir = app.getPath('userData');
+  /*
+   * `~/.wispcrew`, not Electron's `userData`.
+   *
+   * One path on every platform, and one a person can find, back up and
+   * delete without knowing what `%APPDATA%` means. Electron's own choice is
+   * now just another directory to migrate FROM — the desktop and the daemon
+   * must agree, and `defaultDataDir()` in the daemon says the same thing.
+   */
+  const userDataDir = path.join(os.homedir(), '.wispcrew');
 
   try {
     fs.mkdirSync(userDataDir, { recursive: true });

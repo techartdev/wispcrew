@@ -155,9 +155,19 @@ it judges that this machine cannot is **macOS and Linux** — window painting,
 native dialogs, platform process behaviour. If a change does not touch that,
 local verification is the whole story.
 
-Config lives in `<userData>/wispcrew-settings.json`
-(`%APPDATA%\WispCrew` on Windows). Keys live **only** in
-`<userData>/wispcrew-secrets.enc`.
+**Everything lives in `~/.wispcrew`** — one path on every platform, and one
+a person can find, back up and delete. Config is
+`~/.wispcrew/wispcrew-settings.json`; keys live **only** in
+`~/.wispcrew/wispcrew-secrets.enc`; the default workspace for agents that set
+none is `~/.wispcrew/workspace`.
+
+An agent can be pointed at any directory instead — Configure → Workspace, or
+`wispcrew agents set <agent> --workspace <path>` — which is how it works
+inside a real project. Its file and shell tools are confined to that root.
+
+The platform locations Electron used to pick (`%APPDATA%`, `~/Library/
+Application Support`, `~/.config`) are still read once on a first run, so an
+existing profile migrates rather than being abandoned.
 
 ## Debug hooks
 
