@@ -153,6 +153,9 @@ export const shellTool: Tool<ShellArgs> = {
       let stdout = '';
       let stderr = '';
       let timedOut = false;
+      // Set when Stop reached us, so the result can say so rather than
+      // reporting a bare non-zero exit that looks like the command failed.
+      let aborted = false;
 
       /*
        * Kill the whole process tree, not just the shell we spawned.
@@ -191,6 +194,29 @@ export const shellTool: Tool<ShellArgs> = {
       }, timeoutMs);
 
       /*
+       * Stop must reach a command that is already running.
+       *
+       * The abort signal was available on the context and nothing here
+       * listened for it, so pressing Stop did nothing until the command
+       * finished on its own — up to the full timeout. Reported after a
+       * shell call deadlocked: the agent sat at "working", Stop had no
+       * effect, and the only way out was to wait or reload.
+       *
+       * The same kill the timeout uses. Killing the whole tree matters:
+       * `child.kill` would signal the shell and leave whatever it spawned
+       * running, which is exactly the process somebody is trying to stop.
+       */
+      const onAbort = () => {
+        aborted = true;
+        killTree();
+      };
+      ctx.signal?.addEventListener('abort', onAbort, { once: true });
+
+      // Already cancelled before we got here: do not start a command whose
+      // only future is being killed.
+      if (ctx.signal?.aborted) onAbort();
+
+      /*
        * Collect everything; bound it once, at the end.
        *
        * The previous version cut each stream at 200 KB and threw the rest
@@ -223,6 +249,7 @@ export const shellTool: Tool<ShellArgs> = {
 
       child.on('error', (err) => {
         clearTimeout(timer);
+        ctx.signal?.removeEventListener('abort', onAbort);
         resolve({
           id: '',
           name: 'shell',
@@ -266,6 +293,13 @@ export const shellTool: Tool<ShellArgs> = {
         const errRetained = retainText(stderr, { label: 'stderr' });
 
         const content = [
+          /*
+           * Said first, because otherwise a stopped command reads as a
+           * failed one: the model sees a non-zero exit and a kill signal
+           * and reasonably concludes the command was broken, then tries
+           * again — which is the last thing somebody pressing Stop wants.
+           */
+          aborted ? '[stopped by the user]' : '',
           timedOut ? `[timed out after ${timeoutMs}ms]` : '',
           stoppedForVolume
             ? '[stopped: the command produced more output than can be collected]'

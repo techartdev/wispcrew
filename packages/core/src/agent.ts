@@ -220,6 +220,14 @@ export class Agent {
           workspaceRoot: this.workspaceRoot,
           defaultTimeoutMs: this.defaultTimeoutMs,
           env: this.env,
+          /*
+           * So Stop can reach a tool that is ALREADY running.
+           *
+           * The loop below checks this signal between calls, which does
+           * nothing for the call currently awaiting — a long shell command
+           * ignored Stop until it finished by itself.
+           */
+          signal: controller.signal,
           requestApproval: async (req) => {
             const policy = this.approvalPolicy(req);
             if (policy !== undefined) return policy;

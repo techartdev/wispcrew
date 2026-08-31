@@ -342,8 +342,17 @@ export function Chat({
 
   const busy = runState === 'thinking' || runState === 'awaiting-approval';
 
-  /** Is the viewport close enough to the end to count as "following"? */
-  const atBottom = (el: HTMLElement) => el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  /**
+   * Is the viewport close enough to the end to count as "following"?
+   *
+   * A pane with nothing to scroll counts as at the bottom — there is no
+   * "later" to jump to. Without that, a conversation that SHRANK (a reload,
+   * a rewind, a cleared chat) could leave the jump button on screen over
+   * content that fits entirely, offering to scroll somewhere that does not
+   * exist. Reported exactly that way.
+   */
+  const atBottom = (el: HTMLElement) =>
+    el.scrollHeight <= el.clientHeight || el.scrollHeight - el.scrollTop - el.clientHeight < 80;
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -399,8 +408,27 @@ export function Chat({
     const update = () => setShowJump(!atBottom(el));
     update();
     el.addEventListener('scroll', update, { passive: true });
-    return () => el.removeEventListener('scroll', update);
-  }, [agent?.id]);
+
+    /*
+     * Content can change without anybody scrolling.
+     *
+     * The old version listened for `scroll` alone, so the answer went stale
+     * the moment the transcript grew or shrank on its own: after a reload
+     * the button stayed on screen over a conversation that fitted entirely,
+     * with no scroll event coming to correct it.
+     *
+     * A ResizeObserver on the content is what actually changed — watching
+     * the transcript length would miss a message growing as it streams.
+     */
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    for (const child of Array.from(el.children)) observer.observe(child);
+
+    return () => {
+      el.removeEventListener('scroll', update);
+      observer.disconnect();
+    };
+  }, [agent?.id, transcript.length]);
 
   const jumpToLatest = useCallback(() => {
     const el = scrollRef.current;

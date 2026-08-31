@@ -187,6 +187,19 @@ export interface ToolDefinition {
 export interface ToolContext {
   /** Resolve an approval request; throws or returns false when denied. */
   requestApproval(request: ApprovalRequest): Promise<boolean>;
+  /**
+   * Cancellation, for a tool that can act on it.
+   *
+   * The agent loop only checks for an abort BETWEEN tool calls, so a tool
+   * already running is the one thing Stop cannot reach by itself. A shell
+   * command with a thirty-second timeout therefore ignored Stop for thirty
+   * seconds — and when that command was waiting on something that would
+   * never arrive, Stop appeared to do nothing at all.
+   *
+   * Optional because most tools finish too quickly to care. A tool that can
+   * take real time should listen.
+   */
+  signal?: AbortSignal;
   /** Root directory the agent is allowed to touch ("" = cwd). */
   workspaceRoot: string;
   /** Timeout in ms applied by tools that support it. */
