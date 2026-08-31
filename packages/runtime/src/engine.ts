@@ -19,7 +19,12 @@ import type {
   RoutineRecord,
   TranscriptEntry,  ChannelId,
 } from '@wispcrew/shared';
-import { Agent, personaById } from '@wispcrew/core';
+import {
+  Agent,
+  personaById,
+  environmentFacts as coreEnvironmentFacts,
+  type SystemPromptOptions,
+} from '@wispcrew/core';
 import {
   configFromPreset,
   createProvider,
@@ -230,25 +235,78 @@ function environmentOptions(agent: AgentRecord | undefined, conversationId?: str
    * conversation with @itself" is noise, and the single-agent case is still
    * the common one.
    */
-  let room: { handle: string; others: string[] } | undefined;
+  let room: SystemPromptOptions['room'];
 
   if (agent && conversationId) {
-    const participants = (getConversation(conversationId)?.participants ?? []).filter(
-      (p) => p.kind === 'agent',
-    );
+    const conversation = getConversation(conversationId);
+    const participants = conversation?.participants ?? [];
 
-    if (participants.length > 1) {
-      const self = participants.find((p) => p.id === agent.id);
-      if (self) {
-        room = {
-          handle: self.handle,
-          others: participants.filter((p) => p.id !== agent.id).map((p) => p.handle),
-        };
-      }
+    // Only when there is actually company. Telling a lone agent who is in
+    // the room is noise, and one agent is still the common case.
+    const agentCount = participants.filter((p) => p.kind === 'agent').length;
+
+    if (agentCount > 1) {
+      room = {
+        mode: conversation?.mode,
+        participants: participants.map((p) => {
+          if (p.kind === 'human') {
+            /*
+             * How to reach this person, in the words the prompt uses.
+             *
+             * It changes what a good reply looks like: someone answering
+             * from Telegram is not looking at the transcript, so a reply
+             * that says "see the file above" is useless to them.
+             */
+            const doors = p.channels
+              .filter((c) => c !== 'app')
+              .map((c) => (c === 'telegram' ? 'Telegram' : 'desktop notifications'));
+
+            return {
+              kind: 'human' as const,
+              name: p.name,
+              via: doors.length
+                ? `a person, at the app and reachable on ${doors.join(' and ')}`
+                : 'a person, at the app',
+            };
+          }
+
+          /*
+           * Which machine an agent runs on, because it bounds what it can
+           * see: an agent elsewhere cannot read this machine's files, so
+           * asking it to is a wasted turn.
+           */
+          const other = store.getAgent(p.id);
+          const elsewhere = other?.nodeId && other.nodeId !== agent.nodeId;
+
+          return {
+            kind: 'agent' as const,
+            name: other?.name ?? p.handle,
+            handle: p.handle,
+            via: elsewhere ? 'an agent on another machine' : 'an agent on this machine',
+          };
+        }),
+      };
     }
   }
 
+  const self = agent
+    ? (getConversation(conversationId ?? agent.id)?.participants ?? []).find(
+        (p) => p.kind === 'agent' && p.id === agent.id,
+      )
+    : undefined;
+
   return {
+    agentName: agent?.name,
+    handle: self && self.kind === 'agent' ? self.handle : undefined,
+
+    /*
+     * Where this actually runs. Read from the host rather than assumed, so
+     * an agent on a VPS says so instead of describing the user's laptop.
+     */
+    machineName: host().nodeName,
+    platform: platformName(),
+    workspace: agent?.workspaceRoot ?? host().defaultWorkspaceRoot,
+
     // A daemon owns the engine whenever one is attached, which is what makes
     // unattended work possible at all.
     persistent: true,
@@ -262,25 +320,37 @@ function environmentOptions(agent: AgentRecord | undefined, conversationId?: str
   };
 }
 
+/** The operating system in the words a person would use. */
+function platformName(): string {
+  switch (process.platform) {
+    case 'win32':
+      return 'Windows';
+    case 'darwin':
+      return 'macOS';
+    case 'linux':
+      return 'Linux';
+    default:
+      return process.platform;
+  }
+}
+
 /**
- * The environment block on its own, for prompts that replace the persona.
+ * The facts on their own, for prompts that replace the persona.
  *
- * Built by generating the general persona and slicing out the section, so
- * there is one source of these facts rather than two that can disagree.
+ * Was built by generating the general persona and SLICING OUT the section
+ * between two headings — which worked until a heading was renamed, and would
+ * have silently returned nothing. The core now exposes the same composition
+ * directly, so there is one source and no string surgery.
  */
-function environmentFacts(
+function factsFor(
   agent: AgentRecord | undefined,
   model?: string,
   conversationId?: string,
 ): string {
-  const generic = personaById('general')?.build({
+  return coreEnvironmentFacts({
     modelHint: model,
     ...environmentOptions(agent, conversationId),
   });
-  if (!generic) return '';
-  const start = generic.indexOf('## Your environment');
-  const end = generic.indexOf('## How to work');
-  return start === -1 || end === -1 ? '' : generic.slice(start, end).trim();
 }
 
 function systemPromptFor(
@@ -301,7 +371,7 @@ function systemPromptFor(
    */
   const described = agent?.description?.trim();
   if (described) {
-    const facts = environmentFacts(agent, model, conversationId);
+    const facts = factsFor(agent, model, conversationId);
     return facts ? `${described}\n\n${facts}` : described;
   }
   return personaById(personaId)?.build({

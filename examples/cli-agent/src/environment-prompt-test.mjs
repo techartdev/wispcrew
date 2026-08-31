@@ -39,12 +39,12 @@ console.log('\n[the gap that caused the misinformation]');
 console.log('\n[persistence is stated, not assumed]');
 {
   const background = defaultSystemPrompt({ persistent: true });
-  check('a daemon-backed agent is told so', /keeps working when the window is closed/i.test(background));
+  check('a daemon-backed agent is told so', /keeps you working when the window is closed/i.test(background));
 
   const foreground = defaultSystemPrompt({ persistent: false });
   check('an in-process agent is told the truth instead',
     /work stops when the user quits/i.test(foreground));
-  check('and does not claim to survive', !/keeps working when the window is closed/i.test(foreground));
+  check('and does not claim to survive', !/keeps you working when the window is closed/i.test(foreground));
 }
 
 console.log('\n[real state, not boilerplate]');
@@ -83,8 +83,8 @@ console.log('\n[every persona, not just the default]');
   // The general persona is what the environment block is sliced from, so it
   // must contain the markers that slicing depends on.
   const general = personaById('general')?.build({ persistent: true });
-  check('general carries the environment heading', /## Your environment/.test(general ?? ''));
-  check('and the following heading used as the slice end', /## How to work/.test(general ?? ''));
+  check('general carries the environment heading', /## Where you are running/.test(general ?? ''));
+  check('and the following heading used as the slice end', /## Tool use/.test(general ?? ''));
 }
 
 console.log('');

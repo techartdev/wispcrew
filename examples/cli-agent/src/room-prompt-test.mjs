@@ -29,20 +29,45 @@ console.log('\n[alone] a single-agent conversation says nothing about rooms');
   const prompt = defaultSystemPrompt({ persistent: true });
   // Telling a lone agent it is "in a conversation with @itself" is noise,
   // and the single-agent case is still the common one.
-  check('no room section', !/several participants/i.test(prompt));
-  check('but the environment is still described', /## Your environment/.test(prompt));
+  check('no room section', !/Who is in this conversation/i.test(prompt));
+  check('but the environment is still described', /## Where you are running/.test(prompt));
 }
 
 console.log('\n[in company] the agent is told who it is and who else is here');
 {
+  /*
+   * `handle` is what lets the agent find ITSELF in the list.
+   *
+   * The engine always supplies it, and without it the room reads as three
+   * strangers — which is exactly the confusion the section exists to
+   * remove, so the test calls it the way the engine does.
+   */
   const prompt = defaultSystemPrompt({
     persistent: true,
-    room: { handle: 'sums', others: ['colours', 'linux'] },
+    agentName: 'sums',
+    handle: 'sums',
+    room: {
+      participants: [
+        { kind: 'human', name: 'You', via: 'a person, at the app' },
+        { kind: 'agent', name: 'sums', handle: 'sums' },
+        { kind: 'agent', name: 'colours', handle: 'colours', via: 'an agent on this machine' },
+        { kind: 'agent', name: 'linux', handle: 'linux', via: 'an agent on this machine' },
+      ],
+    },
   });
 
-  check('the room is announced', /several participants/i.test(prompt));
-  // Without its own handle an agent cannot tell that `@sums` means itself.
-  check('it knows its own handle', /You are \*\*@sums\*\*/.test(prompt));
+  check('the room is announced', /Who is in this conversation/i.test(prompt));
+  /*
+   * Without its own handle an agent cannot tell that `@sums` means itself.
+   *
+   * The marker moved: it used to read "You are **@sums**." on its own line,
+   * and the participant list now says it in place — `(@sums) — you` — so
+   * one line answers both "who is here" and "which one am I".
+   */
+  // Matched without the dash: it is an em-dash in the source, and pinning a
+  // punctuation character makes the suite fail on an editor's preference
+  // rather than on behaviour.
+  check('it knows its own handle', /\(@sums\)[^\n]*\byou\b/.test(prompt));
   check('and who else is present', /@colours/.test(prompt) && /@linux/.test(prompt));
   check('that everyone can see it', /Everyone sees every message/i.test(prompt));
 
@@ -51,7 +76,7 @@ console.log('\n[in company] the agent is told who it is and who else is here');
    * than reaching for a tool, and not handing the question to a room-mate.
    */
   check('it is told to answer directly', /Answer directly/i.test(prompt));
-  check('and not to delegate to a room-mate', /Do not hand this to another participant/i.test(prompt));
+  check('and not to delegate to a room-mate', /Do not hand the question to another participant/i.test(prompt));
   check('but may draw someone in deliberately', /mention them by handle/i.test(prompt));
 }
 
@@ -60,10 +85,21 @@ console.log('\n[one agent named] a room of one is described honestly');
   // A room can transiently hold one agent — a guest just left, say.
   const prompt = defaultSystemPrompt({
     persistent: true,
-    room: { handle: 'sums', others: [] },
+    room: {
+        participants: [{ kind: 'agent', name: 'sums', handle: 'sums' }],
+      },
   });
-  check('it says so rather than listing nobody', /only agent here/i.test(prompt));
-  check('and still names the agent', /@sums/.test(prompt));
+  /*
+   * A single agent gets NO room section at all.
+   *
+   * It used to be told "You are the only agent here at the moment", which
+   * reads as odd in the ordinary one-to-one chat that most conversations
+   * are. Company means a second AGENT — a person and one agent is not a
+   * room, and describing it as one is noise the model has to reason past.
+   */
+  check('no room section for a lone agent',
+    !/Who is in this conversation/i.test(prompt));
+  check('and no claim about being alone', !/only agent here/i.test(prompt));
 }
 
 console.log('\n[personas] the room reaches every persona, not just the default');
@@ -73,9 +109,15 @@ console.log('\n[personas] the room reaches every persona, not just the default')
     if (!persona) continue;
     const prompt = persona.build({
       persistent: true,
-      room: { handle: 'windows', others: ['linux'] },
+      room: {
+        participants: [
+          { kind: 'human', name: 'You', via: 'a person, at the app' },
+          { kind: 'agent', name: 'windows', handle: 'windows' },
+          { kind: 'agent', name: 'linux', handle: 'linux', via: 'an agent on this machine' },
+        ],
+      },
     });
-    check(`${id} describes the room`, /several participants/i.test(prompt));
+    check(`${id} describes the room`, /Who is in this conversation/i.test(prompt));
     check(`${id} names the handle`, /@windows/.test(prompt));
   }
 }
