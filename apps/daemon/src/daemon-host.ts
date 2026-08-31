@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileLog } from '@wispcrew/runtime';
 import { createNodeCrypto, type HostEnvironment } from '@wispcrew/runtime';
 
 /**
@@ -65,11 +66,51 @@ export function defaultWorkspace(dataDir: string): string {
   return path.join(dataDir, 'workspace');
 }
 
+/**
+ * Bring an older profile forward when `~/.wispcrew` is new and empty.
+ *
+ * The desktop has migrated for a while; the daemon did not, and moving the
+ * default path without this meant a HEADLESS machine silently started fresh
+ * — the VPS reported one agent where its store held three, because the
+ * daemon was reading a directory that had just been created.
+ *
+ * A server is exactly where nobody is watching the first launch, so this
+ * has to be automatic and it has to be safe: it copies only into an empty
+ * directory, and never overwrites anything.
+ */
+function adoptLegacyProfile(dataDir: string): void {
+  // Anything at all means this profile is in use. Merging two profiles is a
+  // far worse outcome than not migrating.
+  if (fs.readdirSync(dataDir).length > 0) return;
+
+  const source = legacyDataDirs().find((dir) => {
+    try {
+      return dir !== dataDir && fs.existsSync(path.join(dir, 'agents.json'));
+    } catch {
+      return false;
+    }
+  });
+  if (!source) return;
+
+  try {
+    fs.cpSync(source, dataDir, { recursive: true, force: false, errorOnExist: false });
+    fileLog('[daemon] adopted the profile at', source);
+  } catch (err) {
+    // A failed migration must not stop the daemon starting. An empty profile
+    // is recoverable; a node that will not boot is not.
+    fileLog('[daemon] could not adopt', source, (err as Error).message);
+  }
+}
+
 export function daemonHost(options: { dataDir?: string; workspace?: string } = {}): HostEnvironment {
   const dataDir = options.dataDir ? path.resolve(options.dataDir) : defaultDataDir();
   const workspace = options.workspace ? path.resolve(options.workspace) : defaultWorkspace(dataDir);
 
   fs.mkdirSync(dataDir, { recursive: true });
+
+  // Only when the caller did not name a directory: an explicit --data-dir is
+  // a deliberate choice and must never be quietly filled from somewhere else.
+  if (!options.dataDir) adoptLegacyProfile(dataDir);
   fs.mkdirSync(workspace, { recursive: true });
 
   return {

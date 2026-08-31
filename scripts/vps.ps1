@@ -21,7 +21,20 @@ $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Script)) { throw "No such script: $Script" }
 
 $remote = "/tmp/_run-$(Get-Random).sh"
-scp -q $Script "${Target}:${remote}"
+
+# Copied with UNIX line endings, always.
+#
+# A script written on Windows carries CRLF, and `sh` treats the carriage
+# return as part of the last word on every line. That is invisible in an
+# editor and produces failures that look like anything but line endings:
+# a model name stored as "nvidia/nemotron-3-nano-30b-a3b\r" made every
+# request 404 while displaying correctly, and `ask Remote` answered "No
+# agent called Remote" for an agent plainly in the list.
+$unix = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($unix, ((Get-Content $Script -Raw) -replace "`r`n", "`n"))
+
+scp -q $unix "${Target}:${remote}"
+Remove-Item $unix -Force
 
 # Environment values are passed as assignments before the command rather than
 # interpolated into the script, so a key never lands in a file on the remote
