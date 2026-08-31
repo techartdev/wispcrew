@@ -6,6 +6,7 @@
  * All data lives in `useWispcrew`.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { IconSettings, IconHistory, IconTrash } from './Icons.js';
 import { useWispcrew } from './useWispcrew';
 import { Sidebar, WispMark } from './Sidebar';
 import { Chat } from './Chat';
@@ -222,6 +223,7 @@ export function App() {
             {selected && (
               <>
                 <button type="button" className="btn" onClick={() => setPanel('agent')}>
+                  <IconSettings />
                   Configure
                 </button>
                 {/* Beside Clear chat on purpose: this is where someone
@@ -231,14 +233,22 @@ export function App() {
                     void actions.listHistory().then(setHistoryPoints);
                     setPanel('history');
                   }}>
+                  <IconHistory />
                   History
                 </button>
+                {/*
+                  The only destructive control up here, so it is the only one
+                  that reads as dangerous. Marked by class rather than colour
+                  alone — `btn-danger` also carries a hover state, and colour
+                  by itself is not a signal everyone receives.
+                */}
                 <button
                   type="button"
-                  className="btn"
+                  className="btn btn-danger"
                   onClick={() => void actions.clearConversation()}
                   disabled={transcript.length === 0}
                 >
+                  <IconTrash />
                   Clear chat
                 </button>
               </>

@@ -9,6 +9,10 @@
   --bg: #0f1115;
   --bg-raised: #161a21;
   --bg-inset: #1c212a;
+  /* One step brighter than an inset surface: what a control looks like
+     under the pointer. Named rather than repeated so every hover in the
+     app moves together. */
+  --bg-hover: #242b36;
   --border: #262c37;
   --border-strong: #333b49;
   --text: #e6e9ef;
@@ -298,6 +302,10 @@ body {
 }
 
 .foot-btn {
+  /* Icon left, label after it, so the five read as a column of labels. */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 8px;
   background: transparent;
   border: 1px solid var(--border);
@@ -306,6 +314,16 @@ body {
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.foot-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 
 .foot-btn:hover {
@@ -805,6 +823,13 @@ body {
 /* ---------------------------------------------------------------- */
 
 .btn {
+  /*
+   * `inline-flex` so an icon and its label share a baseline and one gap,
+   * instead of the label sitting wherever the glyph's line-height leaves it.
+   */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 12px;
   background: var(--bg-inset);
   border: 1px solid var(--border-strong);
@@ -814,7 +839,64 @@ body {
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
+
+  /*
+   * A button should answer the pointer. Hover, active and focus all looked
+   * identical to rest, so nothing in this app acknowledged being touched —
+   * which is most of why it read as raw.
+   */
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
+
+.btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+
+/* A press should be visible, not merely a hover that stopped. */
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/*
+ * Keyboard focus is drawn OUTSIDE the border rather than replacing it, so a
+ * focused button does not change size and shift the row it sits in.
+ */
+.btn:focus-visible,
+.foot-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Icons take the colour of the text beside them and never grow with it. */
+.btn svg,
+.foot-btn svg {
+  flex: none;
+  opacity: 0.85;
+}
+
+.btn:hover:not(:disabled) svg,
+.foot-btn:hover svg {
+  opacity: 1;
+}
+
+/*
+ * `.btn-danger` already exists further down and is red AT REST, which is
+ * right: Deny needs to be distinguishable among three buttons at a glance,
+ * not only once the pointer is over it.
+ *
+ * A duplicate rule stood here briefly, written from a guess about how the
+ * button looked rather than from reading the sheet. It restyled nothing and
+ * carried a comment that contradicted what the screen actually showed.
+ */
 
 .btn:hover:not(:disabled) {
   border-color: var(--accent);

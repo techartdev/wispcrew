@@ -12,6 +12,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import type { AgentRecord, AgentRunState, SkillRecord, TranscriptEntry } from '@wispcrew/shared';
+import { IconSend, IconStop, IconAttach, IconCheck, IconDeny } from './Icons.js';
 import { Markdown } from './Markdown';
 import { parseMention } from './mention';
 
@@ -218,6 +219,14 @@ function ApprovalCard({
           className="btn btn-primary"
           onClick={() => onResolve(entry.requestId, 'allow-once')}
         >
+          {/*
+            A tick and a cross on the two one-word answers, because this is
+            the control where a misread costs the most — it decides whether
+            a command runs. "Always allow" gets NO tick: it looks alike
+            enough to "Allow once" already, and an icon shared with the
+            single-use option would make the safer choice harder to pick out.
+          */}
+          <IconCheck />
           Allow once
         </button>
         <button
@@ -232,6 +241,7 @@ function ApprovalCard({
           className="btn btn-danger"
           onClick={() => onResolve(entry.requestId, 'deny')}
         >
+          <IconDeny />
           Deny
         </button>
       </div>
@@ -891,9 +901,15 @@ export function Chat({
             className="btn btn-attach"
             onClick={attach}
             title="Attach files"
+            aria-label="Attach files"
             disabled={busy}
           >
-            +
+            {/*
+              A paperclip instead of "+", which said nothing about what it
+              would add. This is the one control here with no visible label,
+              so it carries an aria-label and a tooltip.
+            */}
+            <IconAttach />
           </button>
           <textarea
             ref={textareaRef}
@@ -924,6 +940,7 @@ export function Chat({
           />
           {busy ? (
             <button type="button" className="btn btn-stop" onClick={onInterrupt} title="Stop (Esc)">
+              <IconStop />
               Stop
             </button>
           ) : (
@@ -936,6 +953,11 @@ export function Chat({
               // worse dead end than one that tells you what to do.
               disabled={hasProvider && !draft.trim() && pending.length === 0}
             >
+              {/*
+                No paper-plane on "Set up": it would promise a message is
+                about to be sent, and that button opens Settings instead.
+              */}
+              {hasProvider && <IconSend />}
               {hasProvider ? 'Send' : 'Set up'}
             </button>
           )}

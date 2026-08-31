@@ -5,6 +5,7 @@
  * app's primary navigation: pinned agents first, then most-recently-updated.
  */
 import { useMemo, useState } from 'react';
+import { IconClock, IconSkill, IconPlug, IconMachine, IconSettings } from './Icons.js';
 import type { AgentRecord, AgentRunState } from '@wispcrew/shared';
 
 /** Deterministic accent colour from the agent id, so avatars stay stable. */
@@ -134,19 +135,29 @@ export function Sidebar({
       </nav>
 
       <div className="sidebar-foot">
+        {/*
+          Icons sit BESIDE the labels, never instead of them. A glyph is a
+          faster second read once you know the app; it is a guess the first
+          time, and this row is how someone finds Machines at all.
+        */}
         <button type="button" className="foot-btn" onClick={() => onOpenPanel('routines')}>
+          <IconClock />
           Routines
         </button>
         <button type="button" className="foot-btn" onClick={() => onOpenPanel('skills')}>
+          <IconSkill />
           Skills
         </button>
         <button type="button" className="foot-btn" onClick={() => onOpenPanel('mcp')}>
+          <IconPlug />
           Plugins
         </button>
         <button type="button" className="foot-btn" onClick={() => onOpenPanel('nodes')}>
+          <IconMachine />
           Machines
         </button>
         <button type="button" className="foot-btn" onClick={onOpenSettings}>
+          <IconSettings />
           Settings
         </button>
       </div>
