@@ -218,6 +218,28 @@ export function nodeMethods(): MethodTable {
         mode: mode as unknown as 'directed' | 'open' | 'free',
       }),
 
+    /*
+     * Naming a room.
+     *
+     * A conversation with several agents in it is a place, and a place with
+     * no name of its own can only be described by whoever happens to be
+     * listed first — "Nudge" for a room that is really the deploy review.
+     *
+     * Announced like any other roster change, because the sidebar is where
+     * the name is read and it must not need a reload to show it.
+     */
+    renameConversation: (conversationId: never, title: never) => {
+      const trimmed = String(title ?? '').trim();
+      if (!trimmed) throw new Error('A conversation needs a name.');
+
+      const updated = updateConversation(conversationId as unknown as string, {
+        title: trimmed,
+      });
+
+      emitEngineEvent({ type: 'agents-changed', agents: listAgents() });
+      return updated;
+    },
+
     sendToRoom: (conversationId: never, text: never) => {
       /*
        * Fire and forget, like sendPrompt.

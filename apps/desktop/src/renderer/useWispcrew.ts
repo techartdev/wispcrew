@@ -427,6 +427,22 @@ export function useWispcrew() {
         }
       },
 
+      /*
+       * Give a room its own name.
+       *
+       * Takes the id explicitly rather than reading the current selection:
+       * the panel doing the renaming already knows which room it is
+       * showing, and a rename that silently applied to whatever happened to
+       * be selected would be a nasty way to lose one.
+       */
+      async renameConversation(conversationId: string, title: string) {
+        try {
+          setConversations(replaceRoom(await api.renameConversation(conversationId, title)));
+        } catch (err) {
+          fail(err);
+        }
+      },
+
       async setRoomMode(mode: string) {
         if (!selectedRef.current) return;
         try {

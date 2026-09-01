@@ -367,6 +367,14 @@ export interface WispBridge {
   ): Promise<ConversationRecord | undefined>;
 
   /** How much the room constrains who may speak. */
+  /**
+   * Give a room its own name.
+   *
+   * A conversation with several agents is a place, and a place with no name
+   * can only be described by whoever happens to be listed first — "Nudge"
+   * for a room that is really the deploy review.
+   */
+  renameConversation(conversationId: string, title: string): Promise<ConversationRecord>;
   setRoomMode(conversationId: string, mode: RoomMode): Promise<ConversationRecord | undefined>;
 
   /**

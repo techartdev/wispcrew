@@ -247,6 +247,42 @@ body {
   text-overflow: ellipsis;
 }
 
+/*
+ * A room's name, edited in place.
+ *
+ * Borderless until touched, because it is a label most of the time and a
+ * field only when somebody means it to be. A permanent input box here would
+ * suggest the name is something you are expected to fill in, when the
+ * default — named after its first agent — is fine for most rooms.
+ */
+.room-title-input {
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.room-title-input::placeholder {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.room-title-input:hover {
+  border-color: var(--border);
+}
+
+.room-title-input:focus {
+  background: var(--bg);
+  border-color: var(--accent);
+  outline: none;
+}
+
 /* ---- avatars ------------------------------------------------------ */
 
 .avatar {
@@ -309,16 +345,21 @@ body {
 .avatar-stack-item {
   position: absolute;
   display: block;
-  /* A rim in the row's own colour, so the creatures separate where they
-     overlap instead of merging into one shape. */
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--bg);
 }
 
-.agent-row:hover .avatar-stack-item,
-.agent-row[aria-current='true'] .avatar-stack-item {
-  box-shadow: 0 0 0 2px var(--bg-hover);
-}
+/*
+ * NO rim between the stacked creatures.
+ *
+ * There was one — a 2px ring in the row's colour, meant to separate them
+ * where they overlap. It was drawn as a CIRCLE around shapes that are not
+ * all circles (there is a bean, a pebble and a rounded square), so instead
+ * of outlining the creature in front it cut a dark arc across the one
+ * behind. Reported on sight.
+ *
+ * Nothing replaces it. The drop shadow each creature already carries does
+ * the separating, and it follows the actual silhouette because it is
+ * applied to the drawing rather than to the box around it.
+ */
 
 /*
  * "with @linux, @windows" — a room, not a description.

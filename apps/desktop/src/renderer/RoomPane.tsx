@@ -11,7 +11,7 @@
  * are already listed. Nothing here invents a status the engine cannot
  * supply — see the note on `describeState` below.
  */
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import type { AgentRecord, AgentRunState, ConversationRecord, RoutineRecord } from '@wispcrew/shared';
 
 /**
@@ -82,6 +82,7 @@ export function RoomPane({
   runStates,
   onMention,
   onOpenRoutines,
+  onRename,
   onClose,
 }: {
   room: ConversationRecord;
@@ -90,8 +91,25 @@ export function RoomPane({
   runStates: Record<string, AgentRunState>;
   onMention(handle: string): void;
   onOpenRoutines(): void;
+  onRename(title: string): void;
   onClose(): void;
 }) {
+  /*
+   * The name being edited, kept locally so typing is not fighting a round
+   * trip. Reset whenever a different room is shown, or the field would
+   * carry the previous room's half-typed name into this one.
+   */
+  const [draftTitle, setDraftTitle] = useState(room.title ?? '');
+  useEffect(() => setDraftTitle(room.title ?? ''), [room.id, room.title]);
+
+  const commitTitle = () => {
+    const next = draftTitle.trim();
+    // Nothing to do, and an empty name is not a name: fall back rather than
+    // save a room called "".
+    if (!next) return setDraftTitle(room.title ?? '');
+    if (next !== room.title) onRename(next);
+  };
+
   const members = useMemo(
     () => (room.participants ?? []).filter((p) => p.kind === 'agent'),
     [room],
@@ -136,6 +154,38 @@ export function RoomPane({
           ›
         </button>
       </div>
+
+      {/*
+        A room with company can be named.
+        
+        A conversation with several agents is a place, and a place described
+        only by whichever agent is listed first reads as that agent: "Nudge"
+        for a room that is really the deploy review, identical in the
+        sidebar to the row for Nudge alone.
+        
+        Offered only for a shared room. Renaming a one-to-one chat would be
+        renaming the agent by another route, and two ways to change one name
+        is how they end up disagreeing.
+      */}
+      {members.length > 1 && (
+        <input
+          className="room-title-input"
+          value={draftTitle}
+          placeholder="Name this room…"
+          aria-label="Room name"
+          onChange={(e) => setDraftTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.currentTarget.blur();
+            } else if (e.key === 'Escape') {
+              // Abandon the edit rather than commit half a name.
+              setDraftTitle(room.title ?? '');
+              e.currentTarget.blur();
+            }
+          }}
+        />
+      )}
 
       <ul className="room-pane-members">
         {members.map((member) => {

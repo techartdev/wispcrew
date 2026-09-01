@@ -51,6 +51,13 @@ interface SidebarProps {
    * private chat and a group can be noticed without opening each one.
    */
   companions?: Record<string, { id: string; handle: string }[]>;
+  /**
+   * A room's own name, when the user has given it one.
+   *
+   * Absent for every conversation still called after its first agent, which
+   * is the default and most of them.
+   */
+  roomTitles?: Record<string, string>;
   onSelect(id: string): void;
   onCreate(): void;
   onOpenSettings(): void;
@@ -60,6 +67,7 @@ interface SidebarProps {
 export function Sidebar({
   agents,
   companions,
+  roomTitles,
   selectedId,
   runStates,
   onSelect,
@@ -142,6 +150,7 @@ export function Sidebar({
           // Empty for the ordinary one-to-one chat, which is most of them.
           const roomMates = companions?.[agent.id] ?? [];
           const roomMateIds = roomMates.map((m) => m.id);
+          const roomTitle = roomTitles?.[agent.id];
           /*
            * Any state but idle counts as occupied for the avatar's motion.
            * The exact state is already named by the dot beside it, and a
@@ -182,7 +191,19 @@ export function Sidebar({
               <span className="agent-meta">
                 <span className="agent-name">
                   {agent.pinned && <span className="pin-dot" title="Pinned" />}
-                  {agent.name}
+                  {/*
+                    A named room wears its own name.
+                    
+                    Otherwise a room is described by whichever agent happens
+                    to be listed first — "Nudge" for a conversation that is
+                    really the deploy review, and identical to the row for
+                    Nudge alone.
+                    
+                    Only when the user has actually named it: an unnamed
+                    room still shows the agent, which is the truthful
+                    default and what a one-to-one chat always shows.
+                  */}
+                  {roomTitle ?? agent.name}
                 </span>
                 {/*
                   Who else is in there, rather than a count.

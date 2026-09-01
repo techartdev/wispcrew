@@ -172,6 +172,33 @@ export function App() {
   }, [state.conversations]);
 
   /*
+   * Rooms the user has actually named.
+   *
+   * A conversation's title defaults to its first agent's name, so showing
+   * every title would change nothing for most rows and would go stale the
+   * moment that agent was renamed. Only a title that DIFFERS is a name
+   * somebody chose.
+   *
+   * Declared up here with the other memos, above the `if (!ready)` early
+   * return. Placed below it, this hook ran only on some renders — React
+   * counts hooks by call order, so the first paint after startup rendered
+   * more than the boot screen had and the whole window went blank. It
+   * typechecked perfectly; only launching the app showed it.
+   */
+  const roomTitles = useMemo(() => {
+    const map: Record<string, string> = {};
+
+    for (const conversation of state.conversations) {
+      const owner = agents.find((a) => a.id === conversation.id);
+      if (conversation.title && conversation.title !== owner?.name) {
+        map[conversation.id] = conversation.title;
+      }
+    }
+
+    return map;
+  }, [state.conversations, agents]);
+
+  /*
    * A mention the composer should insert.
    *
    * Clicking a participant types their handle rather than sending anything:
@@ -236,6 +263,7 @@ export function App() {
       <Sidebar
         agents={agents}
         companions={companions}
+        roomTitles={roomTitles}
         selectedId={selectedId}
         runStates={runStates}
         onSelect={actions.selectAgent}
@@ -475,6 +503,7 @@ export function App() {
             routines={routines}
             runStates={runStates}
             onMention={(handle) => setDraftMention(`@${handle}`)}
+            onRename={(title) => void actions.renameConversation(room.id, title)}
             onOpenRoutines={() => setPanel('routines')}
             onClose={() => setPaneOpen(false)}
           />

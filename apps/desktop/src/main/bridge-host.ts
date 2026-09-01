@@ -1303,6 +1303,22 @@ export function registerBridge(context: BridgeContext): void {
   });
 
   /*
+   * Naming a room.
+   *
+   * A conversation with several agents is a place, and a place with no name
+   * can only be described by whoever happens to be listed first — "Nudge"
+   * for a room that is really the deploy review.
+   */
+  handle('renameConversation', (conversationId: string, title: string) => {
+    const trimmed = String(title ?? '').trim();
+    if (!trimmed) throw new Error('A conversation needs a name.');
+
+    const updated = updateConversation(conversationId, { title: trimmed });
+    emitEvent({ type: 'agents-changed', agents: store.listAgents() });
+    return updated;
+  });
+
+  /*
    * Reached only for a room this machine owns.
    *
    * A room belonging to an agent on another node is routed there by

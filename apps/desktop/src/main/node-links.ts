@@ -54,6 +54,7 @@ const AGENT_SCOPED = new Set([
   'addRoomAgent',
   'removeRoomParticipant',
   'setRoomMode',
+  'renameConversation',
   'listTurns',
   'cancelTurn',
 ]);
