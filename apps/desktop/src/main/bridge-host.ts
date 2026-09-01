@@ -1181,11 +1181,27 @@ export function registerBridge(context: BridgeContext): void {
 
   handle('listSkills', () => store.listSkills());
 
-  handle('createSkill', (patch: Partial<SkillRecord>) => store.createSkill(patch));
+  /*
+   * Each of these ANNOUNCES the new list.
+   *
+   * There was no `skills-changed` event at all — routines, MCP, grants,
+   * agents and OAuth each had one — so the Skills panel could only be
+   * refreshed by reloading the window. The panel was never the problem.
+   */
+  const announceSkills = <T>(result: T): T => {
+    emitEvent({ type: 'skills-changed', skills: store.listSkills() });
+    return result;
+  };
 
-  handle('updateSkill', (id: string, patch: Partial<SkillRecord>) => store.updateSkill(id, patch));
+  handle('createSkill', (patch: Partial<SkillRecord>) =>
+    announceSkills(store.createSkill(patch)),
+  );
 
-  handle('deleteSkill', (id: string) => store.deleteSkill(id));
+  handle('updateSkill', (id: string, patch: Partial<SkillRecord>) =>
+    announceSkills(store.updateSkill(id, patch)),
+  );
+
+  handle('deleteSkill', (id: string) => announceSkills(store.deleteSkill(id)));
 
   /* -- misc ---------------------------------------------------- */
 

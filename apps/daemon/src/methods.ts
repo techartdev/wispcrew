@@ -141,6 +141,40 @@ export function nodeMethods(): MethodTable {
     return result;
   };
 
+  /*
+   * The same for everything else the daemon can change.
+   *
+   * The desktop bridge emitted five kinds of change event and the daemon
+   * emitted none — while being the host that actually answers these calls.
+   * Every panel therefore went stale after its own edits: a deleted routine
+   * stayed in the list until the window was reloaded, and so did a skill, a
+   * plugin and a revoked permission.
+   *
+   * Wrapped rather than emitted inside each handler, so a method added
+   * later is missing its announcement VISIBLY at the call site instead of
+   * silently in a body — which is how all of these came to be missing.
+   */
+  const announceRoutines = <T>(result: T): T => {
+    emitEngineEvent({ type: 'routines-changed', routines: listRoutines() });
+    return result;
+  };
+
+  const announceSkills = <T>(result: T): T => {
+    emitEngineEvent({ type: 'skills-changed', skills: listSkills() });
+    return result;
+  };
+
+  const announceGrants = <T>(result: T): T => {
+    emitEngineEvent({ type: 'grants-changed', grants: listGrants() });
+    return result;
+  };
+
+  const announceMcp = async <T>(result: Promise<T>): Promise<T> => {
+    const value = await result;
+    emitEngineEvent({ type: 'mcp-changed', servers: await mcpStatuses() });
+    return value;
+  };
+
   return {
     /* agents */
     listAgents: () => listAgents(),
@@ -447,23 +481,32 @@ export function nodeMethods(): MethodTable {
       return settingsView();
     },
 
-    /* routines */
+    /*
+     * routines
+     *
+     * EVERY mutation announces. This was the systemic bug behind "I had to
+     * reload": the desktop emitted five kinds of change event, the daemon
+     * emitted none — and the daemon is what answers these calls. So a
+     * routine was deleted from the store, the call returned successfully,
+     * and the panel went on showing it until the window was reloaded.
+     */
     listRoutines: () => listRoutines(),
-    createRoutine: (patch: never) => createRoutine(patch),
-    updateRoutine: (id: never, patch: never) => updateRoutine(id, patch),
-    deleteRoutine: (id: never) => deleteRoutine(id),
+    createRoutine: (patch: never) => announceRoutines(createRoutine(patch)),
+    updateRoutine: (id: never, patch: never) => announceRoutines(updateRoutine(id, patch)),
+    deleteRoutine: (id: never) => announceRoutines(deleteRoutine(id)),
     runRoutineNow: (id: never) => runRoutineNow(id),
 
     /* skills */
     listSkills: () => listSkills(),
-    createSkill: (patch: never) => createSkill(patch),
-    updateSkill: (id: never, patch: never) => updateSkill(id, patch),
-    deleteSkill: (id: never) => deleteSkill(id),
+    createSkill: (patch: never) => announceSkills(createSkill(patch)),
+    updateSkill: (id: never, patch: never) => announceSkills(updateSkill(id, patch)),
+    deleteSkill: (id: never) => announceSkills(deleteSkill(id)),
 
     /* permissions */
     listToolGrants: () => listGrants(),
-    revokeToolGrant: (agentId: never, toolName: never) => revokeGrant(agentId, toolName),
-    revokeAllToolGrants: () => revokeAll(),
+    revokeToolGrant: (agentId: never, toolName: never) =>
+      announceGrants(revokeGrant(agentId, toolName)),
+    revokeAllToolGrants: () => announceGrants(revokeAll()),
 
     /* mcp — servers run on the node, so their lifecycle belongs here */
     listMcpServers: () => mcpStatuses(),
@@ -473,7 +516,7 @@ export function nodeMethods(): MethodTable {
       };
       const servers = [...(settings.mcpServers ?? []), server];
       writeSettings(host().dataDir, { mcpServers: servers } as never);
-      return syncMcpServers({ ...settings, mcpServers: servers } as never);
+      return announceMcp(syncMcpServers({ ...settings, mcpServers: servers } as never));
     },
     removeMcpServer: async (name: never) => {
       const settings = readSettings(host().dataDir, defaultSettings()) as {
@@ -481,7 +524,7 @@ export function nodeMethods(): MethodTable {
       };
       const servers = (settings.mcpServers ?? []).filter((s) => s.name !== name);
       writeSettings(host().dataDir, { mcpServers: servers } as never);
-      return syncMcpServers({ ...settings, mcpServers: servers } as never);
+      return announceMcp(syncMcpServers({ ...settings, mcpServers: servers } as never));
     },
 
     /* subscription sign-in state; the tokens themselves never leave the node */

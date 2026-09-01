@@ -235,6 +235,9 @@ export function useWispcrew() {
         case 'mcp-changed':
           setMcpServers(event.servers);
           return;
+        case 'skills-changed':
+          setSkills(event.skills);
+          return;
         case 'routines-changed':
           setRoutines(event.routines);
           return;

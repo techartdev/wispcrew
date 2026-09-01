@@ -59,6 +59,7 @@ export type BridgeEvent =
   | { type: 'mcp-changed'; servers: McpServerStatus[] }
   /** A routine started or finished. */
   | { type: 'routines-changed'; routines: RoutineRecord[] }
+  | { type: 'skills-changed'; skills: SkillRecord[] }
   /** Standing tool permissions changed (granted, revoked, agent deleted). */
   | { type: 'grants-changed'; grants: ToolGrant[] }
   /** A subscription sign-in was added, refreshed or removed. */

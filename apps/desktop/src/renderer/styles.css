@@ -931,8 +931,22 @@ body {
 .btn-attach {
   flex: none;
   width: 34px;
-  padding: 6px 0;
-  font-size: 17px;
+
+  /*
+   * Centred properly now that it holds a drawing rather than a "+".
+   *
+   * `padding: 6px 0` plus a font-size centred a TEXT glyph; an inline SVG
+   * sits on the text baseline instead, which left it a little low and a
+   * little left of the middle of its own button. Reported on sight.
+   *
+   * `.btn` already lays out with inline-flex and a gap — the gap is what
+   * pushed it off-centre, since there is no label for it to separate.
+   */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 6px;
   line-height: 1;
 }
 
