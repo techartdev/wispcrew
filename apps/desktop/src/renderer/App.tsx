@@ -503,6 +503,7 @@ export function App() {
             routines={routines}
             runStates={runStates}
             onMention={(handle) => setDraftMention(`@${handle}`)}
+            onConfigure={(id) => { actions.selectAgent(id); setPanel('agent'); }}
             onRename={(title) => void actions.renameConversation(room.id, title)}
             onOpenRoutines={() => setPanel('routines')}
             onClose={() => setPaneOpen(false)}

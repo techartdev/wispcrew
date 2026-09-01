@@ -47,6 +47,21 @@
  */
 const RETRYABLE = new Set([404, 429, 500, 502, 503, 504]);
 
+/**
+ * How many attempts a 404 gets, as against the rest.
+ *
+ * It is retryable because a busy model answers that way — but it is ALSO
+ * how a provider says "that model is not mine", which never changes. Asking
+ * NVIDIA for `gpt-5.6-terra` returns 404 and always will, and an agent
+ * whose provider and model come from different vendors then spends the
+ * whole retry schedule before saying anything. Measured after 404 was made
+ * retryable: such an agent sat silent long enough to look wedged.
+ *
+ * One extra attempt covers a model that is merely busy. Past that, the
+ * answer is not going to be different.
+ */
+const NOT_FOUND_ATTEMPTS = 2;
+
 export interface RetryOptions {
   /** Attempts after the first. Default 3. */
   maxRetries?: number;
@@ -141,7 +156,17 @@ export async function fetchWithRetry(
 
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(input, init);
-    if (res.ok || !isRetryableStatus(res.status) || attempt >= maxRetries) return res;
+
+    /*
+     * A 404 gets fewer attempts than the rest — see `NOT_FOUND_ATTEMPTS`.
+     * It covers a busy model, but it is also how a provider says "not
+     * mine", and an agent configured with a model from another vendor
+     * should say so quickly rather than sitting through the full schedule
+     * looking wedged.
+     */
+    const ceiling = res.status === 404 ? Math.min(maxRetries, NOT_FOUND_ATTEMPTS) : maxRetries;
+
+    if (res.ok || !isRetryableStatus(res.status) || attempt >= ceiling) return res;
 
     // The server's own advice wins when it gives any; NVIDIA's free tier
     // gives none, hence the fallback schedule.

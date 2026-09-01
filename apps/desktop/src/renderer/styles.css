@@ -283,6 +283,34 @@ body {
   outline: none;
 }
 
+/*
+ * The per-member cog, revealed on hover.
+ *
+ * Always visible, five of these would compete with the names they sit
+ * beside — the list is mostly read, not acted on. Kept in the layout at all
+ * times so nothing shifts when it appears, and always reachable by keyboard
+ * regardless of hover, because "hover to discover" is not a route everyone
+ * has.
+ */
+.room-pane-member-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.room-pane-configure {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.room-pane-member-row:hover .room-pane-configure,
+.room-pane-configure:focus-visible {
+  opacity: 1;
+}
+
 /* ---- avatars ------------------------------------------------------ */
 
 .avatar {

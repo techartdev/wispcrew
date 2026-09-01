@@ -12,6 +12,7 @@
  * supply — see the note on `describeState` below.
  */
 import { useMemo, useState, useEffect } from 'react';
+import { IconSettings } from './Icons.js';
 import type { AgentRecord, AgentRunState, ConversationRecord, RoutineRecord } from '@wispcrew/shared';
 
 /**
@@ -83,6 +84,7 @@ export function RoomPane({
   onMention,
   onOpenRoutines,
   onRename,
+  onConfigure,
   onClose,
 }: {
   room: ConversationRecord;
@@ -92,6 +94,8 @@ export function RoomPane({
   onMention(handle: string): void;
   onOpenRoutines(): void;
   onRename(title: string): void;
+  /** Open a particular member's own settings. */
+  onConfigure(agentId: string): void;
   onClose(): void;
 }) {
   /*
@@ -193,7 +197,7 @@ export function RoomPane({
           const status = describeState(runStates[member.id]);
 
           return (
-            <li key={member.id}>
+            <li key={member.id} className="room-pane-member-row">
               {/*
                 Clicking a member writes their handle into the composer.
                 Addressing is how a room works, and hunting for the exact
@@ -209,6 +213,27 @@ export function RoomPane({
                 <span className={`room-pane-dot ${status.tone}`} aria-hidden="true" />
                 <span className="room-pane-name">{nameOf(member.id)}</span>
                 <span className="room-pane-status">{status.label}</span>
+              </button>
+
+              {/*
+                Configure THIS member, from here.
+                
+                A room is rooted at one agent, so the Configure button in
+                the header always opened that agent's settings — and the
+                only way to reach a room-mate's was to leave the room, find
+                its own conversation in the sidebar, configure it there, and
+                come back. For the commonest reason anyone opens this panel
+                — "why is that one not answering" — that is a long walk to
+                a checkbox.
+              */}
+              <button
+                type="button"
+                className="icon-btn room-pane-configure"
+                onClick={() => onConfigure(member.id)}
+                title={`Configure ${nameOf(member.id)}`}
+                aria-label={`Configure ${nameOf(member.id)}`}
+              >
+                <IconSettings />
               </button>
             </li>
           );
