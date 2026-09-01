@@ -149,7 +149,12 @@ export function App() {
    * a room holding Nudge and Local Test showed a row saying "Nudge".
    */
   const companions = useMemo(() => {
-    const map: Record<string, string[]> = {};
+    /*
+     * The id AND the handle. The id seeds each room-mate's avatar; the
+     * handle is what the row shows. Carrying handles alone left the stacked
+     * avatar with nothing stable to draw the other members from.
+     */
+    const map: Record<string, { id: string; handle: string }[]> = {};
 
     for (const conversation of state.conversations) {
       const members = conversation.participants.filter((p) => p.kind === 'agent');
@@ -157,7 +162,9 @@ export function App() {
       if (members.length < 2) continue;
 
       for (const self of members) {
-        map[self.id] = members.filter((p) => p.id !== self.id).map((p) => p.handle);
+        map[self.id] = members
+          .filter((p) => p.id !== self.id)
+          .map((p) => ({ id: p.id, handle: p.handle }));
       }
     }
 

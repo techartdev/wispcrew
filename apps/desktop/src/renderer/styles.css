@@ -247,6 +247,79 @@ body {
   text-overflow: ellipsis;
 }
 
+/* ---- avatars ------------------------------------------------------ */
+
+.avatar {
+  flex: none;
+  display: block;
+  /* Lifts the creature off the row without drawing a border around it. */
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+/*
+ * Breathing, while an agent is occupied.
+ *
+ * The honest version of a "typing" indicator: it says the agent is busy
+ * without claiming to know that words are being produced — which is not
+ * true for most of a turn, where it may be running a tool or waiting on a
+ * provider.
+ *
+ * Slow and small on purpose. A list of animated avatars is a list nobody
+ * can read, and this sits beside text somebody is trying to scan.
+ */
+@keyframes avatar-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.07);
+  }
+}
+
+.avatar-busy {
+  animation: avatar-breathe 1.9s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/*
+ * Somebody who does not want motion should not get it. `prefers-reduced-
+ * motion` is a real setting people turn on for real reasons, and a
+ * decorative pulse is exactly what it is meant to stop.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .avatar-busy {
+    animation: none;
+  }
+}
+
+/*
+ * Several agents as one avatar, for a shared room.
+ *
+ * Overlapped rather than tiled: at 30 pixels a two-by-two of quarter-sized
+ * creatures is four smudges, while two overlapping ones still read as two —
+ * and as "more than one" even when they do not.
+ */
+.avatar-stack {
+  flex: none;
+  position: relative;
+  display: block;
+}
+
+.avatar-stack-item {
+  position: absolute;
+  display: block;
+  /* A rim in the row's own colour, so the creatures separate where they
+     overlap instead of merging into one shape. */
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.agent-row:hover .avatar-stack-item,
+.agent-row[aria-current='true'] .avatar-stack-item {
+  box-shadow: 0 0 0 2px var(--bg-hover);
+}
+
 /*
  * "with @linux, @windows" — a room, not a description.
  *

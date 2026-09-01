@@ -6,6 +6,7 @@
  */
 import { useMemo, useState } from 'react';
 import { IconPlus, IconClock, IconSkill, IconPlug, IconMachine, IconSettings } from './Icons.js';
+import { Avatar, AvatarStack } from './Avatar.js';
 import type { AgentRecord, AgentRunState } from '@wispcrew/shared';
 
 /** Deterministic accent colour from the agent id, so avatars stay stable. */
@@ -49,7 +50,7 @@ interface SidebarProps {
    * conversation at once, so it is the only place the difference between a
    * private chat and a group can be noticed without opening each one.
    */
-  companions?: Record<string, string[]>;
+  companions?: Record<string, { id: string; handle: string }[]>;
   onSelect(id: string): void;
   onCreate(): void;
   onOpenSettings(): void;
@@ -140,6 +141,14 @@ export function Sidebar({
           const state = runStates[agent.id] ?? 'idle';
           // Empty for the ordinary one-to-one chat, which is most of them.
           const roomMates = companions?.[agent.id] ?? [];
+          const roomMateIds = roomMates.map((m) => m.id);
+          /*
+           * Any state but idle counts as occupied for the avatar's motion.
+           * The exact state is already named by the dot beside it, and a
+           * creature that breathes differently for "thinking" and "working"
+           * would be inventing a distinction nobody asked to see.
+           */
+          const active = state !== 'idle';
           return (
             <button
               key={agent.id}
@@ -153,13 +162,23 @@ export function Sidebar({
                   : `${agent.name}, ${state === 'awaiting-approval' ? 'needs approval' : state}`
               }
             >
-              <span
-                className="agent-avatar"
-                style={{ background: avatarColor(agent) }}
-                aria-hidden="true"
-              >
-                {initials(agent.name)}
-              </span>
+              {/*
+                A creature rather than initials.
+                
+                "Local Test" and "Local Infrastructure Eye" both rendered a
+                grey pill with two letters in the same place — nearly
+                indistinguishable in a list that is scanned far more often
+                than it is read. A shape and a colour are told apart in
+                peripheral vision; two letters are not.
+                
+                Seeded by the AGENT ID, not the name, so renaming an agent
+                does not hand it a new face.
+              */}
+              {roomMates.length > 0 ? (
+                <AvatarStack seeds={[agent.id, ...roomMateIds]} busy={active} />
+              ) : (
+                <Avatar seed={agent.id} busy={active} />
+              )}
               <span className="agent-meta">
                 <span className="agent-name">
                   {agent.pinned && <span className="pin-dot" title="Pinned" />}
@@ -177,7 +196,7 @@ export function Sidebar({
                 */}
                 {roomMates.length > 0 ? (
                   <span className="agent-sub agent-room">
-                    with {roomMates.map((h) => `@${h}`).join(', ')}
+                    with {roomMates.map((m) => `@${m.handle}`).join(', ')}
                   </span>
                 ) : (
                   agent.description && (
