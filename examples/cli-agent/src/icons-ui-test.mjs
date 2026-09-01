@@ -142,6 +142,19 @@ console.log('\n[styles] the classes an icon row needs actually exist');
 
   // `--bg-hover` was introduced by this change and used before it existed.
   check('--bg-hover is defined', css.includes('--bg-hover:'));
+
+  /*
+   * The OPEN list of a <select> is drawn by the platform, not the page.
+   *
+   * Making the select transparent to fit the room bar left its options
+   * inheriting a light colour onto the popup's own white background:
+   * "Directed" and "Free" were near-invisible, and only the highlighted row
+   * could be read. Options need BOTH halves stated — inheriting one and
+   * hoping for the other is exactly what broke it.
+   */
+  const option = css.slice(css.indexOf('.room-mode option'));
+  check('select options set their own colour', /\.room-mode option \{[^}]*color:/s.test(option));
+  check('and their own background', /\.room-mode option \{[^}]*background:/s.test(option));
 }
 
 console.log('\n[no duplicates] one rule per selector');

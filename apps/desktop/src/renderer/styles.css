@@ -1274,6 +1274,22 @@ body {
   cursor: pointer;
 }
 
+/*
+ * The OPEN list, which is drawn by the platform and not by the page.
+ *
+ * Making the select transparent to fit the row left its options inheriting
+ * a light `color` onto the popup's own white background: "Directed" and
+ * "Free" were near-invisible, and only the highlighted row could be read.
+ *
+ * Options are one of the few parts of a native control Chromium will let a
+ * page paint, so they are given both halves explicitly rather than
+ * inheriting one and hoping for the other.
+ */
+.room-mode option {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
 /* The select's own ring would be drawn around a transparent box, so the
    wrapper wears it instead. */
 .room-mode:focus {
