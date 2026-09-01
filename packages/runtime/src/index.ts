@@ -23,6 +23,7 @@ export * from './conversations.js';
 export * from './conversation-edit.js';
 export * from './test-connection.js';
 export * from './model-catalogue.js';
+export * from './config-check.js';
 export * from './approval-policy.js';
 export * from './approval-clients.js';
 export * from './floor.js';

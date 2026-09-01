@@ -21,6 +21,18 @@ import { readSecrets } from './secrets-store.js';
  */
 const cache = new Map<string, CatalogueEntry[]>();
 
+/**
+ * What this process already knows, without asking anyone.
+ *
+ * Used to decide whether a configured model is impossible before a turn is
+ * spent on it. A catalogue that has never been fetched proves nothing, and
+ * a first turn must not be blocked on a network call to find out — so this
+ * returns null rather than fetching.
+ */
+export function listCachedModels(presetId: string): CatalogueEntry[] | null {
+  return cache.get(presetId) ?? null;
+}
+
 export async function listProviderModels(
   presetId: string,
   options: { refresh?: boolean } = {},

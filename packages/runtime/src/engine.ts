@@ -36,6 +36,7 @@ import {
 import { ToolRegistry, readSkillTool } from '@wispcrew/tools';
 
 import * as store from './store.js';
+import { checkModelPairing } from './config-check.js';
 import { claimTurn, updateTurn } from './turns.js';
 import { host } from './host.js';
 import { getConversation } from './conversations.js';
@@ -660,6 +661,38 @@ export async function runPrompt(
   const roomMembers = (getConversation(outputId)?.participants ?? [])
     .filter((p) => p.kind === 'agent')
     .map((p) => p.id);
+
+  /*
+   * Refuse a turn that cannot possibly work, BEFORE spending anything.
+   *
+   * An agent created through the CLI had its provider inherited (NVIDIA)
+   * and its model set to `gpt-5.6-terra`, which is OpenAI's. Every turn was
+   * a request NVIDIA answers 404 to and always will — retried, then
+   * reported as a provider error, in a room where other agents were
+   * spending real tokens waiting on it.
+   *
+   * Narrow on purpose: this fires only when the provider publishes a model
+   * list, this process has already fetched it, and the configured model is
+   * absent from it. Anything less certain proceeds, because blocking a
+   * working configuration would be worse than the failure it prevents.
+   */
+  const problem = checkModelPairing(
+    agent?.presetId ?? settings.presetId,
+    agent?.model ?? settings.model,
+  );
+  if (problem) {
+    pushTranscript(outputId, {
+      kind: 'notice',
+      id: store.newId('note'),
+      level: 'error',
+      text: problem.message,
+      createdAt: Date.now(),
+    });
+    emitEngineEvent({ type: 'run-state', agentId: outputId, state: 'idle' });
+    // No reply text: the notice above is the whole outcome, and inventing
+    // an assistant message here would put the error in the agent's mouth.
+    return '';
+  }
 
   const chain = delegation ?? rootContext(resolved.policy, agentId, roomMembers);
   const effectivePolicy = delegation ? delegation.policy : resolved.policy;
