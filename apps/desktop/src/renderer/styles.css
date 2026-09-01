@@ -247,6 +247,19 @@ body {
   text-overflow: ellipsis;
 }
 
+/*
+ * "with @linux, @windows" — a room, not a description.
+ *
+ * Brighter than a description on purpose. The sidebar is the only place
+ * somebody sees every conversation at once, so it is the only place a group
+ * can be told from a private chat without opening it — and a row reading
+ * "Nudge" for a room holding Nudge and Local Test said nothing at all.
+ */
+.agent-room {
+  color: var(--accent);
+  opacity: 0.85;
+}
+
 .pin-dot {
   width: 5px;
   height: 5px;

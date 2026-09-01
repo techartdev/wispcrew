@@ -41,6 +41,15 @@ interface SidebarProps {
   agents: AgentRecord[];
   selectedId: string | null;
   runStates: Record<string, AgentRunState>;
+  /**
+   * Handles of the OTHER agents sharing each agent's room.
+   *
+   * Keyed by agent id, and absent for the ordinary one-to-one case, which
+   * is most of them. The sidebar is the only place a person sees every
+   * conversation at once, so it is the only place the difference between a
+   * private chat and a group can be noticed without opening each one.
+   */
+  companions?: Record<string, string[]>;
   onSelect(id: string): void;
   onCreate(): void;
   onOpenSettings(): void;
@@ -49,6 +58,7 @@ interface SidebarProps {
 
 export function Sidebar({
   agents,
+  companions,
   selectedId,
   runStates,
   onSelect,
@@ -128,6 +138,8 @@ export function Sidebar({
       <nav className="agent-list" aria-label="Agents">
         {visible.map((agent) => {
           const state = runStates[agent.id] ?? 'idle';
+          // Empty for the ordinary one-to-one chat, which is most of them.
+          const roomMates = companions?.[agent.id] ?? [];
           return (
             <button
               key={agent.id}
@@ -153,8 +165,24 @@ export function Sidebar({
                   {agent.pinned && <span className="pin-dot" title="Pinned" />}
                   {agent.name}
                 </span>
-                {agent.description && (
-                  <span className="agent-sub">{agent.description.slice(0, 48)}</span>
+                {/*
+                  Who else is in there, rather than a count.
+                  
+                  "+1" says a group exists but not whether it is the one you
+                  want; the handles are what somebody is actually scanning
+                  for, and they fit in the space the description used.
+                  
+                  It REPLACES the description, because the description is
+                  the same on every visit and the company is not.
+                */}
+                {roomMates.length > 0 ? (
+                  <span className="agent-sub agent-room">
+                    with {roomMates.map((h) => `@${h}`).join(', ')}
+                  </span>
+                ) : (
+                  agent.description && (
+                    <span className="agent-sub">{agent.description.slice(0, 48)}</span>
+                  )
                 )}
               </span>
               {state !== 'idle' && (

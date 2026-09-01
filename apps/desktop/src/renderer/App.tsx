@@ -137,6 +137,34 @@ export function App() {
   );
 
   /*
+   * The other agents sharing each agent's room.
+   *
+   * Derived here because the sidebar has agents but not conversations, and
+   * handing a list component whole conversations would give it the job of
+   * understanding rooms.
+   *
+   * The sidebar is the only place a person sees every conversation at once,
+   * so it is the only place the difference between a private chat and a
+   * group can be noticed without opening each one — which it could not be:
+   * a room holding Nudge and Local Test showed a row saying "Nudge".
+   */
+  const companions = useMemo(() => {
+    const map: Record<string, string[]> = {};
+
+    for (const conversation of state.conversations) {
+      const members = conversation.participants.filter((p) => p.kind === 'agent');
+      // One agent is not company; that is the ordinary chat.
+      if (members.length < 2) continue;
+
+      for (const self of members) {
+        map[self.id] = members.filter((p) => p.id !== self.id).map((p) => p.handle);
+      }
+    }
+
+    return map;
+  }, [state.conversations]);
+
+  /*
    * A mention the composer should insert.
    *
    * Clicking a participant types their handle rather than sending anything:
@@ -200,6 +228,7 @@ export function App() {
     <div className="app">
       <Sidebar
         agents={agents}
+        companions={companions}
         selectedId={selectedId}
         runStates={runStates}
         onSelect={actions.selectAgent}
