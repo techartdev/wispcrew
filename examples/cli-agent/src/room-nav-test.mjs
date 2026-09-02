@@ -178,6 +178,40 @@ console.log('\n[selection] the app opens on the row at the top');
   check('and so does rooms-changed', /applyConversations\(event\.conversations\)/.test(hook));
 }
 
+console.log('\n[run state] the engine owns it, and the client does not forge it');
+{
+  /*
+   * Reported as a Stop button that stayed live after both agents in a room
+   * had finished and the panel showed them listening.
+   *
+   * `send` wrote `runStates[conversationId] = 'thinking'` to show something
+   * was happening immediately. For a one-to-one that id IS the agent's, so
+   * the engine's own `idle` cleared it. A group has a `room_…` id the
+   * engine never emits, so nothing ever cleared it — and because the room's
+   * own entry was checked first, the stale value hid the members' real
+   * states entirely.
+   */
+  check('the client never writes a conversation into runStates',
+    !/setRunStates\(\(prev\) => \(\{ \.\.\.prev, \[target\]/.test(hook),
+    'send still forges an engine state');
+
+  check('the optimistic wait is its own state', /awaitingEngine/.test(hook));
+  // Cleared by the engine speaking, so it cannot outlive the gap it covers.
+  check('cleared on a run-state', /case 'run-state':[\s\S]{0,600}clearAwaiting/.test(hook));
+  /*
+   * And on a notice, because a room can decide nobody should speak —
+   * directed mode with no mention. No agent runs, so no run-state ever
+   * arrives, and the composer would wait for an engine that had finished.
+   */
+  check('and on a notice', /kind === 'notice'\) clearAwaiting/.test(hook));
+
+  // The authoritative picture is consulted before the optimistic flag, or
+  // the flag would win over what the engine actually said.
+  check('the engine answer is preferred',
+    hook.indexOf('const own = runStates[selectedId]') <
+      hook.indexOf("awaitingEngine === selectedId ? 'thinking'"));
+}
+
 console.log('\n[ordering] the list moves when somebody talks');
 {
   /*

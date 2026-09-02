@@ -15,10 +15,22 @@
  * sequence would make the second wait on the first for no reason — they are
  * usually on different machines doing unrelated work. The transcript is
  * upserted by entry id, so interleaved streaming is already handled.
+ *
+ * ## Every entry here is PUSHED, not merely written
+ *
+ * All five used `store.upsertTranscriptEntry`, which saves and tells nobody.
+ * So a room turn's own record — the user's message, the "nobody was
+ * addressed" notice, a failed agent, a floor offer — existed on disk and
+ * appeared on screen only after a reload. The same fault as the approval
+ * card that was written but never announced, one layer out.
+ *
+ * It also stranded the composer. The client shows an optimistic "working"
+ * state until the engine says something; in a room the engine said nothing
+ * at all, so there was nothing to clear it with.
  */
 import type { ChannelId, ConversationRecord } from '@wispcrew/shared';
 import { createConversation, getConversation, recordRoomEvent, updateConversation } from './conversations.js';
-import { runPrompt } from './engine.js';
+import { pushTranscript, runPrompt } from './engine.js';
 import { fileLog } from './filelog.js';
 import { rememberAddressee, routeHumanMessage } from './floor.js';
 import * as store from './store.js';
@@ -126,7 +138,7 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
    */
   const triggerEntryId = input.entryId ?? store.newId('usr');
 
-  store.upsertTranscriptEntry(conversation.id, {
+  pushTranscript(conversation.id, {
     kind: 'message',
     id: triggerEntryId,
     role: 'user',
@@ -182,7 +194,7 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
      * a message that vanishes into a conversation with three agents in it is
      * indistinguishable from a broken app.
      */
-    store.upsertTranscriptEntry(conversation.id, {
+    pushTranscript(conversation.id, {
       kind: 'notice',
       id: store.newId('note'),
       level: 'info',
@@ -236,7 +248,7 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
    * actionable — the laptop is asleep, or the node was never paired.
    */
   for (const agent of placement.unreachable) {
-    store.upsertTranscriptEntry(conversation.id, {
+    pushTranscript(conversation.id, {
       kind: 'notice',
       id: store.newId('note'),
       level: 'error',
@@ -271,7 +283,7 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
       const error = await runRemote(nodeId, agent, text);
       if (error) {
         updateTurn(turn.id, { state: 'failed', detail: error });
-        store.upsertTranscriptEntry(conversation.id, {
+        pushTranscript(conversation.id, {
           kind: 'notice',
           id: store.newId('note'),
           level: 'error',
@@ -341,7 +353,7 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
         failures.push({ agentId: agent.id, handle: agent.handle, error: message });
         fileLog('[room] turn failed for', agent.handle, message);
 
-        store.upsertTranscriptEntry(conversation.id, {
+        pushTranscript(conversation.id, {
           kind: 'notice',
           id: store.newId('note'),
           level: 'error',

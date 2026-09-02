@@ -66,7 +66,29 @@ export function useWispcrew() {
    */
   const PENDING_PREFIX = 'pending_';
   const isPending = (entry: { id?: string }) => Boolean(entry.id?.startsWith(PENDING_PREFIX));
+  /**
+   * What the ENGINE says each agent is doing. Never written by the client.
+   *
+   * Keyed by agent id. A one-to-one conversation shares its agent's id, so
+   * it reads directly; a group has an id of its own and is answered by
+   * aggregating its members.
+   */
   const [runStates, setRunStates] = useState<Record<string, AgentRunState>>({});
+
+  /**
+   * A conversation we have sent to and not yet heard the engine about.
+   *
+   * Covers one specific gap: `sendToRoom` for an agent on another machine
+   * is a network round trip before anything is written, and without this
+   * the composer would look idle while the message was in flight.
+   *
+   * Deliberately separate from `runStates`. It used to be written into that
+   * map under the conversation id — harmless for a one-to-one, where the
+   * engine's own `idle` for the same id cleared it, and permanent for a
+   * group, whose `room_…` id the engine never emits. The Stop button stayed
+   * live after both agents had finished.
+   */
+  const [awaitingEngine, setAwaitingEngine] = useState<string | null>(null);
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [presets, setPresets] = useState<PresetView[]>([]);
   const [personas, setPersonas] = useState<PersonaView[]>([]);
@@ -118,6 +140,31 @@ export function useWispcrew() {
   }, []);
 
   /**
+   * The engine has said something about `id` — stop waiting on it.
+   *
+   * `id` is whatever the event carried: a conversation for a transcript
+   * entry, an agent for a run-state. Either settles the wait, so both are
+   * accepted and the conversation being awaited is resolved from its
+   * membership.
+   *
+   * Reads the conversation list through a ref rather than closing over it,
+   * so this callback stays stable and the event subscription is not town
+   * down and rebuilt every time a room changes.
+   */
+  const conversationsRef = useRef<ConversationRecord[]>([]);
+
+  const clearAwaiting = useCallback((id: string) => {
+    setAwaitingEngine((current) => {
+      if (!current) return current;
+      if (current === id) return null;
+
+      const room = conversationsRef.current.find((c) => c.id === current);
+      const isMember = (room?.participants ?? []).some((p) => p.id === id);
+      return isMember ? null : current;
+    });
+  }, []);
+
+  /**
    * Take a whole conversation list, and keep the selection honest.
    *
    * One function because the two must happen together. The selection used to
@@ -131,6 +178,9 @@ export function useWispcrew() {
    * the middle of the sidebar rather than the one at the top.
    */
   const applyConversations = useCallback((list: ConversationRecord[]) => {
+    // Mirrored into a ref so `clearAwaiting` can read membership without
+    // closing over the list and forcing the event subscription to rebuild.
+    conversationsRef.current = list;
     setConversations(list);
     setSelectedId((prev) => {
       if (prev && list.some((c) => c.id === prev)) return prev;
@@ -204,6 +254,19 @@ export function useWispcrew() {
     const off = api.onEvent((event: BridgeEvent) => {
       switch (event.type) {
         case 'transcript': {
+          /*
+           * A notice settles the wait, wherever it lands.
+           *
+           * A room turn can decide that NOBODY should speak — directed mode
+           * with no mention — and say so in a notice. No agent runs, so no
+           * run-state ever arrives, and without this the composer would
+           * wait for an engine that had already finished answering.
+           *
+           * Checked before the visible-conversation filter below, because
+           * the reply may arrive while the user is looking elsewhere.
+           */
+          if (event.entry.kind === 'notice') clearAwaiting(event.agentId);
+
           // Only the visible conversation is kept in renderer state; other
           // agents' entries are already persisted and load on selection.
           if (event.agentId !== selectedRef.current) return;
@@ -239,6 +302,15 @@ export function useWispcrew() {
         }
         case 'run-state':
           setRunStates((prev) => ({ ...prev, [event.agentId]: event.state }));
+          /*
+           * The engine has spoken, so the optimistic flag has done its job.
+           *
+           * Cleared on a run-state and on a room NOTICE (below), and
+           * deliberately NOT on the echo of the user's own message: that
+           * arrives immediately even when the agent lives on another
+           * machine, which is precisely the wait this flag exists to cover.
+           */
+          clearAwaiting(event.agentId);
           return;
         case 'agents-changed':
           setAgents(event.agents);
@@ -299,7 +371,7 @@ export function useWispcrew() {
       }
     });
     return off;
-  }, [api, applyConversations]);
+  }, [api, applyConversations, clearAwaiting]);
 
   /* -- transcript loading on selection --------------------------- */
 
@@ -364,21 +436,41 @@ export function useWispcrew() {
    */
   const runState: AgentRunState = useMemo(() => {
     if (!selectedId) return 'idle';
+
+    /*
+     * The engine's answer wins, always.
+     *
+     * A one-to-one shares its agent's id, so it reads straight off the map.
+     * A group has an id of its own and no state of its own: it is busy when
+     * any member is, and waiting for a decision outranks working — a header
+     * that says "working" while an approval sits unanswered hides the one
+     * state that needs the person.
+     */
     const own = runStates[selectedId];
-    if (own) return own;
+    let worst: AgentRunState = own ?? 'idle';
 
-    const room = conversations.find((c) => c.id === selectedId);
-    if (!room) return 'idle';
-
-    let worst: AgentRunState = 'idle';
-    for (const p of room.participants ?? []) {
-      if (p.kind !== 'agent') continue;
-      const s = runStates[p.id] ?? 'idle';
-      if (s === 'awaiting-approval') return s;
-      if (s !== 'idle' && worst === 'idle') worst = s;
+    if (worst !== 'awaiting-approval') {
+      const room = conversations.find((c) => c.id === selectedId);
+      for (const p of room?.participants ?? []) {
+        if (p.kind !== 'agent') continue;
+        const s = runStates[p.id] ?? 'idle';
+        if (s === 'awaiting-approval') return s;
+        if (s !== 'idle' && worst === 'idle') worst = s;
+      }
     }
-    return worst;
-  }, [selectedId, runStates, conversations]);
+
+    if (worst !== 'idle') return worst;
+
+    /*
+     * Only now the optimistic flag, and only for this conversation.
+     *
+     * It fills the gap between pressing Enter and the engine saying
+     * anything — which for an agent on another machine is a round trip. It
+     * can no longer outlive that gap, because it is not in `runStates` and
+     * the first engine event clears it.
+     */
+    return awaitingEngine === selectedId ? 'thinking' : 'idle';
+  }, [selectedId, runStates, conversations, awaitingEngine]);
 
   const actions = useMemo(
     () => ({
@@ -465,7 +557,22 @@ export function useWispcrew() {
             createdAt: Date.now(),
           } as TranscriptEntry,
         ]);
-        setRunStates((prev) => ({ ...prev, [target]: 'thinking' }));
+
+        /*
+         * Kept OUT of `runStates`, which belongs to the engine.
+         *
+         * This used to write `runStates[conversationId] = 'thinking'`. For a
+         * one-to-one that is also the agent's id, so the engine's own
+         * `idle` cleared it. In a group it is a `room_…` id the engine never
+         * emits, so nothing ever cleared it: both agents finished, the panel
+         * showed them listening, and the composer sat on "Agent is working"
+         * with a live Stop button until the window was reloaded.
+         *
+         * Separating them means the authoritative map only ever holds what
+         * the engine said, and this flag only covers the gap before it says
+         * anything.
+         */
+        setAwaitingEngine(target);
 
         try {
           /*
@@ -480,7 +587,7 @@ export function useWispcrew() {
            * than leaving a message on screen that no agent ever received.
            */
           setTranscript((prev) => prev.filter((e) => !isPending(e)));
-          setRunStates((prev) => ({ ...prev, [target]: 'idle' }));
+          setAwaitingEngine((current) => (current === target ? null : current));
           fail(err);
         }
       },

@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  addEventSink,
   addParticipant,
   createAgent,
   createNodeCrypto,
@@ -175,6 +176,48 @@ console.log('\n[failure] one agent failing does not take down the other');
   const error = loadTranscript(room.id).filter((e) => e.level === 'error').pop();
   check('the failure is reported', /could not finish/.test(error?.text ?? ''), error?.text);
   check('naming which agent', /@windows/.test(error?.text ?? ''), error?.text);
+}
+
+console.log('\n[announced] a room turn is not written silently');
+{
+  /*
+   * All five of this module's transcript writes used
+   * `store.upsertTranscriptEntry`, which saves and tells nobody. So a room
+   * turn's own record — the user's message, the "nobody was addressed"
+   * notice, a failed agent, a floor offer — existed on disk and appeared on
+   * screen only after a reload. The same fault as the approval card that
+   * was written but never announced, one layer out.
+   *
+   * It also stranded the composer: the client clears its optimistic
+   * "working" state when the engine says something, and in a room the
+   * engine said nothing at all, so the Stop button stayed live after every
+   * agent had finished.
+   */
+  const seen = [];
+  const off = addEventSink((e) => seen.push(e));
+
+  updateConversation(room.id, { lastAddressed: {} });
+  await runRoomTurn({
+    conversationId: room.id,
+    text: '@windows say something',
+    speakerId: LOCAL_HUMAN_ID,
+    run: async () => {},
+  });
+
+  off();
+
+  const transcripts = seen.filter((e) => e.type === 'transcript');
+  check('entries are announced, not just saved', transcripts.length > 0,
+    `${seen.length} event(s), none of them transcript`);
+
+  // The user's own message is the one that must always arrive: it is what
+  // replaces the optimistic placeholder on screen.
+  const userMessage = transcripts.find(
+    (e) => e.entry?.kind === 'message' && e.entry?.role === 'user',
+  );
+  check('including the message that started it', Boolean(userMessage));
+  check('addressed to the room, not an agent', userMessage?.agentId === room.id,
+    userMessage?.agentId);
 }
 
 console.log('\n[missing room] a deleted conversation is handled');
