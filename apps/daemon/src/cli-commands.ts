@@ -1137,29 +1137,50 @@ export async function contextCommand(ctx: CommandContext): Promise<Rendered> {
     messageTokens: number;
     model?: string;
     agentName?: string;
-  }>('getContextReport', [room.id]);
+  }[]>('getContextReports', [room.id]);
 
-  const approx = report.measured ? '' : '~';
-  const pct = report.fraction !== undefined ? ` (${Math.round(report.fraction * 100)}%)` : '';
+  /*
+   * One block per member, fullest first.
+   *
+   * A room has ONE history and a different answer for every agent in it:
+   * the same forty thousand tokens is a tenth of one model's window and a
+   * third of another's. A single figure would be right for at most one
+   * member, and the only question anyone asks of several meters is which
+   * one is about to become a problem.
+   */
+  const lines: string[] = [`"${room.title}"`];
 
-  return {
-    value: report,
-    lines: [
-      `"${room.title}"${report.model ? ` — ${report.model}` : ''}`,
-      `  ${approx}${report.used} of ${report.limit ?? 'an unknown'} tokens${pct}`,
-      `  system prompt  ~${report.systemTokens}`,
-      `  tools          ~${report.toolTokens}`,
-      `  messages       ~${report.messageTokens}`,
-      report.measured
-        ? '  (reported by the provider for the last turn)'
-        : '  (estimated — no turn has run yet)',
-      ...(report.limit
-        ? []
-        : // Never invent a denominator; say what would fix it instead.
-          [`  no context size is known for this model — set one with`,
-           `  wispcrew agents set "${report.agentName ?? name}" --context-window <tokens>`]),
-    ],
-  };
+  for (const r of report) {
+    const approx = r.measured ? '' : '~';
+    const pct = r.fraction !== undefined ? ` (${Math.round(r.fraction * 100)}%)` : '';
+
+    lines.push(
+      '',
+      `  ${r.agentName ?? 'agent'}${r.model ? ` — ${r.model}` : ''}`,
+      `    ${approx}${r.used} of ${r.limit ?? 'an unknown number of'} tokens${pct}`,
+      `    system prompt  ~${r.systemTokens}`,
+      `    tools          ~${r.toolTokens}`,
+      `    messages       ~${r.messageTokens}`,
+      r.measured
+        ? '    (reported by the provider for the last turn)'
+        : '    (estimated — no turn has run on this build yet)',
+    );
+
+    if (!r.limit) {
+      /*
+       * Never invent a denominator — and say what would fix it. Without a
+       * known window there is also no automatic compaction, which is the
+       * consequence worth knowing about.
+       */
+      lines.push(
+        '    no context size is known for this model, so there is no percentage',
+        '    and nothing will be compacted automatically. Set one with:',
+        `      wispcrew agents set "${r.agentName ?? name}" --context-window <tokens>`,
+      );
+    }
+  }
+
+  return { value: report, lines };
 }
 
 /**

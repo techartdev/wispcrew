@@ -1018,6 +1018,33 @@ body {
   justify-content: flex-end;
 }
 
+/*
+ * In the room panel the meter is its own line under the member.
+ *
+ * The panel is about two hundred pixels wide: a third item in the name
+ * row leaves nothing legible, and the composer's 860px column is
+ * meaningless here.
+ */
+.room-pane-member-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 4px;
+}
+
+.context-meter-inline {
+  max-width: 100%;
+  margin: 0 0 0 22px;
+  justify-content: flex-start;
+}
+
+/* Narrower than the panel, and anchored inside it. */
+.context-breakdown-narrow {
+  width: 230px;
+  right: auto;
+  left: 0;
+}
+
 .context-meter {
   display: flex;
   align-items: center;

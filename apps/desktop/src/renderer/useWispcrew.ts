@@ -92,14 +92,20 @@ export function useWispcrew() {
   const [awaitingEngine, setAwaitingEngine] = useState<string | null>(null);
 
   /**
-   * How full the selected conversation's context is.
+   * How full the selected conversation is — ONE REPORT PER AGENT.
+   *
+   * A room has a single history and a different answer for each member,
+   * and the difference is not cosmetic: two agents on the same project can
+   * run different models with different windows, so the same forty
+   * thousand tokens is a tenth of one and a third of the other. A single
+   * figure for the room would be right for at most one member.
    *
    * Fetched rather than derived: the count has to include the system
    * prompt and the tool definitions, which live in the engine and never
-   * reach the renderer. Null until the first answer arrives, so the meter
-   * can stay absent rather than showing a confident zero.
+   * reach the renderer. Empty until the first answer arrives, so a meter
+   * stays absent rather than showing a confident zero.
    */
-  const [contextReport, setContextReport] = useState<ContextReportView | null>(null);
+  const [contextReport, setContextReport] = useState<ContextReportView[]>([]);
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [presets, setPresets] = useState<PresetView[]>([]);
   const [personas, setPersonas] = useState<PersonaView[]>([]);
@@ -400,15 +406,18 @@ export function useWispcrew() {
    */
   useEffect(() => {
     if (!selectedId) {
-      setContextReport(null);
+      setContextReport([]);
       return;
     }
 
     let cancelled = false;
     void api
-      .getContextReport(selectedId)
-      .then((report) => {
-        if (!cancelled && report?.conversationId === selectedId) setContextReport(report);
+      .getContextReports(selectedId)
+      .then((reports) => {
+        if (cancelled) return;
+        // Guard against a slow answer for a conversation the user left.
+        if (reports[0] && reports[0].conversationId !== selectedId) return;
+        setContextReport(reports);
       })
       .catch(() => {
         // A measurement that fails is not worth a toast: the meter simply
@@ -658,12 +667,18 @@ export function useWispcrew() {
        * nothing happen has been told the operation failed, whatever the
        * code says.
        */
-      async compact() {
+      async compact(agentId?: string) {
         const target = selectedRef.current;
         if (!target) return;
 
         try {
-          const result = await api.compactConversation(target);
+          /*
+           * The history is shared, so this is one operation however many
+           * members a room has. `agentId` says whose model writes the
+           * summary — it costs that agent's provider and comes out in that
+           * agent's voice, so the button beside a name uses that name.
+           */
+          const result = await api.compactConversation(target, agentId);
 
           if (!result.ok) {
             setToast({ level: 'info', text: result.reason ?? 'Nothing to compact.' });

@@ -153,6 +153,70 @@ export const SUMMARY_INSTRUCTION =
   'Write it as notes for yourself, not as a report to the user. No preamble.';
 
 /**
+ * The share of the context window at which compaction happens by itself.
+ *
+ * ## Where 0.8 comes from
+ *
+ * A percentage-of-window trigger is what the field has settled on. Roo Code
+ * exposes it as a slider and documents 80% as the worked example; the Claude
+ * Agent SDK monitors usage and summarises when a configured threshold is
+ * reached; Claude Code fires on remaining headroom.
+ *
+ * The margin is the point. Compaction itself costs a model call, and the
+ * turn that triggers it still has to fit — firing at 95% leaves no room for
+ * either. Firing far too early throws away history that was costing nothing.
+ *
+ * ## Two shipped bugs this is shaped to avoid
+ *
+ * Claude Code compacted at ~76K tokens on a 1M-context model, discarding
+ * history with 92% of the window unused, because the threshold was computed
+ * against an assumed size rather than the model's real one. That is why
+ * automatic compaction here NEVER runs on a guessed window: no known limit,
+ * no automatic anything. It is the same rule as never inventing a
+ * denominator for the meter, and this is what it protects against.
+ *
+ * The opposite failure is also real — the same tool has a report of auto
+ * compaction not firing at 100%. So the check runs before every turn rather
+ * than on a schedule, and a conversation that is over the threshold and
+ * cannot be compacted says so instead of quietly failing later.
+ */
+export const AUTO_COMPACT_FRACTION = 0.8;
+
+/**
+ * Compact before a turn if this agent is close to its limit.
+ *
+ * Returns what happened, or null when nothing was needed — the caller
+ * writes the notice, because only it knows whether anyone is watching.
+ *
+ * Deliberately conservative about when it declines:
+ *  - an unknown window means no automatic action, ever (see above);
+ *  - a conversation too short to compact is left alone, because a
+ *    threshold crossed by a huge system prompt or an enormous tool list is
+ *    not fixed by summarising three messages, and trying every turn would
+ *    spend a model call each time to achieve nothing.
+ */
+export async function autoCompactIfNeeded(
+  conversationId: string,
+  /** The agent about to take a turn: its window, and its model writes it. */
+  agentId: string,
+  report: { fraction?: number; limit?: number },
+  fraction: number = AUTO_COMPACT_FRACTION,
+): Promise<CompactionResult | null> {
+  if (report.limit === undefined || report.fraction === undefined) return null;
+  if (report.fraction < fraction) return null;
+
+  const result = await compactConversation(conversationId, agentId);
+
+  /*
+   * A refusal here is not worth reporting as a failure. "Too short to
+   * compact" while over the threshold means the space is going on the
+   * prompt or the tools, which is a configuration problem a summary cannot
+   * fix — and saying so every turn would be noise.
+   */
+  return result.ok ? result : null;
+}
+
+/**
  * Replace the older part of a conversation with a summary of it.
  *
  * Returns a reason rather than throwing when there is nothing to do: "this
@@ -161,6 +225,15 @@ export const SUMMARY_INSTRUCTION =
  */
 export async function compactConversation(
   conversationId: string,
+  /**
+   * Whose model writes the summary.
+   *
+   * The history is shared, so compacting is one operation however many
+   * members a room has — but the summary costs a provider and comes out in
+   * a voice, and both belong to a particular agent. The button beside a
+   * name uses that name; omitted, it falls back to the first member.
+   */
+  agentId?: string,
   opts?: { keepRecent?: number; minEntries?: number },
 ): Promise<CompactionResult> {
   const entries = store.loadTranscript(conversationId);
@@ -201,17 +274,16 @@ export async function compactConversation(
   }
 
   /*
-   * Whose model writes it: the agent whose conversation this is, so the
-   * summary is in its own voice and costs its own provider rather than
-   * silently using somebody else's credential.
+   * Whose model writes it — never silently somebody else's credential.
    */
-  const agentId =
+  const author =
+    agentId ??
     (getConversation(conversationId)?.participants ?? []).find((p) => p.kind === 'agent')?.id ??
     conversationId;
 
   let summaryText: string;
   try {
-    summaryText = await summarise(agentId, renderForSummary(older));
+    summaryText = await summarise(author, renderForSummary(older));
   } catch (err) {
     return { ok: false, reason: `The summary could not be written: ${(err as Error).message}` };
   }

@@ -559,6 +559,8 @@ export function App() {
             agents={agents}
             routines={routines}
             runStates={runStates}
+            contextReports={state.contextReport}
+            onCompact={actions.compact}
             onMention={(handle) => setDraftMention(`@${handle}`)}
             onConfigure={openConfigure}
             onRename={(title) => void actions.renameConversation(room.id, title)}

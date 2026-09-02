@@ -12,9 +12,16 @@
  * supply — see the note on `describeState` below.
  */
 import { useMemo, useState, useEffect } from 'react';
+import { ContextMeter } from './ContextMeter';
 import { IconSettings } from './Icons.js';
 import { isGroup } from '@wispcrew/shared';
-import type { AgentRecord, AgentRunState, ConversationRecord, RoutineRecord } from '@wispcrew/shared';
+import type {
+  AgentRecord,
+  AgentRunState,
+  ContextReportView,
+  ConversationRecord,
+  RoutineRecord,
+} from '@wispcrew/shared';
 
 /**
  * A status a person can act on.
@@ -82,6 +89,8 @@ export function RoomPane({
   agents,
   routines,
   runStates,
+  contextReports,
+  onCompact,
   onMention,
   onOpenRoutines,
   onRename,
@@ -93,6 +102,18 @@ export function RoomPane({
   agents: AgentRecord[];
   routines: RoutineRecord[];
   runStates: Record<string, AgentRunState>;
+
+  /**
+   * How full each member's context is — one report per agent.
+   *
+   * Rendered here rather than beside the composer because in a room the
+   * answer differs per member: same history, different models, different
+   * windows.
+   */
+  contextReports: ContextReportView[];
+
+  /** Compact one member's view of this conversation. */
+  onCompact: (agentId: string) => void;
   onMention(handle: string): void;
   onOpenRoutines(): void;
   onRename(title: string): void;
@@ -260,9 +281,11 @@ export function RoomPane({
         {members.map((member) => {
           const handle = (member as { handle: string }).handle;
           const status = describeState(runStates[member.id]);
+          const context = contextReports.find((r) => r.agentId === member.id);
 
           return (
-            <li key={member.id} className="room-pane-member-row">
+            <li key={member.id} className="room-pane-member-item">
+              <div className="room-pane-member-row">
               {/*
                 Clicking a member writes their handle into the composer.
                 Addressing is how a room works, and hunting for the exact
@@ -300,6 +323,29 @@ export function RoomPane({
               >
                 <IconSettings />
               </button>
+              </div>
+
+              {/*
+                This member's own context, under this member's own name.
+                
+                A room has one history and a different answer for each agent
+                in it, and the difference is not cosmetic: two agents on the
+                same project can run different models with different
+                windows, so the same forty thousand tokens is a tenth of one
+                and a third of the other. A single figure for the room would
+                be right for at most one of them.
+
+                On its own line rather than beside the name: this panel is
+                two hundred pixels wide, and a third item in that row leaves
+                nothing legible.
+              */}
+              {context && (
+                <ContextMeter
+                  report={context}
+                  onCompact={() => onCompact(member.id)}
+                  inline
+                />
+              )}
             </li>
           );
         })}

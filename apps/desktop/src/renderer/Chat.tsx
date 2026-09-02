@@ -42,16 +42,18 @@ interface ChatProps {
   skills: SkillRecord[];
 
   /**
-   * How full this conversation's context is, or null before the first
-   * measurement arrives.
+   * How full this conversation is, one report per agent.
    *
-   * Rendered beside the composer because that is where somebody is standing
-   * when the answer matters: whether to keep going here, or start fresh.
+   * A single meter beside the composer is right for a one-to-one and wrong
+   * for a room: members can run different models with different windows, so
+   * one number would be right for at most one of them. In a group the
+   * meters live in the room panel, one per member, and this row stays out
+   * of the way.
    */
-  contextReport: ContextReportView | null;
+  contextReport: ContextReportView[];
 
   /** Replace the older turns with a summary the agent writes itself. */
-  onCompact: () => void;
+  onCompact: (agentId?: string) => void;
 
   /**
    * Who can be addressed in this room, for @-completion.
@@ -1084,7 +1086,14 @@ export function Chat({
             </button>
           )}
         </div>
-        <ContextMeter report={contextReport} onCompact={onCompact} />
+        {/*
+          One agent, one meter. With several, this would have to choose
+          whose number to show — and the answer differs per member — so the
+          room panel carries them instead, beside the names they belong to.
+        */}
+        {contextReport.length === 1 && (
+          <ContextMeter report={contextReport[0]!} onCompact={() => onCompact(contextReport[0]!.agentId)} />
+        )}
         <div className="composer-hint muted">
           Enter to send · Shift+Enter for a new line · drop files to attach
           {skills.length > 0 ? ' · / for skills' : ''}

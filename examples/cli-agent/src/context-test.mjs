@@ -191,11 +191,75 @@ console.log('\n[assembly] it measures what a turn would really send');
    * that never go.
    */
   check('the same system prompt builder', /systemPromptFor\(agent, cfg\.persona/.test(engine));
-  check('the same MCP tools', /getContextReport[\s\S]{0,2200}buildMcpTools/.test(engine));
+  check('the same MCP tools', /contextForAgent[\s\S]{0,2200}buildMcpTools/.test(engine));
   check('the rebuilt history, not the transcript',
-    /getContextReport[\s\S]{0,2600}rebuildHistory\(store\.loadTranscript/.test(engine));
+    /contextForAgent[\s\S]{0,2600}rebuildHistory\(store\.loadTranscript/.test(engine));
   check('and the agent\u2019s own window override',
     /limitOverride: agent\.contextWindow/.test(engine));
+}
+
+console.log('\n[per agent] a room has one history and an answer for each member');
+{
+  /*
+   * Two agents on the same project can run different models with different
+   * windows, so the same forty thousand tokens is a tenth of one and a
+   * third of the other. A single figure for the room would be right for at
+   * most one member and misleading for the rest.
+   */
+  const engine = fs.readFileSync(path.join(repo, 'packages/runtime/src/engine.ts'), 'utf8');
+
+  check('reports are per agent', /export async function contextForAgent/.test(engine));
+  check('and gathered for every member', /export async function getContextReports/.test(engine));
+  // The only question anyone asks of several meters is which one is about
+  // to become a problem.
+  check('ordered fullest first',
+    /sort\(\(a, b\) => \(b\.fraction \?\? 0\) - \(a\.fraction \?\? 0\)/.test(engine));
+}
+
+console.log('\n[automatic] when, and — more importantly — when not');
+{
+  const compaction = fs.readFileSync(
+    path.join(repo, 'packages/runtime/src/compaction.ts'),
+    'utf8',
+  );
+  const engine = fs.readFileSync(path.join(repo, 'packages/runtime/src/engine.ts'), 'utf8');
+
+  check('there is a threshold', /AUTO_COMPACT_FRACTION = 0\.8/.test(compaction));
+
+  /*
+   * The rule that matters most, and the one a shipped tool got wrong:
+   * Claude Code compacted at ~76K on a 1M-context model because the
+   * threshold was computed against an assumed window, discarding history
+   * with 92% of the context unused. No known limit, no automatic action.
+   */
+  check('an unknown window means no automatic action',
+    /if \(report\.limit === undefined \|\| report\.fraction === undefined\) return null;/
+      .test(compaction),
+    'auto-compaction can fire on a guessed window');
+
+  /*
+   * And WHERE it runs. Anywhere inside the agent loop would replace the
+   * tool results a task in flight is standing on — an agent halfway
+   * through a merge would find its recent work summarised. It belongs at
+   * the seam between turns, before the next one starts.
+   */
+  check('it runs before the session is built',
+    engine.indexOf('autoCompactIfNeeded') < engine.indexOf('const session = getSession'),
+    'compaction happens after the turn has started');
+
+  /*
+   * And the live session must be dropped. It holds its own copy of the
+   * history in memory and reuses it whenever the fingerprint matches, so
+   * rewriting the transcript alone would change nothing about what is
+   * actually sent — the compaction would appear to work and save nothing.
+   */
+  check('and the cached session is dropped',
+    /compacted\?\.ok[\s\S]{0,900}clearSession\(agentId\)/.test(engine),
+    'the in-memory history would survive the compaction');
+
+  // Housekeeping must never be what stops a turn.
+  check('a failure here does not stop the turn',
+    /\[compaction\] skipped:/.test(engine));
 }
 
 console.log('\n[ui] every class the meter renders exists');

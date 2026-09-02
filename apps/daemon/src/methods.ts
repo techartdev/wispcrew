@@ -49,7 +49,7 @@ import {
   addParticipant,
   createRoom,
   deleteConversation,
-  getContextReport,
+  getContextReports,
   compactConversation,
   setRoomGreeting,
   getConversation,
@@ -307,8 +307,8 @@ export function nodeMethods(): MethodTable {
      * has to include. A client computing it from what it happens to have
      * would be measuring a different request.
      */
-    getContextReport: (conversationId: never) =>
-      getContextReport(conversationId as unknown as string),
+    getContextReports: (conversationId: never) =>
+      getContextReports(conversationId as unknown as string),
 
     /*
      * Compaction runs on the node that owns the conversation: it reads that

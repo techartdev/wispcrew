@@ -70,7 +70,7 @@ import {
   addParticipant,
   createRoom,
   deleteConversation,
-  getContextReport,
+  getContextReports,
   compactConversation,
   setRoomGreeting,
   getConversation,
@@ -1354,9 +1354,11 @@ export function registerBridge(context: BridgeContext): void {
    * MCP tool list, and computing it here would measure a request this
    * machine never sends.
    */
-  handle('getContextReport', (conversationId: string) => getContextReport(conversationId));
+  handle('getContextReports', (conversationId: string) => getContextReports(conversationId));
 
-  handle('compactConversation', (conversationId: string) => compactConversation(conversationId));
+  handle('compactConversation', (conversationId: string, agentId?: string) =>
+    compactConversation(conversationId, agentId),
+  );
 
   handle('deleteRoom', (conversationId: string) => {
     const room = getConversation(conversationId);

@@ -476,7 +476,7 @@ export interface WispBridge {
    * which, because an estimate presented as a measurement will eventually
    * be trusted for a decision it cannot carry.
    */
-  getContextReport(conversationId: string): Promise<ContextReportView>;
+  getContextReports(conversationId: string): Promise<ContextReportView[]>;
 
   /**
    * Replace the older turns with a summary the agent writes itself.
@@ -490,7 +490,7 @@ export interface WispBridge {
    * `too short to compact` is an answer, and somebody who pressed the
    * button deserves to be told which it was.
    */
-  compactConversation(conversationId: string): Promise<CompactionResultView>;
+  compactConversation(conversationId: string, agentId?: string): Promise<CompactionResultView>;
 
   /**
    * Send a message to a ROOM rather than an agent.

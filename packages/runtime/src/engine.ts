@@ -50,7 +50,7 @@ import {
 } from './conversations.js';
 import { announceRooms, pushTranscript } from './transcript.js';
 import type { ConversationContext } from './context-report.js';
-import { setSummariser, SUMMARY_INSTRUCTION } from './compaction.js';
+import { autoCompactIfNeeded, setSummariser, SUMMARY_INSTRUCTION } from './compaction.js';
 import { downgradeNotice, resolvePolicy } from './approval-policy.js';
 import { readSettings } from './settings-file.js';
 import { readSecrets } from './secrets-store.js';
@@ -572,7 +572,7 @@ export interface RunOptions {
 }
 
 /**
- * How full a conversation's context is.
+ * How full one agent's view of a conversation is.
  *
  * Assembled here, beside `runPrompt`, because it has to measure what a turn
  * would ACTUALLY send: the same system prompt for the same agent, the same
@@ -587,21 +587,12 @@ export interface RunOptions {
  * estimate when there is one; `measured` says which it was, so the UI can
  * be honest about the difference between "76%" and "about 76%".
  */
-export async function getContextReport(
+export async function contextForAgent(
   conversationId: string,
+  agentId: string,
 ): Promise<ConversationContext> {
   const conversation = getConversation(conversationId);
-
-  /*
-   * A group has one history and a different system prompt per member.
-   * Measured for the first live member, and it says which — the prompt is
-   * hundreds of tokens against a history of tens of thousands, so the
-   * choice barely moves the number, and naming it keeps that honest.
-   */
-  const memberId = (conversation?.participants ?? []).find((p) => p.kind === 'agent')?.id;
-  const agent = memberId ? store.getAgent(memberId) : store.getAgent(conversationId);
-
-  const settings = readSettings(dataDir(), defaultSettings()) as GlobalSettings;
+  const agent = store.getAgent(agentId);
 
   if (!agent) {
     // No agent, no request to measure. An empty report rather than a guess.
@@ -615,6 +606,7 @@ export async function getContextReport(
     };
   }
 
+  const settings = readSettings(dataDir(), defaultSettings()) as GlobalSettings;
   const cfg = await effectiveConfig(agent, settings);
   const preset = configFromPreset(cfg.presetId, {
     apiKey: cfg.apiKey,
@@ -653,6 +645,39 @@ export async function getContextReport(
     agentName: agent.name,
     model: preset.model,
   };
+}
+
+/**
+ * One report per agent in the conversation.
+ *
+ * A room has ONE history and a different answer for every member, and the
+ * difference is not cosmetic: two agents on the same project can be on
+ * different models with different windows — the same forty thousand tokens
+ * is 10% of one and a third of another. A single figure for the room would
+ * be right for at most one member and misleading for the rest.
+ *
+ * Ordered fullest first, because the only question a person asks of several
+ * meters is which one is about to become a problem.
+ */
+export async function getContextReports(
+  conversationId: string,
+): Promise<ConversationContext[]> {
+  const conversation = getConversation(conversationId);
+
+  const memberIds = (conversation?.participants ?? [])
+    .filter((p) => p.kind === 'agent')
+    .map((p) => p.id)
+    // A one-to-one predates conversations having participants at all, so
+    // fall back to the id it shares with its agent.
+    .concat(conversation ? [] : [conversationId]);
+
+  const reports = await Promise.all(
+    memberIds.map((id) => contextForAgent(conversationId, id)),
+  );
+
+  return reports
+    .filter((r) => r.agentId)
+    .sort((a, b) => (b.fraction ?? 0) - (a.fraction ?? 0) || b.used - a.used);
 }
 
 /*
@@ -1113,6 +1138,60 @@ export async function runPrompt(
       return `${room.title}|${room.greeting ?? ''}|${room.mode}|${members}`;
     })(),
   });
+
+  /*
+   * Compact here, or not at all.
+   *
+   * This is the seam between turns: the previous loop has finished, the
+   * transcript is consistent, and the next one has not started. Anywhere
+   * inside `Agent.run` would be wrong — an agent halfway through resolving
+   * a merge would have the tool results it is standing on replaced by a
+   * paragraph about them, which is the one moment recent detail is load
+   * bearing. Compaction is for the long tail, not for work in progress.
+   *
+   * It runs for EVERY conversation, attended or not: a routine firing at
+   * 3am is exactly the case where nobody is watching a meter, and the
+   * failure it prevents — a request the provider refuses — arrives with no
+   * warning and no person to act on it.
+   *
+   * Measured for THIS agent, because in a room each member has its own
+   * window: the same history is a tenth of one model's context and a third
+   * of another's.
+   */
+  try {
+    const report = await contextForAgent(outputId, agentId);
+    const compacted = await autoCompactIfNeeded(outputId, agentId, report);
+
+    if (compacted?.ok) {
+      /*
+       * The live session holds its own copy of the history in memory and
+       * reuses it whenever the fingerprint matches, so rewriting the
+       * transcript alone would change nothing about what is actually sent.
+       * Dropping the session makes the next `getSession` a cold start,
+       * seeded from the compacted transcript below.
+       */
+      clearSession(agentId);
+
+      pushTranscript(outputId, {
+        kind: 'notice',
+        id: store.newId('evt'),
+        level: 'info',
+        text:
+          `Context reached ${Math.round((report.fraction ?? 0) * 100)}% of ` +
+          `${agent.name}'s limit, so the earlier turns were compacted automatically. ` +
+          'The full conversation is in History.',
+        createdAt: Date.now(),
+      });
+    }
+  } catch (err) {
+    /*
+     * Never let housekeeping stop a turn. A failed measurement or a
+     * provider that would not write the summary leaves the conversation
+     * exactly as it was, and the turn proceeds — possibly to fail on
+     * length, which is no worse than failing here and says more.
+     */
+    fileLog('[compaction] skipped:', (err as Error).message);
+  }
 
   const session = getSession(agentId, {
     provider,

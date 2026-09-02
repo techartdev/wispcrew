@@ -46,10 +46,20 @@ function tone(fraction: number | undefined): string {
 export function ContextMeter({
   report,
   onCompact,
+  inline = false,
 }: {
   report: ContextReportView | null;
   /** Replace the older turns with a summary. Absent while one is running. */
   onCompact?: () => void;
+  /**
+   * Rendered inside the room panel rather than under the composer.
+   *
+   * That panel is about two hundred pixels wide, so the meter fills its own
+   * line and the breakdown has to be narrower. One component either way —
+   * two would drift, and this is the number people will compare between
+   * members.
+   */
+  inline?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -71,7 +81,7 @@ export function ContextMeter({
     : 'Estimated from the text — no turn has run yet, so the provider has not reported a figure.';
 
   return (
-    <div className="context-meter-wrap">
+    <div className={`context-meter-wrap${inline ? ' context-meter-inline' : ''}`}>
       <button
         type="button"
         className={`context-meter${tone(report.fraction)}`}
@@ -96,7 +106,11 @@ export function ContextMeter({
       </button>
 
       {open && (
-        <div className="context-breakdown" role="dialog" aria-label="Context usage">
+        <div
+          className={`context-breakdown${inline ? ' context-breakdown-narrow' : ''}`}
+          role="dialog"
+          aria-label="Context usage"
+        >
           <div className="context-breakdown-head">
             <strong>
               {approx}

@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  autoCompactIfNeeded,
   compactConversation,
   createAgent,
   createNodeCrypto,
@@ -119,7 +120,7 @@ console.log('\n[compacting] the recent turns survive byte for byte');
   const entries = fill(40);
   saveTranscript(agent.id, entries);
 
-  const r = await compactConversation(agent.id, { keepRecent: 10, minEntries: 20 });
+  const r = await compactConversation(agent.id, agent.id, { keepRecent: 10, minEntries: 20 });
 
   check('it succeeds', r.ok === true, r.reason);
   check('replacing the older ones', r.replaced === 30, String(r.replaced));
@@ -178,7 +179,7 @@ console.log('\n[already compacted] a summary is not summarised again');
    * conversation that is one summary plus a short tail has nothing left to
    * gain.
    */
-  const r = await compactConversation(agent.id, { keepRecent: 10, minEntries: 5 });
+  const r = await compactConversation(agent.id, agent.id, { keepRecent: 10, minEntries: 5 });
   check('it refuses', r.ok === false);
   check('saying it is already compacted', /already compacted/i.test(r.reason ?? ''), r.reason);
 }
@@ -188,7 +189,7 @@ console.log('\n[an empty summary changes nothing]');
   setSummariser(async () => '   ');
   saveTranscript(agent.id, fill(40));
 
-  const r = await compactConversation(agent.id, { keepRecent: 10, minEntries: 20 });
+  const r = await compactConversation(agent.id, agent.id, { keepRecent: 10, minEntries: 20 });
 
   /*
    * Replacing real turns with nothing is the exact outcome compaction
@@ -206,10 +207,55 @@ console.log('\n[a failing summariser does not damage anything]');
     throw new Error('provider unreachable');
   });
 
-  const r = await compactConversation(agent.id, { keepRecent: 10, minEntries: 20 });
+  const r = await compactConversation(agent.id, agent.id, { keepRecent: 10, minEntries: 20 });
   check('it refuses', r.ok === false);
   check('reporting why', /provider unreachable/.test(r.reason ?? ''), r.reason);
   check('and the conversation is intact', loadTranscript(agent.id).length === 40);
+}
+
+console.log('\n[automatic] a threshold, and a refusal to guess at one');
+{
+  const over = { fraction: 0.95, limit: 200_000 };
+  const under = { fraction: 0.4, limit: 200_000 };
+
+  setSummariser(async () => 'a summary');
+  saveTranscript(agent.id, fill(60));
+
+  check('under the threshold, nothing happens',
+    (await autoCompactIfNeeded(agent.id, agent.id, under)) === null);
+  check('and the conversation is untouched', loadTranscript(agent.id).length === 60);
+
+  const fired = await autoCompactIfNeeded(agent.id, agent.id, over);
+  check('over it, compaction runs', fired?.ok === true, JSON.stringify(fired));
+  check('and the conversation shrinks', loadTranscript(agent.id).length < 60,
+    String(loadTranscript(agent.id).length));
+
+  /*
+   * The rule that matters most, and the one a shipped tool got wrong.
+   * Claude Code compacted at ~76K tokens on a 1M-context model because the
+   * threshold was computed against an assumed window, discarding history
+   * with 92% of the context unused. No known limit means no automatic
+   * action, ever — the same reasoning as never inventing a denominator for
+   * the meter, and this is the damage that rule prevents.
+   */
+  saveTranscript(agent.id, fill(60));
+
+  check('an unknown limit never triggers it',
+    (await autoCompactIfNeeded(agent.id, agent.id, { fraction: undefined, limit: undefined })) === null);
+  check('nor a fraction with no limit behind it',
+    (await autoCompactIfNeeded(agent.id, agent.id, { fraction: 0.99, limit: undefined })) === null);
+  check('and the conversation is untouched', loadTranscript(agent.id).length === 60);
+
+  /*
+   * Over the threshold but too short to help: the space is going on the
+   * system prompt or the tool list, which a summary cannot fix. It declines
+   * quietly rather than spending a model call every turn to achieve
+   * nothing.
+   */
+  saveTranscript(agent.id, fill(4));
+  check('too short to help declines quietly',
+    (await autoCompactIfNeeded(agent.id, agent.id, over)) === null);
+  check('leaving it alone', loadTranscript(agent.id).length === 4);
 }
 
 console.log('\n[rendering] tool output is summarised, not transcribed');

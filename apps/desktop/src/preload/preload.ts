@@ -124,10 +124,10 @@ const bridge: WispBridge = {
     fromConversationId?: string;
   }) => ipcRenderer.invoke('wc:createRoom', patch),
   deleteRoom: (conversationId: string) => ipcRenderer.invoke('wc:deleteRoom', conversationId),
-  getContextReport: (conversationId: string) =>
-    ipcRenderer.invoke('wc:getContextReport', conversationId),
-  compactConversation: (conversationId: string) =>
-    ipcRenderer.invoke('wc:compactConversation', conversationId),
+  getContextReports: (conversationId: string) =>
+    ipcRenderer.invoke('wc:getContextReports', conversationId),
+  compactConversation: (conversationId: string, agentId?: string) =>
+    ipcRenderer.invoke('wc:compactConversation', conversationId, agentId),
   sendToRoom: (conversationId: string, text: string, attachmentPaths?: string[]) =>
     ipcRenderer.invoke('wc:sendToRoom', conversationId, text, attachmentPaths),
 
