@@ -25,6 +25,13 @@ can close; a gap glossed is a gap the next person rediscovers.
 | **An unreachable node** | Named the machine and said it was not connected, rather than failing silently |
 | **A deleted agent** | Removed from its own room, from rooms it had joined, and its transcript deleted |
 | **Telegram, unconfigured** | "No bot token saved on this machine" — names the missing piece rather than reporting a generic failure |
+| **A group created from the CLI** | `rooms new` with two agents and a greeting; a `room_…` id of its own, and the members' own configuration untouched |
+| **A group carrying a chat's history** | `rooms new --from --with-history` copied 29 entries and marked the seam; the original chat still had all 29 afterwards |
+| **A room's instructions reaching the model** | `show-room-prompt.cjs` against the real profile: the greeting appears verbatim under `## This room`, followed by the sentence saying every member and the user can read it |
+| **Who said what** | Assistant transcript entries now carry `authorId`; read back from the store, each resolved to the agent that actually spoke |
+| **Speaking to a group from the CLI** | `rooms say` sends, waits for the reply to stop growing, and reports a provider failure with the provider's own words |
+| **Deleting a group** | Removed the room and its transcript, left its agents alone; refused for a private chat, naming `agents delete` instead |
+| **Every refusal on the way** | A group of one, `--with-history` with no source, and a delete without `--yes` each said what to do instead |
 
 ## Not verified, and why
 
@@ -41,6 +48,15 @@ wanted — it is how an existing user keeps their agents across a rename — and
 it means the live route measures an upgrade. The pieces are pinned in
 `test:first-run` instead, where the profile is empty because the test made
 it.
+
+**An agent reasoning well about its room.** The room's instructions and cast
+demonstrably reach the prompt — that is checked above. What could not be
+shown is a model *using* them: asked what room it was in, every model
+reachable on this key reached for a tool instead, one grepping the source
+tree and another calling `read_skill` four times with invented arguments.
+That is hard rule 11 in the wild — a tool that is offered gets used — and it
+is a model-quality observation, not a WispCrew defect. It wants re-running
+against a strong model.
 
 **macOS and Linux.** CI builds, tests and boots the app on both, but nobody
 has run it on real hardware. Window chrome, native dialogs and keychain
@@ -64,7 +80,26 @@ wispcrew tasks                     # it should appear as completed
 # an approval, from two terminals
 wispcrew ask <agent> "run df -h"   # blocks, prints the id to allow
 wispcrew approvals allow <id>      # in the other terminal
+
+# a group, end to end
+wispcrew rooms new "Deploy review" <agent> <agent> --greeting "Blunt and short."
+wispcrew rooms greeting "Deploy review"          # read it back
+wispcrew rooms say "Deploy review" "@handle ..." # and talk in it
+wispcrew rooms delete "Deploy review" --yes      # agents are kept
 ```
+
+**Check what the model is actually told**, rather than what the prompt
+builder is capable of rendering — the two are different claims and only the
+second one is a test:
+
+```bash
+node scripts/show-room-prompt.cjs "<room title>" "<agent name>"
+```
+
+**A model being listed is not a model being servable.** This profile's model
+reached end of life mid-session, and two others in `/v1/models` returned 404
+on chat. `node scripts/nvidia-probe.cjs <substring>` sends a real one-token
+request to each and reports what came back.
 
 `scripts/vps.ps1` runs a script file on the remote machine, because
 PowerShell mangles inline shell commands containing quotes — that cost hours

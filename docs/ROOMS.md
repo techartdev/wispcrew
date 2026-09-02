@@ -165,6 +165,24 @@ And one that was silent data loss: deleting the agent a group was started
 from destroyed the group and its transcript, because the agent-deleted hook
 removed any room whose id matched. Deleting any other member was harmless.
 
+### And three more, found only by using it
+
+Typecheck, the suites and a screenshot all passed. These needed the daemon
+running and a real conversation.
+
+- **The prompt was lying about the workspace.** It resolved the root as
+  `agent.workspaceRoot ?? host default` and skipped the *global* setting,
+  while the tools read the setting first. An agent asked about its room
+  searched a source tree it had just been told it could not see. The sandbox
+  was right; the prompt was wrong about where the boundary was.
+- **The CLI could not speak to a group at all**, and `rooms new` printed a
+  hint naming a `wispcrew room` command that has never existed. There is now
+  `rooms say`, sharing its send-and-wait with `ask`.
+- **A group that outlived its members could not be removed.** Making a group
+  survive its founder created a state that had not existed: a room with no
+  agents. The sidebar dropped it while the CLI still listed it — so it is
+  now shown, labelled, and deletable from either.
+
 ## Deliberately not done
 
 **A room cannot span two machines.** A room's transcript lives on one node
