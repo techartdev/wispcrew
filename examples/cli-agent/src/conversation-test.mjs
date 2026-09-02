@@ -74,8 +74,8 @@ console.log('\n[handles] addressing an agent with @');
 
 console.log('\n[migration] every existing agent gets a room');
 {
-  const a1 = createAgent({ name: 'Assistant' });
-  const a2 = createAgent({ name: 'Local Infrastructure Eye' });
+  const a1 = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Assistant' });
+  const a2 = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Local Infrastructure Eye' });
 
   // Give them conversations, as a real profile would have.
   for (let i = 0; i < 27; i++) {

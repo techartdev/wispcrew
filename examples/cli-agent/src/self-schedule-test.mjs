@@ -45,7 +45,7 @@ installScheduler();
 
 const work = path.join(dir, 'workspace');
 fs.mkdirSync(work, { recursive: true });
-const agent = createAgent({ name: 'Watcher', workspaceRoot: work });
+const agent = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Watcher', workspaceRoot: work });
 
 /** Records what the user was asked, so the prompt itself can be inspected. */
 const asked = [];

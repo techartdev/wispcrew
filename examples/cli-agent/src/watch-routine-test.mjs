@@ -39,7 +39,7 @@ initStore(dir);
 const watched = path.join(dir, 'watched');
 fs.mkdirSync(watched, { recursive: true });
 
-const agent = createAgent({ name: 'Watcher', workspaceRoot: dir });
+const agent = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Watcher', workspaceRoot: dir });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const fired = [];

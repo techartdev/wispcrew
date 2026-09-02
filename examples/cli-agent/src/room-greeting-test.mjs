@@ -49,8 +49,8 @@ initStore(dir);
 
 console.log('\n[stored] the room owns it, not an agent');
 {
-  const a = createAgent({ name: 'Builder' });
-  const b = createAgent({ name: 'Reviewer' });
+  const a = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Builder' });
+  const b = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Reviewer' });
 
   const room = createRoom({
     title: 'Deploy review',

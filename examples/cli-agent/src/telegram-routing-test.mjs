@@ -53,9 +53,9 @@ globalThis.fetch = async (url, init) => {
   return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 900 + sent.length } }) };
 };
 
-const backend = createAgentWithRoom({ name: 'Backend' });
-const release = createAgentWithRoom({ name: 'Release' });
-const research = createAgentWithRoom({ name: 'Research' });
+const backend = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Backend' });
+const release = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Release' });
+const research = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Research' });
 
 console.log('\n[bindings] an endpoint maps to exactly one room');
 {

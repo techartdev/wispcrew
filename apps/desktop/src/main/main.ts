@@ -36,6 +36,7 @@ import {
   installNotifySender,
   setRemoteRunner,
   migrateAgentsToConversations,
+  migrateAgentsToExplicitProvider,
   installScheduler,
   installSkillReader,
   seedBuiltinSkills,
@@ -316,16 +317,31 @@ app.whenReady().then(async () => {
   migrateLegacyKey(userDataDir, (readSettings(userDataDir, {}) as GlobalSettings).presetId);
 
   /*
-   * Every install has at least one agent so the UI is never empty.
+   * A starter agent, but only once there is something to run it on.
    *
    * Done before the daemon link, while this process is still the only thing
    * touching the store. The daemon does the same check on its own startup,
    * so whichever runs first wins and the other sees a non-empty roster —
    * they never both create one.
+   *
+   * Conditional now that a provider and a model are required. Seeding one
+   * on a fresh profile would mean inventing a provider the user has not
+   * configured; with no credential there is no honest answer, so the roster
+   * stays empty and the app's own empty state asks for a provider first.
    */
-  if (store.listAgents().length === 0) {
-    createAgentWithRoom({ name: 'Assistant', persona: 'general' });
-    fileLog('[main] created default agent');
+  const seed = readSettings(userDataDir, defaultSettings()) as {
+    presetId?: string;
+    model?: string;
+  };
+
+  if (store.listAgents().length === 0 && seed.presetId && seed.model) {
+    createAgentWithRoom({
+      name: 'Assistant',
+      persona: 'general',
+      presetId: seed.presetId,
+      model: seed.model,
+    });
+    fileLog('[main] created default agent on', seed.presetId, seed.model);
   }
 
   /*
@@ -380,6 +396,20 @@ app.whenReady().then(async () => {
    * finds nothing to do. Either host may start first.
    */
   migrateAgentsToConversations();
+
+  /*
+   * And an explicit provider and model, so nothing inherits.
+   *
+   * Idempotent too, and it must run in BOTH hosts: the desktop's roster is
+   * a client-side mirror of every node's agents, so a record can reach this
+   * store having never passed through the daemon's startup — and a mirrored
+   * record with no provider would be uncreatable and unrunnable here.
+   */
+  const providerMigration = migrateAgentsToExplicitProvider();
+  for (const bad of providerMigration.broken) {
+    fileLog('[providers] unusable pairing:', bad.name, bad.presetId, bad.model);
+  }
+
   /*
    * Carry room traffic between machines.
    *

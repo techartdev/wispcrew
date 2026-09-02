@@ -105,7 +105,9 @@ if (paired) {
     check('nodeInfo describes the remote machine', Boolean(info?.name), JSON.stringify(info?.name));
     check('and reports its own data directory', info?.dataDir?.includes('gb-remote-'), info?.dataDir);
 
-    const created = await client.call('createAgent', [{ name: 'Made remotely' }]);
+    const created = await client.call('createAgent', [
+      { name: 'Made remotely', presetId: 'openai', model: 'gpt-5.6-luna' },
+    ]);
     check('created an agent on the node', created?.name === 'Made remotely');
 
     // The proof it ran *there*: the node's own store on disk.

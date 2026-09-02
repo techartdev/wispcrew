@@ -78,8 +78,8 @@ console.log('\n[the token is a credential, not metadata]');
 
 console.log('\n[agents belong to a node]');
 {
-  const local = createAgent({ name: 'Local agent' });
-  const remote = createAgent({ name: 'Remote agent' });
+  const local = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Local agent' });
+  const remote = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Remote agent' });
   updateAgent(remote.id, { nodeId: node.id });
 
   check('an agent defaults to local', getAgent(local.id)?.nodeId === undefined);

@@ -42,7 +42,7 @@ initStore(dir);
 
 console.log('\n[own room] goes with the agent');
 {
-  const agent = createAgentWithRoom({ name: 'Doomed' });
+  const agent = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Doomed' });
   check('the room exists', listConversations().some((c) => c.id === agent.id));
 
   deleteAgent(agent.id);
@@ -54,8 +54,8 @@ console.log('\n[own room] goes with the agent');
 
 console.log('\n[shared room] survives, because it is not the agent\u2019s own');
 {
-  const host = createAgentWithRoom({ name: 'Host' });
-  const guest = createAgentWithRoom({ name: 'Guest' });
+  const host = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Host' });
+  const guest = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Guest' });
 
   /*
    * A room that is NOT either agent's own.
@@ -140,7 +140,7 @@ console.log('\n[old rooms] a ghost written before the fix is not shown');
 
 console.log('\n[transcript] removed too, so a recreated id starts clean');
 {
-  const agent = createAgentWithRoom({ name: 'Temporary' });
+  const agent = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Temporary' });
   const file = path.join(dir, 'transcripts', `${agent.id}.json`);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, '[]', 'utf8');

@@ -46,7 +46,7 @@ setHost({
   crypto: createNodeCrypto(dir),
 });
 initStore(dir);
-createAgent({ name: 'Remote worker' });
+createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Remote worker' });
 
 console.log('\n[address parsing]');
 {

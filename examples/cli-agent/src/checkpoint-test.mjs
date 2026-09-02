@@ -41,7 +41,7 @@ setHost({
 });
 initStore(dir);
 
-const agent = createAgent({ name: 'Valuable conversation' });
+const agent = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Valuable conversation' });
 
 const entry = (i) => ({
   kind: 'message',
@@ -114,7 +114,7 @@ console.log('\n[retention] old checkpoints are pruned, newest kept');
 
 console.log('\n[isolation] one agent cannot see another\'s checkpoints');
 {
-  const other = createAgent({ name: 'Unrelated' });
+  const other = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Unrelated' });
   saveTranscript(other.id, [entry(0), entry(1)], 'seed');
   saveTranscript(other.id, [], 'clear');
 

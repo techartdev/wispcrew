@@ -26,6 +26,7 @@ import {
   installNotifySender,
   startTelegram,
   migrateAgentsToConversations,
+  migrateAgentsToExplicitProvider,
   installScheduler,
   installSkillReader,
   seedBuiltinSkills,
@@ -182,6 +183,24 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
    * finds nothing to do. Either host may start first.
    */
   migrateAgentsToConversations();
+
+  /*
+   * And an explicit provider and model, so nothing inherits.
+   *
+   * Before the room migration would be equally correct; it is here because
+   * both are idempotent and neither depends on the other. Reported to the
+   * console rather than only logged: a pairing that cannot work is
+   * something the operator of a headless box should learn at startup, not
+   * from an agent failing silently at 3am.
+   */
+  const providers = migrateAgentsToExplicitProvider();
+  for (const agent of providers.filled) {
+    console.log(`  set  ${agent.name} -> ${agent.presetId} / ${agent.model}`);
+  }
+  for (const bad of providers.broken) {
+    console.error(`  !!   ${bad.name}: ${bad.why}`);
+  }
+
   installNotifySender();
   // A phone is a door into a room, and the daemon is what keeps it open
   // when the desktop is closed.
@@ -334,11 +353,37 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
     });
   }
 
-  // Every install has at least one agent, so a fresh daemon is usable
-  // immediately rather than presenting an empty roster.
-  if (listAgents().length === 0) {
-    createAgentWithRoom({ name: 'Assistant', persona: 'general' });
-    fileLog('[daemon] created default agent');
+  /*
+   * A starter agent, but only once there is something to run it on.
+   *
+   * This used to create one unconditionally, which worked while a provider
+   * and model were inherited from global settings — an agent with neither
+   * was still runnable. Now that both are required, seeding on a fresh
+   * profile would mean inventing a provider the user has not configured,
+   * and the daemon refused to start at all until this was fixed. Found by
+   * booting one against an empty directory; nothing static saw it.
+   *
+   * With no credential there is no honest answer, so none is given: the
+   * roster stays empty and the app's own empty state asks for a provider
+   * first. That is the correct order anyway — an agent pointed at a
+   * provider with no key fails on its first message, and the reason is not
+   * obvious.
+   */
+  const seedSettings = readSettings(env.dataDir, defaultSettings()) as {
+    presetId?: string;
+    model?: string;
+  };
+  const seedPreset = seedSettings.presetId;
+  const seedModel = seedSettings.model;
+
+  if (listAgents().length === 0 && seedPreset && seedModel) {
+    createAgentWithRoom({
+      name: 'Assistant',
+      persona: 'general',
+      presetId: seedPreset,
+      model: seedModel,
+    });
+    fileLog('[daemon] created default agent on', seedPreset, seedModel);
   }
 
   const settings = readSettings(env.dataDir, defaultSettings());

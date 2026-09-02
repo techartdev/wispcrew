@@ -12,7 +12,7 @@
 // automatic runtime Vite uses.
 import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useProviderModels } from './useProviderModels';
-import { isGroup } from '@wispcrew/shared';
+import { describeModelMismatch, isGroup } from '@wispcrew/shared';
 import type {
   AgentRecord,
   ApprovalPolicy,
@@ -126,15 +126,26 @@ export function Modal({
 /* ------------------------------------------------------------------ */
 
 /**
- * Create an agent, choosing which configured provider it should use.
+ * Create an agent: a name, a provider, and a model that provider serves.
  *
  * Only providers that actually have a key or sign-in are offered. Listing
  * every preset would let a user pick one they have not set up, producing a
  * failure at the agent's first message — and the reason (no key for *this*
  * provider) is not obvious when another provider is working fine.
  *
- * "Use the default" stays first so the common case is one click: most people
- * want another agent on the provider they already use.
+ * ## There is no "use the default"
+ *
+ * There used to be, and it was the first option. It made the common case one
+ * click and it made a whole class of broken agent: the provider was left
+ * inherited while the model was typed in, so the two came from different
+ * places and nothing compared them. An OpenAI model on an inherited NVIDIA
+ * provider is a request that returns `404 page not found` forever.
+ *
+ * Worse, the failure moved later. Changing the provider in Settings silently
+ * changed where every "default" agent sent its requests, so an agent that
+ * worked yesterday failed today with nothing about it having been edited.
+ *
+ * Provider and model are now one decision, made here, and both are required.
  */
 function NewAgentPanel({
   presets,
@@ -144,15 +155,27 @@ function NewAgentPanel({
   onClose,
 }: {
   presets: PresetView[];
+  /** Which provider to preselect — a convenience, never a fallback. */
   defaultPresetId?: string;
   onCreate(patch: Partial<AgentRecord>): void;
   onOpenSettings(): void;
   onClose(): void;
 }) {
   const configured = useMemo(() => presets.filter((p) => p.configured), [presets]);
+
+  /*
+   * Preselect a provider when there is an obvious one, so the common case is
+   * still quick. This is a starting VALUE in a required field, not a
+   * fallback: whatever is showing is what gets saved onto the agent.
+   */
+  const initialPreset =
+    configured.find((p) => p.id === defaultPresetId)?.id ?? configured[0]?.id ?? '';
+
   const [name, setName] = useState('New agent');
-  const [presetId, setPresetId] = useState('');
-  const [model, setModel] = useState('');
+  const [presetId, setPresetId] = useState(initialPreset);
+  const [model, setModel] = useState(
+    presets.find((p) => p.id === initialPreset)?.defaultModel ?? '',
+  );
 
   const chosen = presets.find((p) => p.id === presetId);
   /*
@@ -161,14 +184,25 @@ function NewAgentPanel({
    * NVIDIA offers 84; the preset named six, so the field hid most of what
    * a key already paid for. Tested ones stay first.
    */
-  const liveModels = useProviderModels(presetId || defaultPresetId, chosen?.models ?? []);
-  const fallback = presets.find((p) => p.id === defaultPresetId);
+  const liveModels = useProviderModels(presetId, chosen?.models ?? []);
+
+  /*
+   * The same ownership rule the engine uses, applied while typing.
+   *
+   * The list is fetched from the provider, so picking from it is always
+   * safe — but typing is deliberately still allowed, for a model released
+   * this week or one a self-hosted endpoint serves. That leaves exactly one
+   * way to name somebody else's model, and this is it.
+   */
+  const pairingProblem = describeModelMismatch(presets, presetId, model);
+  const ready = Boolean(presetId) && model.trim().length > 0 && !pairingProblem;
 
   const create = () => {
+    if (!ready) return;
     onCreate({
       name: name.trim() || 'New agent',
-      presetId: presetId || undefined,
-      model: model.trim() || undefined,
+      presetId,
+      model: model.trim(),
     });
     onClose();
   };
@@ -192,13 +226,19 @@ function NewAgentPanel({
         <select
           value={presetId}
           onChange={(e) => {
-            setPresetId(e.target.value);
-            setModel('');
+            const next = e.target.value;
+            setPresetId(next);
+            /*
+             * Switching provider swaps in that provider's default model.
+             *
+             * Not cleared — an empty required field after every switch is a
+             * chore — and above all not LEFT, which would carry the previous
+             * vendor's model name onto the new provider. That is the exact
+             * pairing this panel exists to make impossible.
+             */
+            setModel(presets.find((p) => p.id === next)?.defaultModel ?? '');
           }}
         >
-          <option value="">
-            Use the default{fallback ? ` (${fallback.label})` : ''}
-          </option>
           {configured.map((p) => (
             <option key={p.id} value={p.id}>
               {p.label}
@@ -220,8 +260,14 @@ function NewAgentPanel({
       {chosen && (
         <label className="field">
           <span>
-            Model <em className="muted">— optional, defaults to {chosen.defaultModel}</em>
+            Model <em className="muted">— what this agent runs on</em>
           </span>
+          {/*
+            A combo box, not a closed list. The catalogue is fetched live, so
+            it is normally right — but a model released this week, or one a
+            self-hosted endpoint serves under its own name, must still be
+            usable without waiting for a release of this app.
+          */}
           <input
             list="new-agent-models"
             value={model}
@@ -233,14 +279,25 @@ function NewAgentPanel({
                 <option key={m.id} value={m.id} label={m.tested ? 'verified with tools' : undefined} />
               ))}
           </datalist>
+          <span className="muted small">
+            Belongs to this agent. Changing the provider in Settings will not move it.
+          </span>
         </label>
       )}
+
+      {pairingProblem && <p className="warn-inline">{pairingProblem}</p>}
 
       <div className="row-actions">
         <button type="button" className="btn" onClick={onClose}>
           Cancel
         </button>
-        <button type="button" className="btn btn-primary" onClick={create}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={create}
+          disabled={!ready}
+          title={ready ? undefined : (pairingProblem ?? 'Choose a provider and a model')}
+        >
           Create agent
         </button>
       </div>
@@ -918,7 +975,21 @@ export function SettingsPanel({
 
         {tab === 'provider' && <div className="tab-panel">
       <section className="panel-section">
-        <h3>Model provider</h3>
+        <h3>Credentials</h3>
+        {/*
+          This tab sets up ACCESS, not defaults.
+          
+          It used to double as "the provider and model new agents inherit",
+          and that second job is gone: an agent carries its own provider and
+          model, so nothing here can move an existing one. Saying so removes
+          the reasonable fear that changing a key here will change what an
+          agent runs on.
+        */}
+        <p className="muted">
+          Keys and sign-ins live here, one per provider. Each agent picks its own
+          provider and model — nothing on this screen changes an agent that already
+          exists.
+        </p>
         <div className="provider-grid">
           {presets.map((p) => (
             <button
@@ -990,7 +1061,17 @@ export function SettingsPanel({
 
         <div className="field-row">
           <label className="field">
-            <span>Model</span>
+            {/*
+              This model is for TESTING the credential, and says so.
+              
+              It was the default every agent inherited. The label mattered
+              more than it looked: somebody setting up a key would change it
+              to try something, and silently move every agent that had left
+              its own model blank.
+            */}
+            <span>
+              Model <em className="muted">— used by Test connection only</em>
+            </span>
             <input
               list="model-options"
               value={model}
@@ -1285,17 +1366,51 @@ export function AgentPanel({
   /** What "same as above" actually resolves to, for honest labelling. */
   const effectivePolicy = policy || globalPolicy || 'ask';
 
-  const preset = presets.find((p) => p.id === presetId);
+  const preset = shownPresets.find((p) => p.id === presetId);
   /* Every model the provider reports, not only the curated few. */
-  const liveModels = useProviderModels(presetId || agent.presetId, preset?.models ?? []);
+  const liveModels = useProviderModels(presetId, preset?.models ?? []);
+
+  /*
+   * A provider and a model, or no save.
+   *
+   * The two are one decision, so the button is what enforces it: an agent
+   * that cannot work should not be saveable. Everything else on this panel
+   * may still be left blank, because a workspace or a policy falling back to
+   * a sensible default cannot point a request at the wrong company.
+   */
+  const canSave = Boolean(presetId) && model.trim().length > 0;
+
+  /*
+   * The same rule the engine applies before a turn, applied while typing.
+   *
+   * Imported from `shared` rather than reimplemented: it judges ownership
+   * rather than absence, which is subtle enough that a second copy would
+   * eventually disagree — and disagreeing here means the panel blesses a
+   * pairing the engine then refuses, or the reverse.
+   *
+   * Judged against the list for the machine this agent RUNS ON, which for a
+   * remote agent is not this one's.
+   */
+  const pairingProblem = describeModelMismatch(shownPresets, presetId, model);
+
+  /*
+   * A pairing another vendor owns cannot be saved.
+   *
+   * Not merely warned about. A warning above a working Save button is how
+   * this agent got into that state in the first place — and the cost of
+   * being wrong lands later, in whatever room it was added to, on somebody
+   * else's tokens.
+   */
+  const saveable = canSave && !pairingProblem;
 
   const save = () => {
+    if (!saveable) return;
     onSave({
       name: name.trim() || agent.name,
       description: description.trim() || undefined,
       persona: persona || undefined,
-      presetId: presetId || undefined,
-      model: model || undefined,
+      presetId,
+      model: model.trim(),
       baseUrl: baseUrl.trim() || undefined,
       // Empty means this computer. `undefined` deletes the field, which is
       // what "runs here" has always looked like on disk.
@@ -1355,13 +1470,39 @@ export function AgentPanel({
       </section>
 
       <section className="panel-section">
-        <h3>Overrides</h3>
-        <p className="muted">Leave blank to inherit the global settings.</p>
+        <h3>Model</h3>
+        {/*
+          Not "Overrides" any more, and nothing here inherits.
+          
+          Provider and model used to be blank-means-inherit. They fell back
+          INDEPENDENTLY, which is what made it dangerous: the model was
+          usually set and the provider usually was not, so an OpenAI model
+          ended up aimed at NVIDIA — `404 page not found`, forever. And the
+          failure could arrive later, without this agent being touched,
+          because changing the provider in Settings moved every agent that
+          had left it blank.
+        */}
+        <p className="muted">
+          This agent's own. Changing anything in Settings will not move it.
+        </p>
         <div className="field-row">
           <label className="field">
             <span>Provider</span>
-            <select value={presetId} onChange={(e) => setPresetId(e.target.value)}>
-              <option value="">Inherit from Settings</option>
+            <select
+              value={presetId}
+              onChange={(e) => {
+                const next = e.target.value;
+                setPresetId(next);
+                /*
+                 * The model follows the provider.
+                 *
+                 * Leaving it would carry the previous vendor's model name
+                 * onto the new provider — the precise mismatch this panel
+                 * now exists to prevent, produced by the act of fixing it.
+                 */
+                setModel(shownPresets.find((p) => p.id === next)?.defaultModel ?? '');
+              }}
+            >
               {/*
                 Marking unconfigured providers matters: picking one with no
                 key fails at the first message, and the reason — a key was
@@ -1390,10 +1531,16 @@ export function AgentPanel({
           </label>
           <label className="field">
             <span>Model</span>
+            {/*
+              A combo box, not a closed list. The catalogue is fetched from
+              the provider so it is normally right — but a model released
+              this week, or one a self-hosted endpoint serves under its own
+              name, must stay usable without a release of this app.
+            */}
             <input
               list="agent-model-options"
               value={model}
-              placeholder="Inherit"
+              placeholder={preset?.defaultModel ?? 'Choose a provider first'}
               onChange={(e) => setModel(e.target.value)}
             />
             <datalist id="agent-model-options">
@@ -1410,6 +1557,16 @@ export function AgentPanel({
             Settings, or this agent will fail on its first message.
           </p>
         )}
+
+        {/*
+          A model another vendor owns, caught before it is saved.
+          
+          Typing is deliberately still allowed — a model newer than this app
+          has to be reachable — so this is the one remaining way to produce a
+          pairing that cannot work. Saying so here, beside the field, beats
+          finding out when the agent next speaks.
+        */}
+        {pairingProblem && <p className="warn-inline">{pairingProblem}</p>}
 
         {/* Only useful for a self-hosted or proxied endpoint, so it is not
             given prominence — but without it, an agent on a different
@@ -1583,7 +1740,17 @@ export function AgentPanel({
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="btn btn-primary" onClick={save}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={save}
+            disabled={!saveable}
+            title={
+              saveable
+                ? undefined
+                : (pairingProblem ?? 'This agent needs a provider and a model')
+            }
+          >
             Save
           </button>
         </div>

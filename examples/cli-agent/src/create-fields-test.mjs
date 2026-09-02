@@ -70,22 +70,61 @@ console.log('\n[round trip] every field a caller can set survives creation');
 console.log('\n[the specific regressions] the three that were actually lost');
 {
   // Named individually as well, so a failure says which incident returned.
-  const remote = createAgent({ name: 'Remote', nodeId: 'node_vps' });
+  const remote = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Remote', nodeId: 'node_vps' });
   check('nodeId — an agent for another machine', remote.nodeId === 'node_vps', remote.nodeId);
 
-  const gated = createAgent({ name: 'Gated', channelPolicies: { telegram: 'auto' } });
+  const gated = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Gated', channelPolicies: { telegram: 'auto' } });
   check('channelPolicies — a per-door permission',
     gated.channelPolicies?.telegram === 'auto', JSON.stringify(gated.channelPolicies));
 }
 
-console.log('\n[defaults] an empty patch still produces a usable agent');
+console.log('\n[required] a provider and a model, or no agent');
 {
-  const bare = createAgent({});
+  /*
+   * An empty patch used to produce a usable agent, because the provider and
+   * the model were inherited from global settings at turn time. They were
+   * inherited INDEPENDENTLY, which is what made it dangerous: the model was
+   * usually set on the agent and the provider usually was not, so the two
+   * came from different places and nothing compared them — an OpenAI model
+   * aimed at NVIDIA, which answers `404 page not found` and always will.
+   *
+   * Refused at creation rather than reported at the first message. An agent
+   * that cannot work should not exist: it looks fine in the roster, and the
+   * failure lands in whatever room somebody added it to.
+   */
+  let threw = '';
+  try {
+    createAgent({});
+  } catch (err) {
+    threw = String(err.message ?? err);
+  }
+  check('an empty patch is refused', threw !== '', 'it was created');
+  check('and says both are needed', /provider and a model/.test(threw), threw);
+  check('naming what was missing', /provider=\(none\)/.test(threw) && /model=\(none\)/.test(threw),
+    threw);
+
+  // Half of the pair is still not enough — they are one decision.
+  let halfway = '';
+  try {
+    createAgent({ name: 'Half', presetId: 'openai' });
+  } catch (err) {
+    halfway = String(err.message ?? err);
+  }
+  check('a provider with no model is refused', halfway !== '', 'it was created');
+}
+
+console.log('\n[defaults] everything else may still be left out');
+{
+  const bare = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna' });
   check('it has an id', typeof bare.id === 'string' && bare.id.length > 0);
   check('and a name', typeof bare.name === 'string' && bare.name.length > 0, bare.name);
   check('and timestamps', typeof bare.createdAt === 'number' && typeof bare.updatedAt === 'number');
-  // Absent rather than a guessed default: the resolver treats undefined as
-  // "inherit", and a wrong concrete value would pin it.
+  /*
+   * Absent rather than a guessed default. These still inherit, and should:
+   * a workspace, a policy and a node all fall back to something sensible,
+   * and none of them can silently point a request at the wrong company —
+   * which is the property the provider and model lacked.
+   */
   check('with no invented node', bare.nodeId === undefined);
   check('and no invented policy', bare.approvalPolicy === undefined);
 }

@@ -57,10 +57,29 @@ export interface AgentRecord {
   /** Deterministic avatar styling derived from the id when unset. */
   avatarShape?: string;
   avatarColor?: string;
-  /** Provider preset id (e.g. "openai"); the key is resolved separately. */
-  presetId?: string;
-  /** Model override; falls back to the preset default. */
-  model?: string;
+  /**
+   * Which provider serves this agent, e.g. `openai`. Required.
+   *
+   * Both this and `model` used to be optional, falling back to a global
+   * default. That inheritance was the single largest source of agents that
+   * looked configured and could not work: the MODEL was usually set on the
+   * agent and the PROVIDER was usually not, so the two came from different
+   * places and nothing ever looked at them together. An agent with an
+   * OpenAI model and an inherited NVIDIA provider spent its whole retry
+   * schedule on a host that answers `404 page not found`.
+   *
+   * They are required, and always chosen as a pair. The key or sign-in is
+   * still resolved separately, per provider.
+   */
+  presetId: string;
+  /**
+   * The model this agent uses. Required, and one this provider serves.
+   *
+   * Not an "override" any more — there is nothing left to override. It is
+   * simply what this agent runs on, and it is chosen at the same moment as
+   * the provider so the two cannot drift apart.
+   */
+  model: string;
   /**
    * Endpoint override for this agent.
    *
@@ -403,8 +422,26 @@ export interface ChannelSettings {
 
 
 export interface GlobalSettings {
+  /**
+   * Which provider card the Settings panel is showing.
+   *
+   * A UI cursor, nothing more. It used to be the default every agent
+   * inherited, and that is gone: an agent carries its own provider and
+   * model, always. This survives only so that reopening Settings lands on
+   * the provider you were last entering a key for.
+   *
+   * Nothing in the engine reads it. If you find yourself reaching for it to
+   * answer "what provider should this run on?", the answer is on the agent.
+   */
   presetId?: string;
+  /**
+   * The model shown beside that provider card, for testing a credential.
+   *
+   * Also not a default. `Test connection` needs *some* model to send, and
+   * this is it.
+   */
   model?: string;
+  /** Endpoint override for the provider card above, for self-hosted setups. */
   baseUrl?: string;
   /** Delivery channels available to agents. */
   channels?: ChannelSettings;

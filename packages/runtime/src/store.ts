@@ -158,6 +158,18 @@ export function listAgents(): AgentRecord[] {
   return readArray<AgentRecord>(filePath(AGENTS_FILE));
 }
 
+/**
+ * Write the whole roster back.
+ *
+ * For migrations only, which need to rewrite many records at once without
+ * `updateAgent`'s per-record timestamp — a migration that bumped
+ * `updatedAt` on every agent would reorder the user's sidebar for a change
+ * they did not make.
+ */
+export function replaceAgents(agents: AgentRecord[]): void {
+  saveAgents(agents);
+}
+
 function saveAgents(agents: AgentRecord[]): void {
   writeJson(filePath(AGENTS_FILE), agents);
 }
@@ -169,6 +181,30 @@ export function getAgent(id: string): AgentRecord | undefined {
 export function createAgent(patch: Partial<AgentRecord>): AgentRecord {
   const agents = listAgents();
   const ts = now();
+
+  /*
+   * A provider and a model, or no agent.
+   *
+   * Both used to be optional and fell back to a global default at turn
+   * time. They fell back INDEPENDENTLY, which is the part that hurt: the
+   * model was usually set and the provider usually was not, so the two came
+   * from different places and nothing compared them — an OpenAI model aimed
+   * at NVIDIA, which answers `404 page not found` and always will.
+   *
+   * Refused here rather than warned about later. An agent that cannot work
+   * should not be creatable: it looks fine in the roster, and the failure
+   * arrives on its first message, in whatever room it was added to.
+   */
+  const presetId = patch.presetId?.trim();
+  const model = patch.model?.trim();
+  if (!presetId || !model) {
+    throw new Error(
+      'An agent needs a provider and a model, chosen together. ' +
+        `Got provider=${presetId ? `"${presetId}"` : '(none)'}, ` +
+        `model=${model ? `"${model}"` : '(none)'}.`,
+    );
+  }
+
   const record: AgentRecord = {
     id: patch.id ?? newId('agent'),
     name: patch.name?.trim() || `Agent ${agents.length + 1}`,
@@ -176,8 +212,8 @@ export function createAgent(patch: Partial<AgentRecord>): AgentRecord {
     persona: patch.persona,
     avatarShape: patch.avatarShape,
     avatarColor: patch.avatarColor,
-    presetId: patch.presetId,
-    model: patch.model,
+    presetId,
+    model,
     /*
      * Which machine owns this agent.
      *

@@ -127,7 +127,7 @@ console.log('\n[active] who is speaking right now');
 
 console.log('\n[end to end] a replayed message does not run twice');
 {
-  const agent = createAgentWithRoom({ name: 'Deployer' });
+  const agent = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Deployer' });
 
   let runs = 0;
   const run = async () => {
@@ -162,7 +162,7 @@ console.log('\n[end to end] a replayed message does not run twice');
 
 console.log('\n[failure] a failed turn records why');
 {
-  const agent = createAgentWithRoom({ name: 'Fragile' });
+  const agent = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Fragile' });
   await runRoomTurn({
     conversationId: agent.id,
     text: 'go',

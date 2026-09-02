@@ -79,7 +79,11 @@ console.log('\n[scope] client-only methods are identified');
 
 console.log('\n[engine state] the node owns it');
 {
-  const created = await client.call('createAgent', [{ name: 'Remote agent' }]);
+  // Provider and model travel in the patch like every other field. A node
+  // cannot fill them in from its own settings, because nothing inherits.
+  const created = await client.call('createAgent', [
+    { name: 'Remote agent', presetId: 'openai', model: 'gpt-5.6-luna' },
+  ]);
   check('createAgent works over the wire', created?.name === 'Remote agent');
 
   const roster = await client.call('listAgents');

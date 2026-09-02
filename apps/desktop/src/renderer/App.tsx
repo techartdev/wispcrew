@@ -328,9 +328,15 @@ export function App() {
               </span>
             ) : (
               soloAgent && (
-                <span className="muted topbar-sub">
-                  {soloAgent.model || settings?.model || 'default model'}
-                </span>
+                /*
+                  The agent's own model, with nothing behind it.
+                  
+                  This read `agent.model || settings.model || 'default model'`
+                  — a fallback chain in a LABEL, which meant the header could
+                  confidently name a model the agent had never been set to.
+                  An agent carries its own now, so there is one thing to say.
+                */
+                <span className="muted topbar-sub">{soloAgent.model}</span>
               )
             )}
           </div>

@@ -87,7 +87,7 @@ console.log('\n[attachments] the record survives the reroute');
   setHost({ dataDir: dir, defaultWorkspaceRoot: dir, nodeName: 't', crypto: createNodeCrypto(dir) });
   initStore(dir);
 
-  const agent = createAgentWithRoom({ name: 'Reader' });
+  const agent = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Reader' });
 
   await runRoomTurn({
     conversationId: agent.id,
@@ -121,7 +121,7 @@ console.log('\n[claim] every path now produces a turn record');
   setHost({ dataDir: dir, defaultWorkspaceRoot: dir, nodeName: 't', crypto: createNodeCrypto(dir) });
   initStore(dir);
 
-  const agent = createAgentWithRoom({ name: 'Worker' });
+  const agent = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Worker' });
   await runRoomTurn({
     conversationId: agent.id,
     text: 'go',

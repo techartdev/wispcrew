@@ -17,11 +17,24 @@
  * keep working, and a catalogue this process has not fetched proves
  * nothing.
  */
+import { PROVIDER_PRESETS } from '@wispcrew/llm';
+import { describeModelMismatch, servesAnyName } from '@wispcrew/shared';
 import { listCachedModels } from './model-catalogue.js';
 
 export interface ConfigProblem {
   /** Shown to the user, and written into the conversation. */
   message: string;
+}
+
+/**
+ * Whether this provider may serve a model under any name.
+ *
+ * Delegated to `shared` so the renderer, the daemon and the engine judge
+ * from one implementation. The rule is subtle — ownership, not absence —
+ * and a second copy would get it wrong somewhere nobody was looking.
+ */
+function anythingGoes(presetId: string): boolean {
+  return servesAnyName(PROVIDER_PRESETS.find((p) => p.id === presetId));
 }
 
 /**
@@ -37,6 +50,23 @@ export function checkModelPairing(
 ): ConfigProblem | null {
   if (!presetId || !model) return null;
 
+  const trimmedModel = model.trim();
+
+  /*
+   * Does another vendor claim this name?
+   *
+   * Checked FIRST because it needs nothing: no network, no cache, no
+   * previous turn. The catalogue arm below could only judge a provider this
+   * process had already fetched a list from, which on a freshly started
+   * daemon is none of them — so the case this whole file was written for
+   * sailed straight through. An agent on NVIDIA set to `gpt-5.6-terra` ran
+   * its full retry schedule against a host that answers `404 page not
+   * found`, in a room where other agents were spending real tokens waiting
+   * for it.
+   */
+  const mismatch = describeModelMismatch(PROVIDER_PRESETS, presetId, trimmedModel);
+  if (mismatch) return { message: `${mismatch} Nothing was sent.` };
+
   /*
    * Only a catalogue this process has actually fetched counts.
    *
@@ -47,8 +77,10 @@ export function checkModelPairing(
   const known = listCachedModels(presetId);
   if (!known || known.length === 0) return null;
 
-  const trimmed = model.trim();
-  if (known.some((m) => m.id === trimmed)) return null;
+  if (known.some((m) => m.id === trimmedModel)) return null;
+  // A local or proxied endpoint may serve anything under any name, so its
+  // catalogue is not authoritative about what it will answer to.
+  if (anythingGoes(presetId)) return null;
 
   /*
    * A custom or self-hosted endpoint may serve anything. The catalogue is
@@ -58,7 +90,7 @@ export function checkModelPairing(
    */
   return {
     message:
-      `This agent is set to the model "${trimmed}", which ${presetId} does not offer. ` +
+      `This agent is set to the model "${trimmedModel}", which ${presetId} does not offer. ` +
       'That request cannot succeed, so it was not sent. ' +
       'Open Configure and pick a model from this provider, or change the provider to match.',
   };

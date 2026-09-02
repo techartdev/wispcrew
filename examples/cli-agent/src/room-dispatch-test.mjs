@@ -45,9 +45,9 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-disp-'));
 setHost({ dataDir: dir, defaultWorkspaceRoot: dir, nodeName: 'here', crypto: createNodeCrypto(dir) });
 initStore(dir);
 
-const local = createAgentWithRoom({ name: 'Local' });
-const windows = createAgentWithRoom({ name: 'Windows' });
-const linux = createAgentWithRoom({ name: 'Linux' });
+const local = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Local' });
+const windows = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Windows' });
+const linux = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Linux' });
 
 // Two of them live elsewhere.
 updateAgent(windows.id, { nodeId: 'gaming-pc' });

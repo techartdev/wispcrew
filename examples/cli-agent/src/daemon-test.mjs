@@ -26,7 +26,7 @@ rt.writeSettings(dir, {
   approvalPolicy: 'auto',
   workspaceRoot: process.cwd(),
 });
-const agent = rt.createAgent({ name: 'Wire agent', persona: 'general' });
+const agent = rt.createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Wire agent', persona: 'general' });
 
 // A minimal method table standing in for the desktop's bridge: enough to
 // prove dispatch, streaming events and a real turn over the socket.

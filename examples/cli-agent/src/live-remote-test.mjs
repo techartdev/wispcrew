@@ -44,7 +44,7 @@ console.log('\n[provision] give the NODE its own credentials');
     approvalPolicy: 'auto',
     workspaceRoot: dir,
   });
-  rt.createAgent({ name: 'Remote thinker', persona: 'general' });
+  rt.createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Remote thinker', persona: 'general' });
   check('the node has a key of its own', rt.hasProviderKey(dir, 'nvidia'));
 }
 

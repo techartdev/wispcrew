@@ -38,7 +38,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-routineturn-'));
 setHost({ dataDir: dir, defaultWorkspaceRoot: dir, nodeName: 'n', crypto: createNodeCrypto(dir) });
 initStore(dir);
 
-const agent = createAgentWithRoom({ name: 'Scheduled' });
+const agent = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Scheduled' });
 
 /** What `runRoutine` does, in the shape it does it. */
 const claimForRoutine = (routineId) =>
@@ -97,7 +97,7 @@ console.log('\n[a failure is visible as failed]');
 
 console.log('\n[scoping] turns belong to their conversation');
 {
-  const other = createAgentWithRoom({ name: 'Unrelated' });
+  const other = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Unrelated' });
   check('another agent has none', listTurns(other.id).length === 0);
   check('and the first still has its own', listTurns(agent.id).length === 3,
     String(listTurns(agent.id).length));

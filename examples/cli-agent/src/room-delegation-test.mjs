@@ -39,9 +39,9 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-rd-'));
 setHost({ dataDir: dir, defaultWorkspaceRoot: dir, nodeName: 't', crypto: createNodeCrypto(dir) });
 initStore(dir);
 
-const sums = createAgentWithRoom({ name: 'Sums' });
-const colours = createAgentWithRoom({ name: 'Colours' });
-const outsider = createAgentWithRoom({ name: 'Researcher' });
+const sums = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Sums' });
+const colours = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Colours' });
+const outsider = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Researcher' });
 
 // Put Colours in the Sums room; Researcher stays outside.
 addParticipant(

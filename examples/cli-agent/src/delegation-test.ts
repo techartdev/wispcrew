@@ -49,9 +49,9 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gb-deleg-'));
 store.initStore(dir);
 
 // Three agents to delegate between.
-const alice = store.createAgent({ name: 'Alice' });
-const bob = store.createAgent({ name: 'Bob', description: 'Writes prose' });
-const carol = store.createAgent({ name: 'Carol' });
+const alice = store.createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Alice' });
+const bob = store.createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Bob', description: 'Writes prose' });
+const carol = store.createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Carol' });
 
 async function main(): Promise<void> {
   console.log('\n[policy] a delegate never gains permission');
@@ -270,7 +270,7 @@ async function main(): Promise<void> {
   {
     const solo = fs.mkdtempSync(path.join(os.tmpdir(), 'gb-solo-'));
     store.initStore(solo);
-    const only = store.createAgent({ name: 'Only' });
+    const only = store.createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Only' });
     const c = rootContext('ask', only.id);
     eq('no tool with no peers', makeAskAgentTool(only.id, c, async () => 'x'), null);
     fs.rmSync(solo, { recursive: true, force: true });

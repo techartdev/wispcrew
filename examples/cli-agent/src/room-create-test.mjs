@@ -50,8 +50,8 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-room-create-'));
 setHost({ dataDir: dir, defaultWorkspaceRoot: dir, nodeName: 't', crypto: createNodeCrypto(dir) });
 initStore(dir);
 
-const host = createAgent({ name: 'Assistant' });
-const guest = createAgent({ name: 'Reviewer' });
+const host = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Assistant' });
+const guest = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Reviewer' });
 const chat = createConversation({ agentId: host.id, agentName: host.name });
 
 for (let i = 0; i < 8; i++) {

@@ -41,7 +41,7 @@ setHost({
   crypto: createNodeCrypto(dir),
 });
 initStore(dir);
-const agent = createAgent({ name: 'Contested' });
+const agent = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Contested' });
 
 console.log('\n[lost update] a held snapshot really does erase the other writer');
 {

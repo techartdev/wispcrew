@@ -31,7 +31,7 @@ rt.writeSettings(dir, {
   approvalPolicy: 'auto',
   workspaceRoot: process.cwd(),
 });
-const agent = rt.createAgent({ name: 'Detached agent', persona: 'general' });
+const agent = rt.createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Detached agent', persona: 'general' });
 
 let failures = 0;
 const check = (label, cond, detail) => {

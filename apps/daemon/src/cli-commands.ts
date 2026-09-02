@@ -17,6 +17,7 @@ import {
   removeNode,
   type NodeClient,
 } from '@wispcrew/runtime';
+import { describeModelMismatch } from '@wispcrew/shared';
 import type { Rendered } from './cli-output.js';
 import { table } from './cli-output.js';
 
@@ -104,11 +105,48 @@ export async function agentsCreate(ctx: CommandContext): Promise<Rendered> {
    * here needs no remote-creation protocol at all — which is just as well,
    * because the remote one is currently broken.
    */
+  /*
+   * A provider and a model, both named, or nothing.
+   *
+   * `--model` used to be the only one of the two, with the provider
+   * inherited from global settings — which is precisely how an agent ended
+   * up with an OpenAI model pointed at NVIDIA. The command could create the
+   * mismatch and had no flag capable of fixing it.
+   *
+   * Refused rather than defaulted. A default here would put the agent on
+   * whichever provider the machine happened to be set to, which is the
+   * behaviour being removed.
+   */
+  const presetId = text(ctx.args, 'provider');
+  const model = text(ctx.args, 'model');
+
+  if (!presetId || !model) {
+    const providers = await ctx.client.call<Record<string, unknown>[]>('getPresets');
+    const configured = providers.filter((p) => p.configured).map((p) => String(p.id));
+
+    throw new Error(
+      'An agent needs a provider and a model, chosen together.\n' +
+        `  wispcrew agents create ${name} --provider <id> --model <model>\n` +
+        (configured.length
+          ? `  configured here: ${configured.join(', ')}\n`
+          : '  no provider is configured yet — run: wispcrew configure\n') +
+        '  models: wispcrew models <provider>',
+    );
+  }
+
+  // The same rule the edit path applies, so an agent cannot be born in a
+  // state `agents set` would refuse to put it in.
+  const mismatch = describeModelMismatch(await presetList(ctx), presetId, model);
+  if (mismatch) {
+    throw new Error(`${mismatch} Nothing was created.\n  see: wispcrew models ${presetId}`);
+  }
+
   const created = await ctx.client.call<Record<string, unknown>>('createAgent', [
     {
       name,
       description: text(ctx.args, 'description'),
-      model: text(ctx.args, 'model'),
+      presetId,
+      model,
       approvalPolicy: text(ctx.args, 'policy'),
       workspaceRoot: text(ctx.args, 'workspace'),
     },
@@ -117,7 +155,7 @@ export async function agentsCreate(ctx: CommandContext): Promise<Rendered> {
   return {
     value: created,
     lines: [
-      `Created "${created.name}" on this machine.`,
+      `Created "${created.name}" on this machine, on ${presetId} / ${model}.`,
       '',
       `  wispcrew ask ${created.name} "hello"`,
     ],
@@ -153,11 +191,25 @@ export async function agentsDelete(ctx: CommandContext): Promise<Rendered> {
   };
 }
 
+/**
+ * The provider presets as THIS node reports them.
+ *
+ * Asked of the node rather than imported, because a node is entitled to a
+ * different build — and because the pairing rule must be judged against the
+ * list belonging to the machine the agent runs on, not this one's.
+ */
+async function presetList(ctx: CommandContext) {
+  return ctx.client.call<{ id: string; label?: string; models?: string[]; local?: boolean }[]>(
+    'getPresets',
+  );
+}
+
 export async function agentsUpdate(ctx: CommandContext): Promise<Rendered> {
   const wanted = ctx.positional[0];
   if (!wanted) {
     throw new Error(
-      'Usage: wispcrew agents set <agent> [--model x] [--policy ask|auto|readonly]\n' +
+      'Usage: wispcrew agents set <agent> [--provider id] [--model x]\n' +
+        '                              [--policy ask|auto|readonly]\n' +
         '                              [--description "..."] [--workspace <path>]',
     );
   }
@@ -167,6 +219,7 @@ export async function agentsUpdate(ctx: CommandContext): Promise<Rendered> {
 
   const patch: Record<string, unknown> = {};
   for (const [flag, field] of [
+    ['provider', 'presetId'],
     ['model', 'model'],
     ['policy', 'approvalPolicy'],
     ['description', 'description'],
@@ -178,7 +231,41 @@ export async function agentsUpdate(ctx: CommandContext): Promise<Rendered> {
   }
 
   if (Object.keys(patch).length === 0) {
-    throw new Error('Nothing to change. Pass at least one of --model, --policy, --description.');
+    throw new Error(
+      'Nothing to change. Pass at least one of --provider, --model, --policy, --description.',
+    );
+  }
+
+  /*
+   * A provider and a model are one decision, so they are checked together.
+   *
+   * Either may be given alone — moving to a newer model on the same
+   * provider is the common case — but the PAIR that results is what must
+   * make sense, so the missing half is taken from the record. Checking only
+   * what was typed would let `--model gpt-5.6-terra` land on an NVIDIA
+   * agent, which is exactly the mistake this whole change removes.
+   *
+   * Refused here rather than at the first message. An agent that cannot
+   * work should not be saveable: it looks fine in the roster afterwards,
+   * and the failure surfaces in whatever room it was added to.
+   */
+  const nextPreset = String(patch.presetId ?? agent.presetId ?? '');
+  const nextModel = String(patch.model ?? agent.model ?? '');
+
+  /*
+   * `describeModelMismatch`, not `checkModelPairing`.
+   *
+   * The latter is the engine's turn-time check and ends with "Nothing was
+   * sent", which is true there and false here — nothing was being sent, a
+   * setting was being saved. Same rule, correct consequence.
+   */
+  const mismatch = describeModelMismatch(await presetList(ctx), nextPreset, nextModel);
+  if (mismatch) {
+    throw new Error(
+      `${mismatch} Nothing was changed.\n` +
+        `  move the provider too:  wispcrew agents set ${agent.name} --provider <id> --model ${nextModel}\n` +
+        `  or see what ${nextPreset} serves:  wispcrew models ${nextPreset}`,
+    );
   }
 
   const updated = await ctx.client.call<Record<string, unknown>>('updateAgent', [agent.id, patch]);
@@ -242,6 +329,55 @@ export async function providers(ctx: CommandContext): Promise<Rendered> {
         String(p.defaultModel ?? ''),
       ]),
       ['ID', 'PROVIDER', 'DEFAULT MODEL'],
+    ),
+  };
+}
+
+/**
+ * What a provider actually serves, asked of the provider.
+ *
+ * Added because two error messages wanted to point at it. The curated list
+ * in each preset is short and goes stale — NVIDIA serves 84 models and the
+ * preset names six — so "pick a model this provider offers" is useless
+ * advice without a way to see the real list.
+ *
+ * `--refresh` re-asks rather than reading the cache, which is what you want
+ * the moment a model you expected is missing.
+ */
+export async function models(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) {
+    const presets = await ctx.client.call<Record<string, unknown>[]>('getPresets');
+    throw new Error(
+      'Which provider? Usage: wispcrew models <provider>\n' +
+        `  ${presets.map((p) => String(p.id)).join(', ')}`,
+    );
+  }
+
+  const list = await ctx.client.call<Record<string, unknown>[]>('listProviderModels', [
+    wanted,
+    { refresh: ctx.args.refresh === true },
+  ]);
+
+  if (list.length === 0) {
+    return {
+      value: [],
+      lines: [
+        `${wanted} returned no model list.`,
+        'It may be unreachable, or it may not publish one — a model can still be',
+        'given by name if you know it serves one.',
+      ],
+    };
+  }
+
+  return {
+    value: list,
+    lines: table(
+      // "verified with tools" is the only thing here that is not simply the
+      // provider's own word, and it is the fact that matters most: a model
+      // that cannot call a tool cannot do the job.
+      list.map((m) => [String(m.id), m.tested ? 'verified with tools' : '']),
+      ['MODEL', 'NOTES'],
     ),
   };
 }
@@ -1582,11 +1718,17 @@ const COMMAND_SCHEMA = [
     summary: 'Create an agent on THIS machine, with its own room.',
     args: [
       { name: 'name', required: true, positional: true },
+      { name: '--provider', required: true, description: 'preset id; see `providers`' },
+      { name: '--model', required: true, description: 'one this provider serves; see `models`' },
       { name: '--description', required: false },
-      { name: '--model', required: false },
       { name: '--policy', required: false, description: 'ask | auto | readonly' },
+      { name: '--workspace', required: false },
     ],
     returns: 'the created agent',
+    notes:
+      'Provider and model are both required and are one decision. Nothing is ' +
+      'inherited from global settings: an agent carries where it runs and what it ' +
+      'runs on, so changing a global setting can never silently move it.',
   },
   {
     name: 'agents delete',
@@ -1742,10 +1884,15 @@ const COMMAND_SCHEMA = [
   },
   {
     name: 'agents set',
-    summary: 'Change an agent: model, permissions, description, workspace.',
+    summary: 'Change an agent: provider, model, permissions, description, workspace.',
+    notes:
+      'Provider and model are checked as a PAIR, taking the missing half from the ' +
+      'record — so `--model` alone cannot land a model this agent\u2019s provider does ' +
+      'not serve. Refused at this point rather than at the first message.',
     args: [
       { name: 'agent', required: true, positional: true },
-      { name: '--model', required: false },
+      { name: '--provider', required: false, description: 'preset id; see `providers`' },
+      { name: '--model', required: false, description: 'one this provider serves' },
       { name: '--policy', required: false, description: 'ask | auto | readonly' },
       { name: '--description', required: false },
       { name: '--workspace', required: false },
@@ -1864,6 +2011,18 @@ const COMMAND_SCHEMA = [
     summary: 'Provider presets this build knows about.',
     args: [],
     returns: 'array of { id, label, defaultModel }',
+  },
+  {
+    name: 'models',
+    summary: 'What a provider actually serves, asked of the provider.',
+    args: [
+      { name: 'provider', required: true, positional: true, description: 'preset id' },
+      { name: '--refresh', required: false, description: 're-ask instead of reading the cache' },
+    ],
+    returns: 'array of { id, tested }',
+    notes:
+      'The curated list in each preset is short and goes stale — NVIDIA serves 84 ' +
+      'and the preset names six. This is the real one.',
   },
   {
     name: 'personas',

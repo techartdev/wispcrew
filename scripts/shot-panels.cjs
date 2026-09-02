@@ -27,7 +27,7 @@ fs.writeFileSync(
   `
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { NewChoicePanel, NewGroupPanel, RoomPanel } from '${path
+import { NewChoicePanel, NewGroupPanel, RoomPanel, NewAgentPanel, AgentPanel } from '${path
     .join(repo, 'apps/desktop/src/renderer/Panels.tsx')
     .replace(/\\/g, '/')}';
 
@@ -52,7 +52,36 @@ const room = {
 
 const noop = () => {};
 
+const presets = [
+  { id: 'openai', label: 'OpenAI', configured: true, defaultModel: 'gpt-5.6-luna',
+    models: ['gpt-5.6-luna', 'gpt-5.6-terra'], keyHint: '', kind: 'openai-compatible', baseUrl: '' },
+  { id: 'nvidia', label: 'NVIDIA NIM', configured: true,
+    defaultModel: 'nvidia/nemotron-3-super-120b-a12b',
+    models: ['nvidia/nemotron-3-super-120b-a12b'], keyHint: '', kind: 'openai-compatible', baseUrl: '' },
+  { id: 'anthropic', label: 'Anthropic (Claude)', configured: false, defaultModel: 'claude-opus-5',
+    models: ['claude-opus-5'], keyHint: '', kind: 'anthropic', baseUrl: '' },
+];
+
+// A pairing that cannot work, so the refusal is visible rather than assumed.
+const crossed = {
+  id: 'a1', name: 'Crossed wires', presetId: 'nvidia', model: 'gpt-5.6-terra',
+  createdAt: 1, updatedAt: 1,
+};
+
 globalThis.__PANELS__ = {
+  'new-agent': renderToStaticMarkup(
+    React.createElement(NewAgentPanel, {
+      presets, defaultPresetId: 'nvidia', onCreate: noop, onOpenSettings: noop, onClose: noop,
+    }),
+  ),
+  'agent-mismatch': renderToStaticMarkup(
+    React.createElement(AgentPanel, {
+      agent: crossed, presets, personas: [{ id: 'general', label: 'General', description: '' }],
+      nodes: [], globalPolicy: 'ask',
+      onSave: noop, onDelete: noop, onDuplicate: noop,
+      onPickDirectory: async () => null, onClose: noop,
+    }),
+  ),
   'new-choice': renderToStaticMarkup(
     React.createElement(NewChoicePanel, {
       canGroup: true, onAgent: noop, onGroup: noop, onClose: noop,

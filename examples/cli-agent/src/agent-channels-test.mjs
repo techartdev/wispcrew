@@ -46,7 +46,7 @@ const global = { channels: { enabled: ['desktop'] } };
 
 console.log('\n[unset] an agent follows the global setting');
 {
-  const agent = createAgent({ name: 'Default' });
+  const agent = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Default' });
   check('no override is stored', agent.channels === undefined);
 
   const resolved = channelsFor(agent, global);
@@ -56,7 +56,7 @@ console.log('\n[unset] an agent follows the global setting');
 
 console.log('\n[override] an agent can be noisier than the default');
 {
-  const agent = createAgent({ name: 'Noisy' });
+  const agent = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Noisy' });
   updateAgent(agent.id, { channels: ['telegram'] });
 
   const stored = listAgents().find((a) => a.id === agent.id);
@@ -70,7 +70,7 @@ console.log('\n[override] an agent can be noisier than the default');
 
 console.log('\n[silence] an empty override is a real choice, not "unset"');
 {
-  const agent = createAgent({ name: 'Quiet' });
+  const agent = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Quiet' });
   updateAgent(agent.id, { channels: [] });
 
   const stored = listAgents().find((a) => a.id === agent.id);

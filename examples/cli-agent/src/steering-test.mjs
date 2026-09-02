@@ -45,8 +45,8 @@ setHost({
 initStore(dir);
 initGrants(dir);
 
-const alice = createAgent({ name: 'Alice' });
-const bob = createAgent({ name: 'Bob' });
+const alice = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Alice' });
+const bob = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Bob' });
 const methods = nodeMethods();
 
 console.log('\n[1] a typed message is recorded before the turn runs');

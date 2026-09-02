@@ -41,7 +41,7 @@ const reload = (id) => listAgents().find((a) => a.id === id);
 
 console.log('\n[the trap] an explicit undefined does not delete');
 {
-  const agent = createAgent({ name: 'Probe', channelPolicies: { telegram: 'auto' } });
+  const agent = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Probe', channelPolicies: { telegram: 'auto' } });
 
   /*
    * This is what a form would naturally send, and what silently failed.
@@ -58,7 +58,7 @@ console.log('\n[the trap] an explicit undefined does not delete');
 
 console.log('\n[clear] naming the field removes it');
 {
-  const agent = createAgent({ name: 'Probe2', channelPolicies: { telegram: 'auto' } });
+  const agent = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Probe2', channelPolicies: { telegram: 'auto' } });
 
   const overWire = JSON.parse(JSON.stringify({ clear: ['channelPolicies'] }));
   updateAgent(agent.id, overWire);
@@ -76,7 +76,7 @@ console.log('\n[partial updates] absence still means "leave it alone"');
    * name would otherwise wipe every permission on the agent.
    */
   const agent = createAgent({
-    name: 'Probe3',
+    presetId: 'openai', model: 'gpt-5.6-luna', name: 'Probe3',
     channelPolicies: { telegram: 'ask' },
     approvalPolicy: 'readonly',
   });
@@ -92,7 +92,7 @@ console.log('\n[partial updates] absence still means "leave it alone"');
 console.log('\n[both at once] a patch may set some fields and clear others');
 {
   const agent = createAgent({
-    name: 'Probe4',
+    presetId: 'openai', model: 'gpt-5.6-luna', name: 'Probe4',
     channelPolicies: { telegram: 'auto' },
     workspaceRoot: '/tmp/x',
   });
@@ -107,7 +107,7 @@ console.log('\n[both at once] a patch may set some fields and clear others');
 
 console.log('\n[identity] clear cannot remove what identifies the agent');
 {
-  const agent = createAgent({ name: 'Probe5' });
+  const agent = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Probe5' });
   updateAgent(agent.id, { clear: ['id', 'createdAt'] });
   const after = reload(agent.id);
 

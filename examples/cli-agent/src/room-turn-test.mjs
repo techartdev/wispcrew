@@ -42,8 +42,8 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-room-'));
 setHost({ dataDir: dir, defaultWorkspaceRoot: dir, nodeName: 't', crypto: createNodeCrypto(dir) });
 initStore(dir);
 
-const windows = createAgent({ name: 'Windows builder' });
-const linux = createAgent({ name: 'Linux builder' });
+const windows = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Windows builder' });
+const linux = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Linux builder' });
 migrateAgentsToConversations();
 
 const room = listConversations().find((r) => r.id === windows.id);

@@ -239,3 +239,4 @@ export * from './domain.js';
 export * from './bridge.js';
 export * from './method-scope.js';
 export * from './conversation.js';
+export * from './model-pairing.js';

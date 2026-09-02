@@ -77,7 +77,7 @@ const inbound = (text, extra = {}) => ({
   ...extra,
 });
 
-const agent = createAgent({ name: 'Assistant' });
+const agent = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Assistant' });
 migrateAgentsToConversations();
 const room = listConversations()[0];
 

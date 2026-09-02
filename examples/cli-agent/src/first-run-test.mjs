@@ -63,7 +63,7 @@ console.log('\n[an empty profile] nothing is invented');
 
 console.log('\n[the first agent] arrives with a room, or it cannot be talked to');
 {
-  const agent = createAgentWithRoom({ name: 'Assistant' });
+  const agent = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Assistant' });
 
   check('the agent exists', listAgents().length === 1);
 

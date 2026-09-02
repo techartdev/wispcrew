@@ -179,38 +179,51 @@ function resolveApiKey(presetId: string): string | undefined {
 }
 
 /**
- * Resolve the effective configuration for an agent: per-agent overrides win
- * over the global defaults, so one agent can run a cheap model in a scratch
- * directory while another uses a stronger model against a real project.
+ * Resolve the effective configuration for an agent.
+ *
+ * ## The provider and the model come from the agent, and nowhere else
+ *
+ * These used to fall back: `agent.presetId ?? settings.presetId ?? 'deepseek'`
+ * and `agent.model ?? settings.model`. That chain was the largest single
+ * source of agents that looked configured and could not work, because the
+ * two halves fell back independently. In practice the model was set on the
+ * agent and the provider was not, so they came from different places and
+ * nothing ever compared them — producing an OpenAI model aimed at NVIDIA,
+ * which answers `404 page not found` and always will.
+ *
+ * Worse, the failure moved. Changing the global provider silently changed
+ * where every inheriting agent sent its requests, so an agent that worked
+ * yesterday failed today with nothing about it having been edited.
+ *
+ * There is no fallback now. An agent carries both, always, chosen together.
+ * `migrateAgentsToExplicitProvider` writes them into records that predate
+ * this, and the store refuses to create one without them.
+ *
+ * Everything else still inherits, and should: a workspace, an approval
+ * policy and a persona are all safe to leave at a sensible default, and
+ * none of them can silently point a request at the wrong company.
  */
-async function effectiveConfig(agent: AgentRecord | undefined, settings: GlobalSettings) {
-  const presetId = agent?.presetId ?? settings.presetId ?? 'deepseek';
+async function effectiveConfig(agent: AgentRecord, settings: GlobalSettings) {
+  const presetId = agent.presetId;
   const credential = await resolveCredential(presetId);
   return {
     presetId,
-    model: agent?.model ?? settings.model,
+    model: agent.model,
     /*
-     * A custom Base URL belongs to the preset it was entered for.
+     * A custom Base URL belongs to the agent, or to its preset.
      *
-     * `presetId` and `model` honour a per-agent override, but `baseUrl` used
-     * to be taken from global settings unconditionally — so an agent set to
-     * OpenAI while the global provider was NVIDIA sent OpenAI's model name to
-     * NVIDIA's host. The reply ("does not recognise gpt-5.6-terra") was
-     * correct but came from the wrong provider, and the error named OpenAI,
-     * making it look like a valid model had been rejected.
-     *
-     * The override now applies only when the agent is actually on the preset
-     * the URL was configured for; otherwise the preset's own default host is
-     * used. `custom` has no default host, so its URL always applies.
+     * It used to be readable from global settings when the agent happened
+     * to be on the same preset the URL was entered for — a coupling that
+     * existed only because the provider was inherited too. With the
+     * provider on the agent, the agent's own `baseUrl` is the only
+     * override, and everything else uses the preset's published host.
      */
-    baseUrl:
-      agent?.baseUrl ??
-      (presetId === settings.presetId || presetId === 'custom' ? settings.baseUrl : undefined),
+    baseUrl: agent.baseUrl,
     // The same resolution the prompt uses, so what an agent is TOLD about
     // its boundary and where it is actually confined cannot drift apart.
     workspaceRoot: resolveWorkspaceRoot(agent),
-    approvalPolicy: agent?.approvalPolicy ?? settings.approvalPolicy ?? 'ask',
-    persona: agent?.persona ?? settings.persona,
+    approvalPolicy: agent.approvalPolicy ?? settings.approvalPolicy ?? 'ask',
+    persona: agent.persona ?? settings.persona,
     apiKey: credential.apiKey,
     accountId: credential.accountId,
     /** Set when a subscription sign-in is required but absent. */
@@ -561,6 +574,29 @@ export async function runPrompt(
   const images = attachments.filter((a) => a.kind === 'image');
   const settings = readSettings(dataDir(), defaultSettings()) as GlobalSettings;
   const agent = store.getAgent(agentId);
+
+  /*
+   * No record, no run.
+   *
+   * Reachable when an agent is deleted while a turn is in flight, or when a
+   * room still lists a member that has gone. It used to proceed on the
+   * global provider and model — a turn with no name, on somebody else's
+   * settings, writing into a transcript nobody owns. With inheritance gone
+   * there is nothing left to proceed WITH, which is the honest answer
+   * anyway: say so, and stop.
+   */
+  if (!agent) {
+    pushTranscript(outputId, {
+      kind: 'notice',
+      id: store.newId('err'),
+      level: 'error',
+      text: 'That agent no longer exists, so the message was not sent.',
+      createdAt: Date.now(),
+    });
+    emitEngineEvent({ type: 'run-state', agentId: outputId, state: 'idle' });
+    return '';
+  }
+
   const cfg = await effectiveConfig(agent, settings);
 
   // A subscription preset with no sign-in fails here with a message that
@@ -729,15 +765,20 @@ export async function runPrompt(
    * reported as a provider error, in a room where other agents were
    * spending real tokens waiting on it.
    *
-   * Narrow on purpose: this fires only when the provider publishes a model
-   * list, this process has already fetched it, and the configured model is
-   * absent from it. Anything less certain proceeds, because blocking a
-   * working configuration would be worse than the failure it prevents.
+   * Narrow on purpose, and it fires on two kinds of certainty: another
+   * vendor explicitly claims the model name, or the provider published a
+   * catalogue this process has fetched and the model is absent from it.
+   * Anything less certain proceeds, because blocking a working
+   * configuration would be worse than the failure it prevents.
+   *
+   * Both values come off the agent now. Inheritance was how the pairing
+   * went wrong in the first place — the model set explicitly on the agent,
+   * the provider not set at all, the two arriving from different places
+   * with nothing comparing them. This check survives the removal of that
+   * chain because a person can still type a model by hand, which is the one
+   * remaining way to get it wrong.
    */
-  const problem = checkModelPairing(
-    agent?.presetId ?? settings.presetId,
-    agent?.model ?? settings.model,
-  );
+  const problem = checkModelPairing(agent.presetId, agent.model);
   if (problem) {
     pushTranscript(outputId, {
       kind: 'notice',

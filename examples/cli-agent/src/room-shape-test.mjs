@@ -54,7 +54,7 @@ initStore(dir);
 
 console.log('\n[direct] one agent, one chat — unchanged');
 {
-  const agent = createAgent({ name: 'Assistant' });
+  const agent = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Assistant' });
   const room = createConversation({ agentId: agent.id, agentName: agent.name });
 
   check('the room id is still the agent id', room.id === agent.id, room.id);
@@ -66,8 +66,8 @@ console.log('\n[direct] one agent, one chat — unchanged');
 
 console.log('\n[group] a room nobody owns');
 {
-  const a = createAgent({ name: 'Builder' });
-  const b = createAgent({ name: 'Reviewer' });
+  const a = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Builder' });
+  const b = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Reviewer' });
   const room = createRoom({ title: 'Deploy review', members: [
     { id: a.id, name: a.name },
     { id: b.id, name: b.name },
@@ -105,7 +105,7 @@ console.log('\n[no model] a room configures nothing');
 
 console.log('\n[minimum] a group of one is a chat, and is refused');
 {
-  const a = createAgent({ name: 'Lonely' });
+  const a = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Lonely' });
   let threw = '';
   try {
     createRoom({ title: 'Just me', members: [{ id: a.id, name: a.name }] });
@@ -123,8 +123,8 @@ console.log('\n[migration] rooms written before `kind` existed');
    * ids derived from their agents. This is what a real profile on disk
    * looks like right now.
    */
-  const solo = createAgent({ name: 'Old Solo' });
-  const mate = createAgent({ name: 'Old Mate' });
+  const solo = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Old Solo' });
+  const mate = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Old Mate' });
   const now = Date.now();
 
   const legacy = [
@@ -217,7 +217,7 @@ console.log('\n[founder] deleting the agent a group started from');
 
 console.log('\n[direct is still disposable] a private chat goes with its agent');
 {
-  const solo = createAgent({ name: 'Temp' });
+  const solo = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Temp' });
   createConversation({ agentId: solo.id, agentName: solo.name });
   check('the chat exists', Boolean(getConversation(solo.id)));
 
@@ -229,8 +229,8 @@ console.log('\n[direct is still disposable] a private chat goes with its agent')
 
 console.log('\n[promotion] a second agent joining a chat makes it a group');
 {
-  const host = createAgent({ name: 'Host' });
-  const guest = createAgent({ name: 'Guest' });
+  const host = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Host' });
+  const guest = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Guest' });
   const room = createConversation({ agentId: host.id, agentName: host.name });
   check('starts direct', room.kind === 'direct');
 
