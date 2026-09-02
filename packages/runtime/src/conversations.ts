@@ -25,7 +25,7 @@ import type {
   RoomEventKind,
   TranscriptEntry,
 } from '@wispcrew/shared';
-import { handleFor } from '@wispcrew/shared';
+import { agentsIn, handleFor } from '@wispcrew/shared';
 import { fileLog } from './filelog.js';
 import * as store from './store.js';
 
@@ -43,12 +43,29 @@ export function localHuman(channels: ChannelId[] = ['app', 'desktop']): HumanPar
   return { kind: 'human', id: LOCAL_HUMAN_ID, name: 'You', channels };
 }
 
+/**
+ * Fill in `kind` for a record written before it existed.
+ *
+ * Done on read rather than only in the migration, because a profile is not
+ * always migrated by the process that reads it: two hosts share one store,
+ * and a remote node's records arrive over the wire having never passed
+ * through this machine's startup at all.
+ *
+ * The rule is what the user already lived with: a room holding more than one
+ * agent has been behaving as a group, whatever it was created as. Anything
+ * else is a direct chat.
+ */
+function withKind(record: ConversationRecord): ConversationRecord {
+  if (record.kind === 'direct' || record.kind === 'group') return record;
+  return { ...record, kind: agentsIn(record).length > 1 ? 'group' : 'direct' };
+}
+
 /** Every room, newest first. */
 export function listConversations(): ConversationRecord[] {
   const all = store.readJson<ConversationRecord[]>(store.conversationsPath(), []);
   if (!Array.isArray(all)) return [];
 
-  return [...all].sort((a, b) => b.updatedAt - a.updatedAt);
+  return [...all].map(withKind).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 /**
@@ -97,11 +114,62 @@ export function createConversation(patch: {
     // what lets the existing transcript file stay exactly where it is.
     id: patch.id ?? patch.agentId,
     title: patch.title ?? patch.agentName,
+    kind: 'direct',
     participants: [
       localHuman(),
       { kind: 'agent', id: patch.agentId, handle: handleFor(patch.agentName) },
     ],
     mode: 'open',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  saveConversations([...listConversations(), record]);
+  return record;
+}
+
+/**
+ * Create a room that belongs to nobody.
+ *
+ * The difference from `createConversation` is the whole point of this
+ * restructure: the id is the room's own (`room_…`), not an agent's, so the
+ * room stops being its first member. Deleting any one agent leaves the room
+ * intact, the header has something to describe other than a model, and
+ * Configure has a room to configure.
+ *
+ * A room has no model and no provider, and there is no parameter here for
+ * one. Agents arrive already configured; a room that could set a model would
+ * make the same agent answer differently depending on which room it was
+ * spoken to in, which is exactly the confusion rooms are meant to end.
+ *
+ * Two members minimum, enforced rather than advised: a group of one is a
+ * direct chat wearing the wrong clothes, and every screen that renders a
+ * room would then have to cope with a room that is not one.
+ */
+export function createRoom(patch: {
+  title: string;
+  members: { id: string; name: string }[];
+  mode?: ConversationRecord['mode'];
+  id?: string;
+}): ConversationRecord {
+  if (patch.members.length < 2) {
+    throw new Error('A group needs at least two agents. With one, use a direct chat.');
+  }
+
+  const now = Date.now();
+  const handles: string[] = [];
+  const agents: AgentParticipant[] = patch.members.map((m) => {
+    const handle = handleFor(m.name, handles);
+    handles.push(handle);
+    return { kind: 'agent', id: m.id, handle };
+  });
+
+  const record: ConversationRecord = {
+    id: patch.id ?? store.newId('room'),
+    title: patch.title,
+    kind: 'group',
+    participants: [localHuman(), ...agents],
+    mode: patch.mode ?? 'open',
     createdAt: now,
     updatedAt: now,
   };
@@ -158,7 +226,21 @@ export function deleteConversation(id: string): void {
  * it rendered in the sidebar, accepted messages, and did nothing with them.
  */
 store.setAgentDeletedHook((agentId) => {
-  deleteConversation(agentId);
+  /*
+   * Only the agent's OWN direct chat goes with it.
+   *
+   * Before rooms had a `kind`, this deleted any room whose id matched the
+   * agent's — and a group made by adding a second agent to a direct chat
+   * carries the founding agent's id. So deleting the agent you happened to
+   * start the group from destroyed the group, its transcript included, while
+   * deleting any other member did not. That is the "undefined state" in
+   * `docs/ROOMS.md`, and it was silent data loss.
+   *
+   * A group survives its founder: it belongs to whoever made it, and the
+   * departing agent is removed like any other member below.
+   */
+  const own = getConversation(agentId);
+  if (own && own.kind !== 'group') deleteConversation(agentId);
 
   /*
    * And out of every room it merely joined.
@@ -219,9 +301,20 @@ export function addParticipant(
   if (!conversation) return undefined;
   if (conversation.participants.some((p) => p.id === participant.id)) return conversation;
 
-  const updated = updateConversation(conversationId, {
-    participants: [...conversation.participants, participant],
-  });
+  const participants = [...conversation.participants, participant];
+
+  /*
+   * A second agent joining a direct chat makes it a group.
+   *
+   * Kept for now because it is what happens today, and step 1 of the
+   * restructure changes no behaviour. Step 5 replaces this path: adding an
+   * agent to a one-to-one will ask whether to start fresh or bring the
+   * history, and either answer produces a NEW room rather than quietly
+   * converting the chat the user was already in.
+   */
+  const kind = participants.filter((p) => p.kind === 'agent').length > 1 ? 'group' : conversation.kind;
+
+  const updated = updateConversation(conversationId, { participants, kind });
 
   const label = participant.kind === 'agent' ? `@${participant.handle}` : participant.name;
   const invited = participant.kind === 'agent' && participant.invitedBy;
@@ -271,6 +364,8 @@ export function removeParticipant(
  * matters because both hosts call this at startup and either may go first.
  */
 export function migrateAgentsToConversations(): number {
+  backfillKinds();
+
   const existing = new Set(listConversations().map((c) => c.id));
   const agents = store.listAgents();
 
@@ -285,4 +380,35 @@ export function migrateAgentsToConversations(): number {
     fileLog('[conversations] created', String(created), 'room(s) for existing agents');
   }
   return created;
+}
+
+/**
+ * Write `kind` onto rooms that predate it.
+ *
+ * `listConversations` already fills it in on the way out, so nothing depends
+ * on this having run — it exists so the file on disk stops needing to be
+ * interpreted. Writes only when something actually changed, because a
+ * rewrite that changes nothing is still a rewrite, and every write of this
+ * file is a chance to lose it.
+ *
+ * No id is touched. Every existing room keeps its agent-derived id, exactly
+ * as `docs/ROOMS.md` promises: nothing moves on disk and there is no flag
+ * day. Only rooms created from here on get a `room_…` id of their own.
+ */
+function backfillKinds(): number {
+  const raw = store.readJson<ConversationRecord[]>(store.conversationsPath(), []);
+  if (!Array.isArray(raw)) return 0;
+
+  let changed = 0;
+  const next = raw.map((record) => {
+    const filled = withKind(record);
+    if (filled !== record) changed++;
+    return filled;
+  });
+
+  if (changed > 0) {
+    saveConversations(next);
+    fileLog('[conversations] labelled', String(changed), 'room(s) direct/group');
+  }
+  return changed;
 }

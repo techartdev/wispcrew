@@ -35,10 +35,28 @@ which is exactly the confusion this is meant to end.
 Conversation
   id            room_…            its own, never an agent's
   title         "Deploy review"
-  members       [agentId, …]      nobody is the root
+  kind          direct | group    what it was meant to be
+  participants  [agent, …, you]   nobody is the root
   mode          directed | open | free
   greeting      the tone, the purpose, who is here and why
 ```
+
+Two notes on the shape as built, both departures from the first sketch.
+
+**`members` is derived, not stored.** The sketch had a `members: string[]`
+beside `participants`. Membership is already written down — `participants`
+carries each agent's id, handle and who invited it — so a second list could
+only ever agree or be wrong, and two records of one fact drift until the
+answer depends on which you happened to read. `memberIds()` reads it off
+`participants`. What the sketch was really asking for is that **nobody is
+the root**, and that comes from the room owning an id, not from copying ids
+into an array.
+
+**`kind` is stored, not counted.** "How many agents are in here?" is a
+count; "was this meant to be a group?" is an intention, and they diverge the
+moment a group drops to one member. Counting would silently demote it to a
+private chat with whoever was left — moving its header and Configure onto an
+agent that merely outlasted the others.
 
 ### The greeting
 
@@ -88,21 +106,35 @@ is misbehaving, so it is where fixing it should begin.
 ## Migration
 
 Every existing room keeps its agent-derived id as its `id`. Nothing moves
-on disk, nothing is renamed, and `members` is filled from the participants
+on disk, nothing is renamed, and membership is read from the participants
 already recorded. Rooms created afterwards get a real `room_…` id. Both
 shapes work indefinitely; there is no flag day.
 
 A one-to-one chat is a room with one member and is rendered exactly as it
 is today, so the common case is untouched.
 
+`kind` is filled in on read as well as written by the migration, because a
+profile is not always migrated by the process that reads it: two hosts share
+one store, and a remote node's records arrive over the wire having never
+passed through this machine's startup.
+
+### One bug this uncovered
+
+A group made by adding a second agent to a chat carries the founding agent's
+id — and the agent-deleted hook removed any room whose id matched. So
+deleting the agent you happened to start a group from **destroyed the
+group and its transcript**, while deleting any other member was harmless.
+Silent data loss that depended on which member you removed. A group now
+survives its founder; only a `direct` chat goes with its agent.
+
 ## Order of work
 
-1. `members` and a room id, with the migration — the shape only, no
-   behaviour change.
+1. ✅ A room id of its own, `kind`, derived membership, and the migration —
+   shape only, with `test:room-shape` pinning it and pinning that
+   one-to-one chats are untouched.
 2. The greeting: stored, editable, shown to members.
 3. Header and Configure move from the agent to the room.
 4. The two creation paths.
-5. A suite pinning the migration, and that one-to-one chats are untouched.
 
 ## Not part of this
 

@@ -87,10 +87,27 @@ export interface AgentParticipant {
 
 export type Participant = HumanParticipant | AgentParticipant;
 
+/**
+ * What kind of place this is, as the person who made it intended.
+ *
+ * `direct` is you and one agent — the original shape, and still the common
+ * one. `group` is a room several agents were deliberately put in.
+ *
+ * Stored rather than counted, because the two answer different questions.
+ * "How many agents are in here right now?" is a count; "was this meant to be
+ * a group?" is an intention, and the difference shows the moment a group
+ * drops to one member. Counting would silently demote it to a private chat
+ * with whoever happened to be left — renaming its header, moving its
+ * Configure button, and making the room look like it belongs to an agent
+ * that merely outlasted the others.
+ */
+export type ConversationKind = 'direct' | 'group';
+
 export interface ConversationRecord {
   id: string;
   /** User-facing title. Defaults to the first agent's name. */
   title: string;
+  kind: ConversationKind;
   participants: Participant[];
   mode: RoomMode;
   createdAt: number;
@@ -179,7 +196,37 @@ export function handleFor(name: string, taken: string[] = []): string {
 
 /** Participants that can be addressed with `@`. */
 export function agentsIn(conversation: ConversationRecord): AgentParticipant[] {
-  return conversation.participants.filter((p): p is AgentParticipant => p.kind === 'agent');
+  return (conversation.participants ?? []).filter(
+    (p): p is AgentParticipant => p.kind === 'agent',
+  );
+}
+
+/**
+ * The room's members: the agents in it, by id.
+ *
+ * `docs/ROOMS.md` sketches this as a stored `members: string[]` beside
+ * `participants`. It is derived instead, and the reason is the bug class
+ * that has cost this project the most: two records of the same fact drift,
+ * and then the answer depends on which one you happened to read. Membership
+ * is already written down — `participants` carries each agent's id, handle
+ * and who invited it — so a second list could only ever agree or be wrong.
+ *
+ * What the document actually asked for was that **nobody is the root**: a
+ * room is not its first agent. That is delivered by the room owning an id of
+ * its own, not by copying ids into a parallel array.
+ */
+export function memberIds(conversation: ConversationRecord): string[] {
+  return agentsIn(conversation).map((a) => a.id);
+}
+
+/**
+ * Is this room a group — several agents deliberately put together?
+ *
+ * Reads `kind` when it is set and falls back to counting, so a record
+ * written before `kind` existed still answers correctly.
+ */
+export function isGroup(conversation: ConversationRecord): boolean {
+  return conversation.kind ? conversation.kind === 'group' : agentsIn(conversation).length > 1;
 }
 
 export function humansIn(conversation: ConversationRecord): HumanParticipant[] {
