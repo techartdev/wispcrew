@@ -1089,26 +1089,7 @@ body {
 }
 
 /* Narrower than the panel, and anchored inside it. */
-/*
- * Anchored to the pane's inner edge, not to the meter's left.
- *
- * `left: 0` opened it rightwards from a control that already sits at the
- * right-hand edge of the window, so the panel ran off the screen and its
- * contents could not be read at all. Right-anchored it opens inwards, and
- * the width is capped by the column it lives in.
- */
-.context-breakdown-narrow {
-  /*
-   * Right-anchored and fixed width, so it opens INWARDS over the
-   * conversation and its right edge can never pass the window's.
-   * `left: 0` opened it rightwards from a control already at the right
-   * edge of the screen, and the panel simply ran off — the numbers it
-   * exists to show could not be read at all.
-   */
-  width: 240px;
-  right: 0;
-  left: auto;
-}
+
 
 .context-meter {
   display: flex;
@@ -1162,17 +1143,21 @@ body {
   white-space: nowrap;
 }
 
+/*
+ * Placed by the component, in viewport coordinates, via a portal.
+ *
+ * It used to be absolutely positioned beside its trigger — which cannot
+ * work from inside the room panel, because that scrolls and therefore
+ * clips its children. Position and width are set inline now; what stays
+ * here is only how it looks.
+ */
 .context-breakdown {
-  position: absolute;
-  right: 0;
-  bottom: 26px;
-  z-index: 30;
-  width: 260px;
+  z-index: 60;
   padding: 10px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
   background: var(--bg-raised);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
 }
 
 .context-breakdown-head {

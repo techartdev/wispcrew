@@ -177,3 +177,97 @@ for (const [name, html] of Object.entries(globalThis.__PANELS__)) {
   );
   console.log(`wrote ${path.relative(repo, file)}`);
 }
+
+/*
+ * And one page that actually RUNS.
+ *
+ * The files above are `renderToStaticMarkup` — markup with no React behind
+ * it, which is all a form at rest needs. It is useless for anything that
+ * exists only after a click, and the context breakdown is exactly that: it
+ * opens on click, measures its trigger, and clamps itself to the window.
+ * Every earlier check of it was therefore by construction rather than by
+ * looking, and it was wrong twice — most recently by being trapped inside a
+ * scrolling panel that clips its children.
+ *
+ * So this bundles a real client entry and mounts it, and `shot-open.cjs`
+ * clicks it.
+ */
+const liveEntry = path.join(out, 'live.jsx');
+fs.writeFileSync(
+  liveEntry,
+  `
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { RoomPane } from '${path
+    .join(repo, 'apps/desktop/src/renderer/RoomPane.tsx')
+    .replace(/\\/g, '/')}';
+
+const noop = () => {};
+
+const room = ${JSON.stringify({
+    id: 'r1',
+    title: 'OpenClaw AddOn Dev & OpenClaw Dev Version',
+    kind: 'group',
+    mode: 'open',
+    greeting:
+      'Repository workflow - @openclaw-addon-dev manages the main techartdev/OpenClawHomeAssistant repository: watches issues, pull requests, releases and CI.',
+    createdAt: 1,
+    updatedAt: 1,
+    participants: [
+      { kind: 'human', id: 'human:local', name: 'You', channels: ['app'] },
+      { kind: 'agent', id: 'a1', handle: 'openclaw-addon-prod-version' },
+      { kind: 'agent', id: 'a2', handle: 'openclaw-addon-dev-version' },
+    ],
+  })};
+
+const agents = ${JSON.stringify([
+    { id: 'a1', name: 'OpenClaw AddOn Prod Version', createdAt: 1, updatedAt: 1 },
+    { id: 'a2', name: 'OpenClaw AddOn Dev Version', createdAt: 1, updatedAt: 1 },
+  ])};
+
+const reports = ${JSON.stringify([
+    {
+      conversationId: 'r1', agentId: 'a1', agentName: 'OpenClaw AddOn Prod Version',
+      used: 45468, measured: false, limit: 400000, fraction: 0.1136,
+      systemTokens: 1016, toolTokens: 2010, messageTokens: 42442, model: 'gpt-5.6-terra',
+    },
+    {
+      conversationId: 'r1', agentId: 'a2', agentName: 'OpenClaw AddOn Dev Version',
+      used: 45431, measured: false, limit: 400000, fraction: 0.1135,
+      systemTokens: 979, toolTokens: 2010, messageTokens: 42442, model: 'gpt-5.6-terra',
+    },
+  ])};
+
+createRoot(document.getElementById('root')).render(
+  React.createElement('div', { style: { display: 'flex', height: '100vh' } },
+    React.createElement('div', { style: { flex: 1, background: '#0f1115' } }),
+    React.createElement(RoomPane, {
+      room, agents, routines: [], runStates: { a1: 'idle', a2: 'idle' },
+      contextReports: reports,
+      onCompact: noop, onMention: noop, onOpenRoutines: noop,
+      onRename: noop, onSetGreeting: noop, onConfigure: noop, onClose: noop,
+    }),
+  ),
+);
+`,
+);
+
+const live = esbuild.buildSync({
+  entryPoints: [liveEntry],
+  bundle: true,
+  write: false,
+  format: 'iife',
+  platform: 'browser',
+  jsx: 'automatic',
+  loader: { '.tsx': 'tsx', '.ts': 'ts', '.jsx': 'jsx' },
+  absWorkingDir: repo,
+});
+
+const liveFile = path.join(out, 'room-pane-live.html');
+fs.writeFileSync(
+  liveFile,
+  `<!doctype html><meta charset="utf-8"><style>${css}</style>` +
+    `<body style="margin:0"><div id="root"></div>` +
+    `<script>${live.outputFiles[0].text}</script></body>`,
+);
+console.log(`wrote ${path.relative(repo, liveFile)}`);

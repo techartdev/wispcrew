@@ -19,8 +19,15 @@
  * own input-token figure is used. "~" is the difference, and the tooltip
  * spells it out.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ContextReportView } from '@wispcrew/shared';
+
+/** The breakdown's size, needed before it exists in order to place it. */
+const PANEL_W = 260;
+const PANEL_H = 230;
+/** Keep this far from every window edge. */
+const MARGIN = 8;
 
 /** `12345` → `12.3K`, because the exact digit is never the question. */
 function short(tokens: number): string {
@@ -54,15 +61,70 @@ export function ContextMeter({
   /**
    * Rendered inside the room panel rather than under the composer.
    *
-   * That panel is about two hundred pixels wide, so the meter fills its own
-   * line and the breakdown has to be narrower. One component either way —
-   * two would drift, and this is the number people will compare between
-   * members.
+   * Affects only how the TRIGGER looks — the panel is about two hundred
+   * pixels wide, so the meter fills its own line and wears its border only
+   * on hover. The breakdown itself is identical in both places.
    */
   inline?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
+
+  /**
+   * Where the breakdown should appear, in viewport coordinates.
+   *
+   * Measured from the trigger and clamped to the window. Prefers to open
+   * upwards, because both meters sit low — under the composer, and near the
+   * bottom of a member list — and falls below only when there is no room
+   * above.
+   */
+  const place = () => {
+    const rect = trigger.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const room = { above: rect.top - MARGIN, below: window.innerHeight - rect.bottom - MARGIN };
+
+    setAt({
+      top: room.above >= PANEL_H || room.above >= room.below
+        ? Math.max(MARGIN, rect.top - PANEL_H - 6)
+        : rect.bottom + 6,
+      // Right-aligned with the trigger, then pulled back inside the window.
+      left: Math.min(
+        Math.max(MARGIN, rect.right - PANEL_W),
+        window.innerWidth - PANEL_W - MARGIN,
+      ),
+    });
+  };
+
+  /*
+   * Close on anything that would move the trigger out from under it.
+   *
+   * A panel positioned once and left there drifts away from the control it
+   * belongs to the moment the pane scrolls. Closing is honest and cheap;
+   * following the trigger would mean recomputing on every scroll frame for
+   * a panel nobody keeps open.
+   */
+  useEffect(() => {
+    if (!open) return;
+
+    const shut = () => setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+
+    // `true` so a scroll inside the room pane is caught too: scroll does not
+    // bubble, and the pane is the container this most needs to hear from.
+    window.addEventListener('scroll', shut, true);
+    window.addEventListener('resize', shut);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('scroll', shut, true);
+      window.removeEventListener('resize', shut);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
 
   // Nothing measured yet, or an empty conversation: say nothing rather than
   // showing a confident zero.
@@ -84,8 +146,12 @@ export function ContextMeter({
     <div className={`context-meter-wrap${inline ? ' context-meter-inline' : ''}`}>
       <button
         type="button"
+        ref={trigger}
         className={`context-meter${tone(report.fraction)}`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (!open) place();
+          setOpen((v) => !v);
+        }}
         aria-expanded={open}
         title={title}
       >
@@ -105,11 +171,24 @@ export function ContextMeter({
         <span className="context-meter-label">{label}</span>
       </button>
 
-      {open && (
+      {/*
+        Rendered into the document body, not beside the trigger.
+        
+        The room panel scrolls, and `overflow-y: auto` makes a clipping
+        context: an absolutely-positioned child of it CANNOT leave it, no
+        matter how it is anchored. Two attempts at anchoring failed for that
+        reason, and the panel came out cut off against the window edge.
+        
+        A portal takes it out of that box entirely, and `position: fixed`
+        with a measured, clamped position keeps it on screen wherever the
+        trigger happens to be.
+      */}
+      {open && at && createPortal(
         <div
-          className={`context-breakdown${inline ? ' context-breakdown-narrow' : ''}`}
+          className="context-breakdown"
           role="dialog"
           aria-label="Context usage"
+          style={{ position: 'fixed', top: at.top, left: at.left, width: PANEL_W }}
         >
           <div className="context-breakdown-head">
             <strong>
@@ -177,7 +256,8 @@ export function ContextMeter({
               </span>
             </div>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

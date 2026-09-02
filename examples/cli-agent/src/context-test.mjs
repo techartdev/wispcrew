@@ -296,6 +296,39 @@ console.log('\n[ui] every class the meter renders exists');
   // would be a claim about how full the context is.
   check('the bar is gated on a known fraction',
     /report\.fraction !== undefined && \(/.test(tsx));
+
+  /*
+   * The breakdown is PORTALLED, and that is not a style choice.
+   *
+   * `.room-pane` scrolls, and `overflow-y: auto` makes a clipping context:
+   * an absolutely-positioned child of it cannot leave it however it is
+   * anchored. Two attempts at anchoring failed for exactly that reason and
+   * the panel came out cut off against the window edge — reported as "it
+   * cannot appear freely on the screen", which was the correct diagnosis.
+   */
+  check('it escapes the scrolling pane', /createPortal\(/.test(tsx),
+    'an absolutely-positioned popover cannot leave .room-pane');
+  check('into the document body', /document\.body/.test(tsx));
+  check('positioned in viewport coordinates', /position: 'fixed'/.test(tsx));
+
+  // Measured from the trigger and clamped, or it lands off-screen anyway.
+  check('and clamped to the window',
+    /window\.innerWidth - PANEL_W - MARGIN/.test(tsx));
+  check('preferring the side with room',
+    /room\.above >= PANEL_H \|\| room\.above >= room\.below/.test(tsx));
+
+  /*
+   * Closed on scroll, with a CAPTURING listener: scroll does not bubble,
+   * and the pane is the container this most needs to hear from. A panel
+   * fixed once drifts away from the control it belongs to as soon as its
+   * list moves.
+   */
+  check('closed when the trigger moves', /addEventListener\('scroll', shut, true\)/.test(tsx));
+  check('and on Escape', /e\.key === 'Escape'/.test(tsx));
+
+  // Nothing left anchoring it inside a box it now escapes.
+  check('no stale narrow variant', !/context-breakdown-narrow/.test(tsx));
+  check('nor in the stylesheet', !/context-breakdown-narrow/.test(css));
   // And the tilde is the visible difference between the two kinds of number.
   check('an estimate is marked with a tilde', /report\.measured \? '' : '~'/.test(tsx));
 }
