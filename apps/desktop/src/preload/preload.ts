@@ -115,6 +115,10 @@ const bridge: WispBridge = {
     ipcRenderer.invoke('wc:renameConversation', conversationId, title),
   setRoomMode: (conversationId: string, mode: string) =>
     ipcRenderer.invoke('wc:setRoomMode', conversationId, mode),
+  setRoomGreeting: (conversationId: string, greeting: string) =>
+    ipcRenderer.invoke('wc:setRoomGreeting', conversationId, greeting),
+  createRoom: (patch: { title: string; agentIds: string[]; greeting?: string }) =>
+    ipcRenderer.invoke('wc:createRoom', patch),
   sendToRoom: (conversationId: string, text: string, attachmentPaths?: string[]) =>
     ipcRenderer.invoke('wc:sendToRoom', conversationId, text, attachmentPaths),
 

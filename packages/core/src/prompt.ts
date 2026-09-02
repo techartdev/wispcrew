@@ -77,6 +77,15 @@ export interface SystemPromptOptions {
     participants: ParticipantFact[];
     /** How much the room constrains who speaks. */
     mode?: 'directed' | 'open' | 'free';
+    /** The room's name, when it has one of its own. */
+    title?: string;
+    /**
+     * The room's standing instructions — its tone, purpose and cast.
+     *
+     * Rendered as something the user can also read, because that is what it
+     * is. See `ConversationRecord.greeting`.
+     */
+    greeting?: string;
   };
 }
 
@@ -229,6 +238,8 @@ function roomSection(opts: SystemPromptOptions): string[] {
   const room = opts.room;
   if (!room) return [];
 
+  const greeting = (room.greeting ?? '').trim();
+
   /*
    * Company means more than one AGENT, not more than one participant.
    *
@@ -237,9 +248,39 @@ function roomSection(opts: SystemPromptOptions): string[] {
    * made a normal one-to-one conversation announce itself, and disagreed
    * with the engine, which only supplies a room when a second agent joins.
    */
-  if (room.participants.filter((p) => p.kind === 'agent').length <= 1) return [];
+  const company = room.participants.filter((p) => p.kind === 'agent').length > 1;
+  if (!company && !greeting) return [];
 
-  const lines = ['## Who is in this conversation', ''];
+  const lines: string[] = [];
+
+  /*
+   * The room's own instructions, before who is in it.
+   *
+   * Placed first because it is the frame everything else is read in: what
+   * this place is for, and in what tone. An agent that reads the cast before
+   * the purpose has to reinterpret the cast.
+   *
+   * Stated as visible, not as a secret directive. That sentence is
+   * load-bearing — without it a model treats standing instructions as
+   * confidential by default and will deflect when the user asks what it was
+   * told, which is precisely the opacity this design rejects.
+   */
+  if (greeting) {
+    lines.push(
+      room.title ? `## This room: ${room.title}` : '## This room',
+      '',
+      ...greeting.split('\n').map((line) => `> ${line}`.trimEnd()),
+      '',
+      "Those are the room's standing instructions. Everyone who has joined can see",
+      'them, the user included — they are not confidential. Follow them, say what',
+      'they are if you are asked, and speak up if one of them is wrong.',
+      '',
+    );
+  }
+
+  if (!company) return lines;
+
+  lines.push('## Who is in this conversation', '');
 
   for (const p of room.participants) {
     const self = p.kind === 'agent' && p.handle && p.handle === opts.handle;

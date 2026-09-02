@@ -13,6 +13,7 @@
  */
 import { useMemo, useState, useEffect } from 'react';
 import { IconSettings } from './Icons.js';
+import { isGroup } from '@wispcrew/shared';
 import type { AgentRecord, AgentRunState, ConversationRecord, RoutineRecord } from '@wispcrew/shared';
 
 /**
@@ -84,6 +85,7 @@ export function RoomPane({
   onMention,
   onOpenRoutines,
   onRename,
+  onSetGreeting,
   onConfigure,
   onClose,
 }: {
@@ -94,6 +96,8 @@ export function RoomPane({
   onMention(handle: string): void;
   onOpenRoutines(): void;
   onRename(title: string): void;
+  /** Save the room's standing instructions. Empty clears them. */
+  onSetGreeting(text: string): void;
   /** Open a particular member's own settings. */
   onConfigure(agentId: string): void;
   onClose(): void;
@@ -112,6 +116,22 @@ export function RoomPane({
     // save a room called "".
     if (!next) return setDraftTitle(room.title ?? '');
     if (next !== room.title) onRename(next);
+  };
+
+  /*
+   * The greeting, edited locally and saved on blur.
+   *
+   * Same reasoning as the title: typing must not fight a round trip, and a
+   * half-written instruction must not follow the user into the next room.
+   */
+  const [draftGreeting, setDraftGreeting] = useState(room.greeting ?? '');
+  useEffect(() => setDraftGreeting(room.greeting ?? ''), [room.id, room.greeting]);
+
+  const commitGreeting = () => {
+    const next = draftGreeting.trim();
+    // An empty box means "no instructions", which is a real answer here —
+    // unlike an empty name, there is nothing to fall back to.
+    if (next !== (room.greeting ?? '')) onSetGreeting(next);
   };
 
   const members = useMemo(
@@ -189,6 +209,51 @@ export function RoomPane({
             }
           }}
         />
+      )}
+
+      {/*
+        The room's standing instructions.
+        
+        The one piece of content a room owns: its tone, its purpose, and why
+        these particular agents are here. It travels with the conversation,
+        so an agent added halfway through knows what kind of place it walked
+        into without reading the whole scrollback.
+        
+        Shown in plain sight, editable in place, with a line saying who can
+        read it — because everyone can. A hidden system instruction would
+        mean the user reads a reply shaped by a rule they cannot find, and
+        an agent asked "what were you told?" would have to deflect. A rule
+        nobody can see is a rule nobody can correct.
+        
+        Offered for a group only. A one-to-one chat already has a place for
+        standing instructions — the agent's own description — and a second
+        one would just be two ways to say the same thing.
+      */}
+      {isGroup(room) && (
+        <div className="room-greeting">
+          <label className="room-greeting-label" htmlFor="room-greeting-input">
+            Room instructions
+          </label>
+          <textarea
+            id="room-greeting-input"
+            className="room-greeting-input"
+            value={draftGreeting}
+            rows={3}
+            placeholder="What is this room for, and in what tone? Everyone here will read it."
+            onChange={(e) => setDraftGreeting(e.target.value)}
+            onBlur={commitGreeting}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setDraftGreeting(room.greeting ?? '');
+                e.currentTarget.blur();
+              }
+            }}
+          />
+          <p className="room-greeting-note">
+            Visible to everyone here, including the agents. They are told to follow it
+            and to say what it is if you ask.
+          </p>
+        </div>
       )}
 
       <ul className="room-pane-members">

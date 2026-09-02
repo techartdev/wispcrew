@@ -47,6 +47,8 @@ import {
   listRoutines,
   listSkills,
   addParticipant,
+  createRoom,
+  setRoomGreeting,
   getConversation,
   listCheckpoints,
   listConversations,
@@ -154,6 +156,32 @@ export function nodeMethods(): MethodTable {
    * later is missing its announcement VISIBLY at the call site instead of
    * silently in a body — which is how all of these came to be missing.
    */
+  /**
+   * A room changed — renamed, re-moded, a member in or out, greeting edited.
+   *
+   * Renaming was the only room change that announced anything, and it did so
+   * by borrowing `agents-changed`, which happens to make the client re-read
+   * the room list. Every other room mutation announced nothing, so the CLI
+   * setting a mode or a greeting left an open window showing the old room
+   * until it was reloaded. The same shape as the invisible approval card and
+   * the sidebar that kept a deleted agent: a change made where the call is
+   * ANSWERED has to be announced from there.
+   *
+   * Rooms are sent as the client should see them — without members whose
+   * agent no longer exists — because that is what `listConversations`
+   * returns and two doors onto one fact must not disagree.
+   */
+  const announceRooms = <T>(result: T): T => {
+    emitEngineEvent({
+      type: 'rooms-changed',
+      conversations: listConversations().map((room) => ({
+        ...room,
+        participants: visibleParticipants(room),
+      })),
+    });
+    return result;
+  };
+
   const announceRoutines = <T>(result: T): T => {
     emitEngineEvent({ type: 'routines-changed', routines: listRoutines() });
     return result;
@@ -231,26 +259,75 @@ export function nodeMethods(): MethodTable {
         .filter((p) => p.kind === 'agent')
         .map((p) => (p as { handle: string }).handle);
 
-      return addParticipant(
-        id,
-        { kind: 'agent', id: agent.id, handle: handleFor(agent.name, taken) },
-        LOCAL_HUMAN_ID,
-        'You',
+      return announceRooms(
+        addParticipant(
+          id,
+          { kind: 'agent', id: agent.id, handle: handleFor(agent.name, taken) },
+          LOCAL_HUMAN_ID,
+          'You',
+        ),
       );
     },
 
     removeRoomParticipant: (conversationId: never, participantId: never) =>
-      removeParticipant(
-        conversationId as unknown as string,
-        participantId as unknown as string,
-        LOCAL_HUMAN_ID,
-        'You',
+      announceRooms(
+        removeParticipant(
+          conversationId as unknown as string,
+          participantId as unknown as string,
+          LOCAL_HUMAN_ID,
+          'You',
+        ),
       ),
 
     setRoomMode: (conversationId: never, mode: never) =>
-      updateConversation(conversationId as unknown as string, {
-        mode: mode as unknown as 'directed' | 'open' | 'free',
-      }),
+      announceRooms(
+        updateConversation(conversationId as unknown as string, {
+          mode: mode as unknown as 'directed' | 'open' | 'free',
+        }),
+      ),
+
+    /*
+     * The room's standing instructions.
+     *
+     * The one piece of content a room owns, and deliberately visible: it is
+     * shown in the room pane and goes into every member's prompt marked as
+     * something the user can read too. A rule nobody can see is a rule
+     * nobody can correct.
+     */
+    setRoomGreeting: (conversationId: never, greeting: never) =>
+      announceRooms(
+        setRoomGreeting(conversationId as unknown as string, String(greeting ?? '')),
+      ),
+
+    /*
+     * A room that belongs to nobody.
+     *
+     * No model and no provider parameter, because a room does not
+     * reconfigure the agents in it — they arrive configured, and a room that
+     * could change that would make the same agent answer differently
+     * depending on where it was spoken to.
+     */
+    createRoom: (patch: never) => {
+      const input = (patch ?? {}) as {
+        title?: string;
+        agentIds?: string[];
+        greeting?: string;
+      };
+
+      const title = String(input.title ?? '').trim();
+      if (!title) throw new Error('A group needs a name.');
+
+      const roster = listAgents();
+      const members = (input.agentIds ?? []).map((id) => {
+        const agent = roster.find((a) => a.id === id);
+        // Named, not counted: "one of the agents is missing" sends the user
+        // looking through a list, and the answer is already known here.
+        if (!agent) throw new Error(`No agent with id ${id} exists on this node.`);
+        return { id: agent.id, name: agent.name };
+      });
+
+      return announceRooms(createRoom({ title, members, greeting: input.greeting }));
+    },
 
     /*
      * Naming a room.
@@ -266,12 +343,9 @@ export function nodeMethods(): MethodTable {
       const trimmed = String(title ?? '').trim();
       if (!trimmed) throw new Error('A conversation needs a name.');
 
-      const updated = updateConversation(conversationId as unknown as string, {
-        title: trimmed,
-      });
-
-      emitEngineEvent({ type: 'agents-changed', agents: listAgents() });
-      return updated;
+      return announceRooms(
+        updateConversation(conversationId as unknown as string, { title: trimmed }),
+      );
     },
 
     sendToRoom: (conversationId: never, text: never) => {

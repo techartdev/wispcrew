@@ -68,6 +68,8 @@ import {
   discoverChatId,
   getSecret,
   addParticipant,
+  createRoom,
+  setRoomGreeting,
   getConversation,
   listCheckpoints,
   listConversations,
@@ -1279,6 +1281,25 @@ export function registerBridge(context: BridgeContext): void {
     listConversations().map((room) => ({ ...room, participants: visibleParticipants(room) })),
   );
 
+  /**
+   * Tell every window a room changed, and pass the result through.
+   *
+   * These handlers used to emit `agents-changed`, which works only because
+   * the client happens to re-read the room list when the roster changes. A
+   * room is not an agent; saying so directly means a client can react to a
+   * room edit without being told a lie about the roster first.
+   */
+  const announceRooms = <T>(result: T): T => {
+    emitEvent({
+      type: 'rooms-changed',
+      conversations: listConversations().map((room) => ({
+        ...room,
+        participants: visibleParticipants(room),
+      })),
+    });
+    return result;
+  };
+
   handle('addRoomAgent', (conversationId: string, agentId: string) => {
     const agent = store.listAgents().find((a) => a.id === agentId);
     if (!agent) throw new Error('No such agent.');
@@ -1296,27 +1317,60 @@ export function registerBridge(context: BridgeContext): void {
       .filter((p) => p.kind === 'agent')
       .map((p) => (p as { handle: string }).handle);
 
-    const updated = addParticipant(
-      conversationId,
-      { kind: 'agent', id: agent.id, handle: handleFor(agent.name, taken) },
-      LOCAL_HUMAN_ID,
-      'You',
+    return announceRooms(
+      addParticipant(
+        conversationId,
+        { kind: 'agent', id: agent.id, handle: handleFor(agent.name, taken) },
+        LOCAL_HUMAN_ID,
+        'You',
+      ),
     );
-    emitEvent({ type: 'agents-changed', agents: store.listAgents() });
-    return updated;
   });
 
-  handle('removeRoomParticipant', (conversationId: string, participantId: string) => {
-    const updated = removeParticipant(conversationId, participantId, LOCAL_HUMAN_ID, 'You');
-    emitEvent({ type: 'agents-changed', agents: store.listAgents() });
-    return updated;
-  });
+  handle('removeRoomParticipant', (conversationId: string, participantId: string) =>
+    announceRooms(removeParticipant(conversationId, participantId, LOCAL_HUMAN_ID, 'You')),
+  );
 
-  handle('setRoomMode', (conversationId: string, mode: string) => {
-    const updated = updateConversation(conversationId, { mode: mode as never });
-    emitEvent({ type: 'agents-changed', agents: store.listAgents() });
-    return updated;
-  });
+  handle('setRoomMode', (conversationId: string, mode: string) =>
+    announceRooms(updateConversation(conversationId, { mode: mode as never })),
+  );
+
+  /*
+   * The room's standing instructions — its tone, purpose and cast.
+   *
+   * Visible to everyone who has joined, on purpose: shown in the room pane
+   * and placed in every member's prompt marked as something the user can
+   * read too. An agent that can read the room's rules can follow them, say
+   * what they are, and point out that one is wrong.
+   */
+  handle('setRoomGreeting', (conversationId: string, greeting: string) =>
+    announceRooms(setRoomGreeting(conversationId, String(greeting ?? ''))),
+  );
+
+  /*
+   * A room that belongs to nobody.
+   *
+   * There is no model or provider parameter, and that absence is the design:
+   * agents arrive configured, and a room that could reconfigure them would
+   * make the same agent behave differently depending on where it was spoken
+   * to — the exact confusion rooms exist to end.
+   */
+  handle(
+    'createRoom',
+    (patch: { title?: string; agentIds?: string[]; greeting?: string }) => {
+      const title = String(patch?.title ?? '').trim();
+      if (!title) throw new Error('A group needs a name.');
+
+      const roster = store.listAgents();
+      const members = (patch?.agentIds ?? []).map((id) => {
+        const agent = roster.find((a) => a.id === id);
+        if (!agent) throw new Error(`No agent with id ${id} exists on this machine.`);
+        return { id: agent.id, name: agent.name };
+      });
+
+      return announceRooms(createRoom({ title, members, greeting: patch?.greeting }));
+    },
+  );
 
   /*
    * Naming a room.
@@ -1329,9 +1383,7 @@ export function registerBridge(context: BridgeContext): void {
     const trimmed = String(title ?? '').trim();
     if (!trimmed) throw new Error('A conversation needs a name.');
 
-    const updated = updateConversation(conversationId, { title: trimmed });
-    emitEvent({ type: 'agents-changed', agents: store.listAgents() });
-    return updated;
+    return announceRooms(updateConversation(conversationId, { title: trimmed }));
   });
 
   /*

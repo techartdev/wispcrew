@@ -247,9 +247,23 @@ function environmentOptions(agent: AgentRecord | undefined, conversationId?: str
     // the room is noise, and one agent is still the common case.
     const agentCount = participants.filter((p) => p.kind === 'agent').length;
 
-    if (agentCount > 1) {
+    /*
+     * A greeting is reason enough on its own.
+     *
+     * A group whose members left down to one still has standing
+     * instructions, and dropping them because of a head count would change
+     * how the remaining agent behaves for a reason nobody could see. The
+     * prompt renders the two parts independently.
+     */
+    const greeting = conversation?.greeting?.trim() ? conversation.greeting : undefined;
+
+    if (agentCount > 1 || greeting) {
       room = {
         mode: conversation?.mode,
+        greeting,
+        // Only a room with a name of its own; a direct chat's title is just
+        // the agent's name, and "## This room: Assistant" says nothing.
+        title: conversation?.kind === 'group' ? conversation.title : undefined,
         participants: participants.map((p) => {
           if (p.kind === 'human') {
             /*

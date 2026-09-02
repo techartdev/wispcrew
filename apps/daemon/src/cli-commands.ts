@@ -827,6 +827,92 @@ export async function roomsAdd(ctx: CommandContext): Promise<Rendered> {
   };
 }
 
+/**
+ * Make a group.
+ *
+ * At least two agents, refused rather than warned about: a group of one is a
+ * direct chat, and every screen that renders a room would then have to cope
+ * with a room that is not one.
+ *
+ * There is no `--model` and no `--provider`, and that absence is deliberate.
+ * A room does not reconfigure the agents in it — they arrive configured, and
+ * a room that could change that would make the same agent answer differently
+ * depending on where it was spoken to.
+ */
+export async function roomsNew(ctx: CommandContext): Promise<Rendered> {
+  const [title, ...members] = ctx.positional;
+  if (!title || members.length === 0) {
+    throw new Error('Usage: wispcrew rooms new <name> <agent> <agent> [--greeting "…"]');
+  }
+
+  if (members.length < 2) {
+    throw new Error(
+      'A group needs at least two agents. For one agent, talk to it directly: wispcrew ask <agent> "…"',
+    );
+  }
+
+  const roster = await ctx.client.call<Record<string, unknown>[]>('listAgents');
+  const chosen = members.map((name) => findAgent(roster, name));
+
+  const greeting =
+    typeof ctx.args.greeting === 'string' ? ctx.args.greeting : undefined;
+
+  const room = await ctx.client.call<Record<string, unknown>>('createRoom', [
+    { title, agentIds: chosen.map((a) => a.id as string), greeting },
+  ]);
+
+  return {
+    value: room,
+    lines: [
+      `Created "${title}" with ${chosen.map((a) => a.name).join(', ')}.`,
+      `Send to it with:  wispcrew room "${title}" "@${(chosen[0] as { name: string }).name.split(/\s+/)[0]?.toLowerCase()} …"`,
+    ],
+  };
+}
+
+/**
+ * Read or set the room's standing instructions.
+ *
+ * Reading is half the point. These instructions are visible to every member
+ * and to the user by design, so there has to be a way to see what a room is
+ * telling its agents without opening the desktop app.
+ */
+export async function roomsGreeting(ctx: CommandContext): Promise<Rendered> {
+  const [roomName, ...rest] = ctx.positional;
+  if (!roomName) {
+    throw new Error('Usage: wispcrew rooms greeting <room> ["…"]   (omit the text to read it)');
+  }
+
+  const room = await findRoom(ctx, roomName);
+  const text = rest.join(' ');
+
+  // No text given: report what is there rather than silently clearing it.
+  // Clearing is `--clear`, so it cannot happen by leaving an argument off.
+  if (!text && ctx.args.clear !== true) {
+    const current = String(room.greeting ?? '');
+    return {
+      value: { room: room.id, greeting: current || null },
+      lines: current
+        ? [`"${room.title}" tells everyone who joins:`, '', ...current.split('\n').map((l) => `  ${l}`)]
+        : [`"${room.title}" has no standing instructions.`],
+    };
+  }
+
+  const updated = await ctx.client.call<Record<string, unknown>>('setRoomGreeting', [
+    room.id,
+    ctx.args.clear === true ? '' : text,
+  ]);
+
+  return {
+    value: updated,
+    lines: [
+      ctx.args.clear === true
+        ? `Cleared the instructions for "${room.title}".`
+        : `Everyone in "${room.title}" will now read that on arrival.`,
+    ],
+  };
+}
+
 export async function roomsRemove(ctx: CommandContext): Promise<Rendered> {
   const [roomName, agentName] = ctx.positional;
   if (!roomName || !agentName) {
@@ -1479,6 +1565,30 @@ const COMMAND_SCHEMA = [
     ],
     returns: 'array of transcript entries',
     notes: 'How to see what an unattended agent has been doing.',
+  },
+  {
+    name: 'rooms new',
+    summary: 'Create a group: a place where configured agents talk to each other.',
+    args: [
+      { name: 'name', required: true, positional: true },
+      { name: 'agents', required: true, positional: true, description: 'two or more, by name' },
+      { name: '--greeting', required: false, description: 'tone and purpose; every member reads it' },
+    ],
+    returns: 'the new room',
+    notes:
+      'A room has no model or provider — agents arrive configured. Two agents minimum: ' +
+      'a group of one is a direct chat.',
+  },
+  {
+    name: 'rooms greeting',
+    summary: "Read or set a room's standing instructions.",
+    args: [
+      { name: 'room', required: true, positional: true },
+      { name: 'text', required: false, positional: true, description: 'omit to read it' },
+      { name: '--clear', required: false, description: 'remove the instructions' },
+    ],
+    returns: '{ room, greeting }',
+    notes: 'Visible to every member and to the user; never a hidden system instruction.',
   },
   {
     name: 'rooms add',

@@ -149,6 +149,7 @@ export function createConversation(patch: {
 export function createRoom(patch: {
   title: string;
   members: { id: string; name: string }[];
+  greeting?: string;
   mode?: ConversationRecord['mode'];
   id?: string;
 }): ConversationRecord {
@@ -170,12 +171,33 @@ export function createRoom(patch: {
     kind: 'group',
     participants: [localHuman(), ...agents],
     mode: patch.mode ?? 'open',
+    greeting: patch.greeting?.trim() || undefined,
     createdAt: now,
     updatedAt: now,
   };
 
   saveConversations([...listConversations(), record]);
   return record;
+}
+
+/**
+ * Set or clear the room's standing instructions.
+ *
+ * A separate function rather than a raw `updateConversation` call so the
+ * change is announced in one place and the empty string means *clear* rather
+ * than "a greeting consisting of nothing" — a room with a blank greeting
+ * would still print an empty instructions block into every member's prompt.
+ *
+ * The record it returns is what every caller shows, which is the point: the
+ * greeting is visible to the user and to the agents, and there is no second
+ * hidden copy anywhere for them to disagree about.
+ */
+export function setRoomGreeting(
+  conversationId: string,
+  greeting: string,
+): ConversationRecord | undefined {
+  const text = greeting.trim();
+  return updateConversation(conversationId, { greeting: text || undefined });
 }
 
 /**

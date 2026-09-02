@@ -55,6 +55,19 @@ export type BridgeEvent =
     }
   /** The agent roster changed (created/renamed/deleted elsewhere). */
   | { type: 'agents-changed'; agents: AgentRecord[] }
+  /**
+   * A room changed: renamed, re-moded, a member added or removed, or its
+   * greeting edited.
+   *
+   * Its own event rather than another `agents-changed`. Renaming a room
+   * borrowed that one and it worked, because the client re-reads the room
+   * list whenever the roster changes — but a room is not an agent, and
+   * riding on that coincidence meant every OTHER room change announced
+   * nothing at all. Changing the mode, adding a member or editing the
+   * greeting from the CLI left an open window showing the old room until it
+   * was reloaded.
+   */
+  | { type: 'rooms-changed'; conversations: ConversationRecord[] }
   /** MCP server connection states changed. */
   | { type: 'mcp-changed'; servers: McpServerStatus[] }
   /** A routine started or finished. */
@@ -377,6 +390,30 @@ export interface WispBridge {
    */
   renameConversation(conversationId: string, title: string): Promise<ConversationRecord>;
   setRoomMode(conversationId: string, mode: RoomMode): Promise<ConversationRecord | undefined>;
+
+  /**
+   * Set the room's standing instructions — its tone, purpose and cast.
+   *
+   * Visible to every member and to the user; see `ConversationRecord.greeting`.
+   * An empty string clears it.
+   */
+  setRoomGreeting(
+    conversationId: string,
+    greeting: string,
+  ): Promise<ConversationRecord | undefined>;
+
+  /**
+   * Create a room that belongs to nobody, with at least two agents in it.
+   *
+   * No model and no provider: agents arrive configured, and a room that
+   * could reconfigure them would make the same agent answer differently
+   * depending on where it was spoken to.
+   */
+  createRoom(patch: {
+    title: string;
+    agentIds: string[];
+    greeting?: string;
+  }): Promise<ConversationRecord>;
 
   /**
    * Send a message to a ROOM rather than an agent.

@@ -114,6 +114,26 @@ export interface ConversationRecord {
   updatedAt: number;
 
   /**
+   * The one piece of content a room owns: its tone, its purpose, and why
+   * these particular agents are here.
+   *
+   * **Visible to everyone who has joined**, deliberately — it is shown in
+   * the room and it goes into every member's prompt marked as something the
+   * user can also read. Not a hidden system instruction.
+   *
+   * That choice is the whole design. An agent that can read the room's rules
+   * can follow them, can say what they are when asked, and can point out
+   * that one of them is wrong. A rule nobody can see is a rule nobody can
+   * correct — and the user, reading a reply shaped by an instruction they
+   * cannot find, has no way to know why their agent is behaving oddly.
+   *
+   * Belongs to the room, not to any agent: it travels with the conversation,
+   * so an agent added halfway through knows what kind of place it walked
+   * into without reading the whole transcript.
+   */
+  greeting?: string;
+
+  /**
    * The agent each person last addressed, keyed by human id.
    *
    * Tracked per person rather than per room: with two humans present, "the

@@ -260,7 +260,7 @@ OpenAI-compatible endpoint keeps chat-completions. `test:attachments` pins the
 routing, including that a local server borrowing an OpenAI model name is not
 rerouted.
 
-**Test coverage**: 72 offline suites — no API key, no network.
+**Test coverage**: 74 offline suites — no API key, no network.
 Several caught real bugs when written, and a few caught bugs that had already
 shipped; keep them green. Notable ones: `single-writer` (two engines on one
 store), `shell-timeout` (a killed process emits `exit` with no `close` on

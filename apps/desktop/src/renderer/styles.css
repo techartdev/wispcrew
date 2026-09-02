@@ -284,6 +284,64 @@ body {
 }
 
 /*
+ * The room's standing instructions.
+ *
+ * Rendered as an ordinary field rather than a settings dialog, because it is
+ * ordinary content: everyone in the room can read it, so hiding it behind a
+ * cog would misrepresent what it is.
+ */
+.room-greeting {
+  margin: 0 0 14px;
+}
+
+.room-greeting-label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.room-greeting-input {
+  width: 100%;
+  padding: 7px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.room-greeting-input::placeholder {
+  color: var(--text-dim);
+}
+
+.room-greeting-input:focus {
+  background: var(--bg);
+  border-color: var(--accent);
+  outline: none;
+}
+
+/*
+ * Who can read it, said out loud.
+ *
+ * The whole design rests on these instructions being visible rather than
+ * secret, and a field that does not say so reads like every other hidden
+ * system prompt the user has met.
+ */
+.room-greeting-note {
+  margin: 5px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/*
  * The per-member cog, revealed on hover.
  *
  * Always visible, five of these would compete with the names they sit

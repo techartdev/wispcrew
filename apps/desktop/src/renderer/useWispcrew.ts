@@ -232,6 +232,18 @@ export function useWispcrew() {
             // but coherent. The next event tries again.
           });
           return;
+        case 'rooms-changed':
+          /*
+           * A room was renamed, re-moded, joined, left, or its greeting
+           * edited — possibly from the CLI, possibly from another window.
+           *
+           * The list arrives in the frame rather than being re-fetched,
+           * because the sender already has it and a round trip here would
+           * leave a visible gap between the change and the screen catching
+           * up.
+           */
+          setConversations(event.conversations);
+          return;
         case 'mcp-changed':
           setMcpServers(event.servers);
           return;
@@ -452,6 +464,40 @@ export function useWispcrew() {
           setConversations(replaceRoom(await api.setRoomMode(selectedRef.current, mode as never)));
         } catch (err) {
           fail(err);
+        }
+      },
+
+      /*
+       * The room's standing instructions.
+       *
+       * Takes the id explicitly, like renaming: the pane editing it knows
+       * which room it is showing, and instructions that silently landed on
+       * whatever happened to be selected would be a nasty thing to discover
+       * later.
+       */
+      async setRoomGreeting(conversationId: string, greeting: string) {
+        try {
+          setConversations(replaceRoom(await api.setRoomGreeting(conversationId, greeting)));
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      /**
+       * Make a group, and select it.
+       *
+       * Selecting it is the point of doing it here: a room the user just
+       * created and cannot see would look like a failure.
+       */
+      async createRoom(patch: { title: string; agentIds: string[]; greeting?: string }) {
+        try {
+          const room = await api.createRoom(patch);
+          setConversations((current) => [room, ...current.filter((c) => c.id !== room.id)]);
+          setSelectedId(room.id);
+          return room;
+        } catch (err) {
+          fail(err);
+          return undefined;
         }
       },
 
