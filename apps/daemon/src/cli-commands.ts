@@ -1092,6 +1092,77 @@ export async function roomsNew(ctx: CommandContext): Promise<Rendered> {
 }
 
 /**
+ * How full a conversation's context is, and optionally compact it.
+ *
+ * Belongs here as much as in the window. A headless box running routines is
+ * exactly where a conversation fills up unwatched, and where nobody is
+ * looking at a meter — `wispcrew context <agent>` is how an operator finds
+ * out, and `--compact` is how they act on it over ssh.
+ */
+export async function contextCommand(ctx: CommandContext): Promise<Rendered> {
+  const [name] = ctx.positional;
+  if (!name) throw new Error('Usage: wispcrew context <agent or room> [--compact]');
+
+  const room = await findRoom(ctx, name);
+
+  if (ctx.args.compact === true) {
+    const result = await ctx.client.call<{
+      ok: boolean;
+      reason?: string;
+      replaced?: number;
+      kept?: number;
+    }>('compactConversation', [room.id]);
+
+    return {
+      value: result,
+      lines: result.ok
+        ? [
+            `Compacted "${room.title}".`,
+            `  ${result.replaced} earlier entries replaced by a summary`,
+            `  ${result.kept} recent entries kept exactly as they were`,
+            '  the full version is saved — restore it from History',
+          ]
+        : // A refusal is an answer, not a failure: say which.
+          [`Nothing was changed. ${result.reason ?? ''}`.trim()],
+    };
+  }
+
+  const report = await ctx.client.call<{
+    used: number;
+    measured: boolean;
+    limit?: number;
+    fraction?: number;
+    systemTokens: number;
+    toolTokens: number;
+    messageTokens: number;
+    model?: string;
+    agentName?: string;
+  }>('getContextReport', [room.id]);
+
+  const approx = report.measured ? '' : '~';
+  const pct = report.fraction !== undefined ? ` (${Math.round(report.fraction * 100)}%)` : '';
+
+  return {
+    value: report,
+    lines: [
+      `"${room.title}"${report.model ? ` — ${report.model}` : ''}`,
+      `  ${approx}${report.used} of ${report.limit ?? 'an unknown'} tokens${pct}`,
+      `  system prompt  ~${report.systemTokens}`,
+      `  tools          ~${report.toolTokens}`,
+      `  messages       ~${report.messageTokens}`,
+      report.measured
+        ? '  (reported by the provider for the last turn)'
+        : '  (estimated — no turn has run yet)',
+      ...(report.limit
+        ? []
+        : // Never invent a denominator; say what would fix it instead.
+          [`  no context size is known for this model — set one with`,
+           `  wispcrew agents set "${report.agentName ?? name}" --context-window <tokens>`]),
+    ],
+  };
+}
+
+/**
  * Read or set the room's standing instructions.
  *
  * Reading is half the point. These instructions are visible to every member
@@ -1852,6 +1923,18 @@ const COMMAND_SCHEMA = [
       'Who replies is the room\u2019s business: address someone with @handle, use @all, or ' +
       'say nothing special to continue with whoever you last addressed. `ask` is the ' +
       'same thing aimed at one agent.',
+  },
+  {
+    name: 'context',
+    summary: "How full a conversation's context is; --compact to reclaim it.",
+    args: [
+      { name: 'agent', required: true, positional: true, description: 'agent or room' },
+      { name: '--compact', required: false, description: 'replace older turns with a summary' },
+    ],
+    returns: '{ used, limit, fraction, systemTokens, toolTokens, messageTokens }',
+    notes:
+      'A model with no known window reports no percentage rather than a guessed one. ' +
+      'Compaction checkpoints first, so the full conversation is restorable from History.',
   },
   {
     name: 'rooms greeting',

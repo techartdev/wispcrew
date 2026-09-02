@@ -71,6 +71,7 @@ import {
   createRoom,
   deleteConversation,
   getContextReport,
+  compactConversation,
   setRoomGreeting,
   getConversation,
   listCheckpoints,
@@ -1354,6 +1355,8 @@ export function registerBridge(context: BridgeContext): void {
    * machine never sends.
    */
   handle('getContextReport', (conversationId: string) => getContextReport(conversationId));
+
+  handle('compactConversation', (conversationId: string) => compactConversation(conversationId));
 
   handle('deleteRoom', (conversationId: string) => {
     const room = getConversation(conversationId);

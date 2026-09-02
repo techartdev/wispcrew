@@ -50,6 +50,9 @@ interface ChatProps {
    */
   contextReport: ContextReportView | null;
 
+  /** Replace the older turns with a summary the agent writes itself. */
+  onCompact: () => void;
+
   /**
    * Who can be addressed in this room, for @-completion.
    *
@@ -290,6 +293,7 @@ export function Chat({
   runState,
   skills,
   contextReport,
+  onCompact,
   members,
   onOpenRoutines,
   onOpenHistory,
@@ -931,7 +935,19 @@ export function Chat({
               return (
                 <div
                   key={entry.id}
-                  className={`notice notice-${entry.level}`}
+                  /*
+                   * A compaction summary is a seam, not a status line.
+                   *
+                   * It stands in place of everything before it and is what
+                   * the model now remembers, so it gets room to be read —
+                   * a conversation that quietly changed shape reads as an
+                   * agent that has started forgetting things.
+                   */
+                  className={
+                    entry.summary
+                      ? 'notice notice-summary'
+                      : `notice notice-${entry.level}`
+                  }
                   // Errors are announced assertively: they usually mean the
                   // turn failed and the user must act, so waiting for a pause
                   // would bury the one message that matters.
@@ -1068,7 +1084,7 @@ export function Chat({
             </button>
           )}
         </div>
-        <ContextMeter report={contextReport} />
+        <ContextMeter report={contextReport} onCompact={onCompact} />
         <div className="composer-hint muted">
           Enter to send · Shift+Enter for a new line · drop files to attach
           {skills.length > 0 ? ' · / for skills' : ''}

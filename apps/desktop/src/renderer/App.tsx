@@ -512,6 +512,7 @@ export function App() {
           runState={runState}
           skills={skills}
           contextReport={state.contextReport}
+          onCompact={actions.compact}
           /*
             Everyone here, always — this is how a message finds the name of
             whoever wrote it, and a one-to-one chat has an author too. The

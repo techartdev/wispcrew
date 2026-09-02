@@ -50,6 +50,7 @@ import {
   createRoom,
   deleteConversation,
   getContextReport,
+  compactConversation,
   setRoomGreeting,
   getConversation,
   listCheckpoints,
@@ -308,6 +309,14 @@ export function nodeMethods(): MethodTable {
      */
     getContextReport: (conversationId: never) =>
       getContextReport(conversationId as unknown as string),
+
+    /*
+     * Compaction runs on the node that owns the conversation: it reads that
+     * transcript, spends that agent's own provider on the summary, and
+     * writes the checkpoint beside the rest of that machine's history.
+     */
+    compactConversation: (conversationId: never) =>
+      compactConversation(conversationId as unknown as string),
 
     deleteRoom: (conversationId: never) => {
       const id = conversationId as unknown as string;

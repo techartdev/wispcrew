@@ -43,8 +43,16 @@ function tone(fraction: number | undefined): string {
   return '';
 }
 
-export function ContextMeter({ report }: { report: ContextReportView | null }) {
+export function ContextMeter({
+  report,
+  onCompact,
+}: {
+  report: ContextReportView | null;
+  /** Replace the older turns with a summary. Absent while one is running. */
+  onCompact?: () => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   // Nothing measured yet, or an empty conversation: say nothing rather than
   // showing a confident zero.
@@ -129,6 +137,32 @@ export function ContextMeter({ report }: { report: ContextReportView | null }) {
               : `No context size is known for ${report.model ?? 'this model'}, so there is no percentage. Set one in Configure if you know it.`}
             {report.agentName ? ` Measured for ${report.agentName}.` : ''}
           </p>
+
+          {onCompact && (
+            <div className="context-breakdown-actions">
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  // Left open: the result is a toast, and closing the panel
+                  // underneath somebody's click reads as the button failing.
+                  void Promise.resolve(onCompact()).finally(() => setBusy(false));
+                }}
+              >
+                {busy ? 'Compacting…' : 'Compact now'}
+              </button>
+              {/*
+                Said before it is pressed, not after. This rewrites the
+                conversation, and "it is recoverable" is the fact that makes
+                the button safe to try.
+              */}
+              <span className="muted small">
+                Replaces older turns with a summary. The full version stays in History.
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

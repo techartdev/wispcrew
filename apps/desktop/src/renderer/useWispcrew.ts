@@ -646,6 +646,42 @@ export function useWispcrew() {
         }
       },
 
+      /**
+       * Replace the older turns with a summary the agent writes itself.
+       *
+       * The transcript is re-read afterwards rather than patched: compaction
+       * rewrites the whole thing, and reconstructing that here would be a
+       * second idea of what the conversation now contains.
+       *
+       * A refusal — too short to be worth it, an empty summary — arrives as
+       * a reason and is shown as one. Somebody who pressed a button and saw
+       * nothing happen has been told the operation failed, whatever the
+       * code says.
+       */
+      async compact() {
+        const target = selectedRef.current;
+        if (!target) return;
+
+        try {
+          const result = await api.compactConversation(target);
+
+          if (!result.ok) {
+            setToast({ level: 'info', text: result.reason ?? 'Nothing to compact.' });
+            return;
+          }
+
+          const entries = await api.getTranscript(target);
+          if (selectedRef.current === target) setTranscript(entries);
+
+          setToast({
+            level: 'info',
+            text: `Compacted ${result.replaced} earlier entries; ${result.kept} recent ones kept. The full version is in History.`,
+          });
+        } catch (err) {
+          fail(err);
+        }
+      },
+
       /** Add an agent to the selected room. */
       async addRoomAgent(agentId: string) {
         if (!selectedRef.current) return;

@@ -238,6 +238,20 @@ export type TranscriptEntry =
        * "something went wrong".
        */
       event?: RoomEvent;
+      /**
+       * Set when this notice REPLACES earlier turns rather than describing
+       * something that happened.
+       *
+       * A compacted conversation keeps its recent turns verbatim and stands
+       * a summary in place of everything before them. That summary has to
+       * reach the model — it is the memory now — but it must not be read as
+       * the room announcing an event, and the UI needs to render it as the
+       * seam it is rather than as another status line.
+       *
+       * The entries it replaced are never destroyed: a checkpoint is
+       * written first, and History restores it.
+       */
+      summary?: boolean;
       createdAt: number;
     };
 

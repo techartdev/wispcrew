@@ -50,6 +50,7 @@ import {
 } from './conversations.js';
 import { announceRooms, pushTranscript } from './transcript.js';
 import type { ConversationContext } from './context-report.js';
+import { setSummariser, SUMMARY_INSTRUCTION } from './compaction.js';
 import { downgradeNotice, resolvePolicy } from './approval-policy.js';
 import { readSettings } from './settings-file.js';
 import { readSecrets } from './secrets-store.js';
@@ -653,6 +654,47 @@ export async function getContextReport(
     model: preset.model,
   };
 }
+
+/*
+ * Compaction asks the agent's own model to summarise.
+ *
+ * Installed as a hook because `compaction.ts` must not resolve providers,
+ * credentials or OAuth — that is this module's job, and duplicating it
+ * would give the summary a second, drifting idea of which model to use.
+ *
+ * Deliberately a bare provider call rather than an `Agent`: no tools, no
+ * system prompt describing a workspace and a room. The task is to compress
+ * text, and a tool that is offered gets used — an agent asked to summarise
+ * its own history will otherwise start re-reading the files it mentions.
+ */
+setSummariser(async (agentId, conversationText) => {
+  const agent = store.getAgent(agentId);
+  if (!agent) throw new Error('That agent no longer exists.');
+
+  const settings = readSettings(dataDir(), defaultSettings()) as GlobalSettings;
+  const cfg = await effectiveConfig(agent, settings);
+  const preset = configFromPreset(cfg.presetId, {
+    apiKey: cfg.apiKey,
+    model: cfg.model,
+    baseUrl: cfg.baseUrl,
+  });
+
+  const provider = createProvider(preset);
+
+  let text = '';
+  for await (const chunk of provider.chat({
+    system: 'You compress conversations without losing what matters. You write notes, not reports.',
+    messages: [{ role: 'user', content: `${conversationText}\n\n---\n\n${SUMMARY_INSTRUCTION}` }],
+    toolDefs: [],
+    stream: true,
+  })) {
+    if (chunk.kind === 'text') text += chunk.text;
+    else if (chunk.kind === 'done' && !text && chunk.message.content) text = chunk.message.content;
+    else if (chunk.kind === 'error') throw new Error(chunk.message);
+  }
+
+  return text;
+});
 
 export async function runPrompt(
   agentId: string,

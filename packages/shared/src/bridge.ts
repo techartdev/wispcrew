@@ -110,6 +110,14 @@ export interface ContextReportView {
   model?: string;
 }
 
+/** What compaction did, or why it did nothing. */
+export interface CompactionResultView {
+  ok: boolean;
+  reason?: string;
+  replaced?: number;
+  kept?: number;
+}
+
 /** Settings as reported to the UI — deliberately key-free. */
 export interface SettingsView extends GlobalSettings {
   /** True when a provider key is stored (in the secrets store or env). */
@@ -469,6 +477,20 @@ export interface WispBridge {
    * be trusted for a decision it cannot carry.
    */
   getContextReport(conversationId: string): Promise<ContextReportView>;
+
+  /**
+   * Replace the older turns with a summary the agent writes itself.
+   *
+   * Recent turns are kept exactly as they are. A checkpoint is written
+   * first, so History restores the full version — compaction is a
+   * destructive edit to somebody's conversation and must never be the
+   * only copy.
+   *
+   * Returns a reason rather than throwing when there is nothing to do:
+   * `too short to compact` is an answer, and somebody who pressed the
+   * button deserves to be told which it was.
+   */
+  compactConversation(conversationId: string): Promise<CompactionResultView>;
 
   /**
    * Send a message to a ROOM rather than an agent.

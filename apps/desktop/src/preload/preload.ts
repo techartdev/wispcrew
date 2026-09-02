@@ -126,6 +126,8 @@ const bridge: WispBridge = {
   deleteRoom: (conversationId: string) => ipcRenderer.invoke('wc:deleteRoom', conversationId),
   getContextReport: (conversationId: string) =>
     ipcRenderer.invoke('wc:getContextReport', conversationId),
+  compactConversation: (conversationId: string) =>
+    ipcRenderer.invoke('wc:compactConversation', conversationId),
   sendToRoom: (conversationId: string, text: string, attachmentPaths?: string[]) =>
     ipcRenderer.invoke('wc:sendToRoom', conversationId, text, attachmentPaths),
 

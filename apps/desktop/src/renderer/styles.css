@@ -1129,6 +1129,35 @@ body {
   background: var(--accent);
 }
 
+/*
+ * The seam left by compaction.
+ *
+ * Deliberately unlike the muted one-line notices around it: this is the
+ * conversation's memory of everything before it, and somebody scrolling
+ * back needs to see where the verbatim record stops.
+ */
+.notice-summary {
+  white-space: pre-wrap;
+  text-align: left;
+  max-width: 860px;
+  margin: 14px auto;
+  padding: 10px 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.context-breakdown-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
 .context-breakdown-note {
   margin: 8px 0 0;
   line-height: 1.45;
