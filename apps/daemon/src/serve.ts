@@ -27,6 +27,7 @@ import {
   startTelegram,
   migrateAgentsToConversations,
   migrateAgentsToExplicitProvider,
+  migrateHandles,
   installScheduler,
   installSkillReader,
   seedBuiltinSkills,
@@ -183,6 +184,16 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
    * finds nothing to do. Either host may start first.
    */
   migrateAgentsToConversations();
+
+  /*
+   * Handles follow the current naming rule.
+   *
+   * After the room migration, because it needs the rooms to exist.
+   * Idempotent: a handle that already matches is left alone. Rooms written
+   * under the old rule kept only the first word of a name, so two agents on
+   * one project answered to `@openclaw` and `@openclaw2`.
+   */
+  migrateHandles();
 
   /*
    * And an explicit provider and model, so nothing inherits.

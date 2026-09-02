@@ -15,6 +15,7 @@ export * from './files.js';
 export * from './web.js';
 export * from './search.js';
 export * from './edit.js';
+export * from './room.js';
 
 export const defaultTools: Tool<any>[] = [
   notifyTool,

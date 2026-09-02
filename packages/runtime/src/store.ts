@@ -252,9 +252,10 @@ export function updateAgent(id: string, patch: AgentPatch): AgentRecord {
   const idx = agents.findIndex((a) => a.id === id);
   if (idx === -1) throw new Error(`No such agent: ${id}`);
 
-  // Read before the merge, so the comparison at the end is against what the
-  // workspace actually was rather than what it has just become.
+  // Read before the merge, so the comparisons at the end are against what
+  // these actually were rather than what they have just become.
   const previousRoot = agents[idx]!.workspaceRoot;
+  const previousName = agents[idx]!.name;
 
   // `id`/`createdAt` are identity, never patchable.
   const next: AgentRecord = {
@@ -315,6 +316,9 @@ export function updateAgent(id: string, patch: AgentPatch): AgentRecord {
     notifyWorkspaceMoved?.(next.id, previousRoot, next.workspaceRoot);
   }
 
+  // Rooms hold a handle and a title derived from the name; both follow it.
+  if (previousName !== next.name) notifyAgentRenamed?.(next.id, next.name);
+
   return next;
 }
 
@@ -334,6 +338,21 @@ export function setWorkspaceMovedHook(
   hook: (agentId: string, from: string | undefined, to: string | undefined) => void,
 ): void {
   notifyWorkspaceMoved = hook;
+}
+
+/**
+ * Announce a rename, so every room can follow it.
+ *
+ * A handle and a direct chat's title were both fixed when the room was
+ * created, so a renamed agent kept the old ones: one called "OpenClaw AddOn
+ * Dev" still answered to `@assistant`. A hook for the same reason as the
+ * others — `conversations.ts` imports this module, so it cannot be imported
+ * back.
+ */
+let notifyAgentRenamed: ((agentId: string, name: string) => void) | undefined;
+
+export function setAgentRenamedHook(hook: (agentId: string, name: string) => void): void {
+  notifyAgentRenamed = hook;
 }
 
 /**

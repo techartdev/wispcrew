@@ -70,10 +70,23 @@ export interface AgentParticipant {
   /** The agent's own id, so its configuration and node are already known. */
   id: string;
   /**
-   * Short handle for addressing it, e.g. `@windows`.
+   * Handle for addressing it, e.g. `@windows-builder`.
    *
-   * Derived from the agent's name but stored, because renaming an agent
-   * must not silently break every `@mention` already in the transcript.
+   * Stored rather than derived on read, so a room can resolve a mention
+   * without the roster — but it FOLLOWS the agent's name, and is rewritten
+   * when the agent is renamed.
+   *
+   * That reverses the original decision, which froze it so that renaming an
+   * agent "must not silently break every `@mention` already in the
+   * transcript". The trade proved to be the wrong way round. Old mentions
+   * are prose in a finished conversation; nothing resolves them and nothing
+   * acts on them. A frozen handle, by contrast, is live: an agent renamed
+   * "Assistant" to "OpenClaw AddOn Dev" kept introducing itself as
+   * `@assistant`, in a room whose members list said otherwise, and the user
+   * could not tell whether the agent was confused or the app was.
+   *
+   * A rename now says so in every room the agent is in, so the change is
+   * visible rather than merely correct.
    */
   handle: string;
   /**
@@ -178,31 +191,27 @@ export interface RoomEvent {
 }
 
 /**
- * Words that describe where an agent runs rather than what it does.
+ * A handle from an agent name: the whole name, slugified, unique in a room.
  *
- * "Local Infrastructure Eye" would otherwise become `@local`, which says
- * nothing and collides with every other agent someone calls "Local
- * something". The second word is almost always the distinguishing one.
+ * This used to keep only the first meaningful word, skipping a leading
+ * "local"/"remote"/"the" as uninformative. It read well for one agent and
+ * failed for a team: "OpenClaw AddOn Dev" and "OpenClaw Dev Version" — two
+ * agents on the same project, which is exactly when you have several —
+ * became `@openclaw` and `@openclaw2`. The numbering is what gives it away:
+ * the shortening manufactured a collision, then papered over it, and the
+ * result told nobody which agent was which.
  *
- * Deliberately short: a longer list starts making choices the user did not
- * ask for, and a wrong guess is worse than a dull handle.
+ * The whole name has no such failure. `@openclaw-addon-dev` is longer to
+ * read and never ambiguous, and nothing has to be typed by hand anyway —
+ * the composer completes handles from the room's membership.
  */
-const WEAK_FIRST_WORDS = new Set(['local', 'remote', 'my', 'the', 'a', 'new', 'main']);
-
-/** A handle from an agent name: lowercase, no spaces, unique within a room. */
 export function handleFor(name: string, taken: string[] = []): string {
-  const words = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  // Skip a leading word that only says where the agent lives, unless it is
-  // the whole name — `@local` is right for an agent actually called "Local".
-  const first = words[0] ?? '';
   const base =
-    (WEAK_FIRST_WORDS.has(first) && words.length > 1 ? words[1] : first) || 'agent';
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      // Punctuation at either end would otherwise leave a dangling dash.
+      .replace(/^-+|-+$/g, '') || 'agent';
 
   if (!taken.includes(base)) return base;
 

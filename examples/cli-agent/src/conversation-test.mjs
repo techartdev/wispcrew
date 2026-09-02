@@ -45,31 +45,38 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-conv-'));
 setHost({ dataDir: dir, defaultWorkspaceRoot: dir, nodeName: 't', crypto: createNodeCrypto(dir) });
 initStore(dir);
 
-console.log('\n[handles] addressing an agent with @');
+console.log('\n[handles] the whole name, slugified');
 {
-  check('a simple name', handleFor('Windows builder') === 'windows', handleFor('Windows builder'));
-  // "Local" is skipped as a weak first word, so this also pins that
-  // punctuation does not survive into the handle.
-  check('punctuation is dropped', handleFor('Local Infra Eye!') === 'infra',
-    handleFor('Local Infra Eye!'));
-  check('an empty name still yields something', handleFor('') === 'agent');
-  // Two agents called "Build server" would otherwise share a handle, and
-  // `@build` would be ambiguous exactly when precision matters.
-  check('a collision is numbered', handleFor('Build server', ['build']) === 'build2');
-  check('and again', handleFor('Build server', ['build', 'build2']) === 'build3');
-
   /*
-   * A leading word that only says WHERE an agent runs is skipped.
-   * "Local Infrastructure Eye" became `@local`, which says nothing and
-   * would collide with every other "Local something" — noticed on a real
-   * profile, not imagined.
+   * This used to keep only the first meaningful word, skipping a leading
+   * "local"/"remote"/"the" as uninformative. It read well for one agent and
+   * failed for a team: "OpenClaw AddOn Dev" and "OpenClaw Dev Version" —
+   * two agents on the same project, which is exactly when you have several
+   * — became `@openclaw` and `@openclaw2`. The numbering is the tell: the
+   * shortening manufactured a collision, then papered over it, and the
+   * result told nobody which agent was which.
    */
-  check('a weak first word is skipped',
-    handleFor('Local Infrastructure Eye') === 'infrastructure',
+  check('the whole name is kept',
+    handleFor('Windows builder') === 'windows-builder', handleFor('Windows builder'));
+  check('so two agents on one project stay apart',
+    handleFor('OpenClaw AddOn Dev') === 'openclaw-addon-dev' &&
+      handleFor('OpenClaw Dev Version') === 'openclaw-dev-version');
+  check('and a leading word is no longer dropped',
+    handleFor('Local Infrastructure Eye') === 'local-infrastructure-eye',
     handleFor('Local Infrastructure Eye'));
-  check('and an article', handleFor('The Reviewer') === 'reviewer');
-  // Unless it is the whole name, where it is the only thing to go on.
-  check('but not when it is the whole name', handleFor('Local') === 'local');
+
+  check('punctuation becomes separators', handleFor('Local Infra Eye!') === 'local-infra-eye',
+    handleFor('Local Infra Eye!'));
+  // Not a trailing dash: punctuation at either end would leave one dangling.
+  check('and never a dangling dash', handleFor('  ...weird!!  ') === 'weird',
+    handleFor('  ...weird!!  '));
+  check('an empty name still yields something', handleFor('') === 'agent');
+
+  // A genuine collision — two agents with the SAME name — is still numbered.
+  check('a real collision is numbered',
+    handleFor('Build server', ['build-server']) === 'build-server2');
+  check('and again',
+    handleFor('Build server', ['build-server', 'build-server2']) === 'build-server3');
 }
 
 console.log('\n[migration] every existing agent gets a room');

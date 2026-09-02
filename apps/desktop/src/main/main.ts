@@ -37,6 +37,7 @@ import {
   setRemoteRunner,
   migrateAgentsToConversations,
   migrateAgentsToExplicitProvider,
+  migrateHandles,
   installScheduler,
   installSkillReader,
   seedBuiltinSkills,
@@ -396,6 +397,14 @@ app.whenReady().then(async () => {
    * finds nothing to do. Either host may start first.
    */
   migrateAgentsToConversations();
+
+  /*
+   * Handles follow the current naming rule.
+   *
+   * After the room migration, which has to have created the rooms first.
+   * Idempotent, so both hosts running it is harmless.
+   */
+  migrateHandles();
 
   /*
    * And an explicit provider and model, so nothing inherits.

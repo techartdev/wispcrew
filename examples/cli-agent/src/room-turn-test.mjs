@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { handleFor } from '@wispcrew/shared';
 import {
   addEventSink,
   addParticipant,
@@ -48,7 +49,14 @@ const linux = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Li
 migrateAgentsToConversations();
 
 const room = listConversations().find((r) => r.id === windows.id);
-addParticipant(room.id, { kind: 'agent', id: linux.id, handle: 'linux' }, LOCAL_HUMAN_ID, 'You');
+// The handle the room would derive for this agent, not a hand-picked short
+// one: the suite addresses it exactly as a user's completion menu would.
+addParticipant(
+  room.id,
+  { kind: 'agent', id: linux.id, handle: handleFor(linux.name) },
+  LOCAL_HUMAN_ID,
+  'You',
+);
 
 /** Records who was asked to run, without touching a provider. */
 const spy = () => {
@@ -64,7 +72,7 @@ const spy = () => {
 console.log('\n[the message is recorded first]');
 {
   const { run, ran } = spy();
-  await runRoomTurn({ conversationId: room.id, text: '@windows check the build', speakerId: LOCAL_HUMAN_ID, run });
+  await runRoomTurn({ conversationId: room.id, text: '@windows-builder check the build', speakerId: LOCAL_HUMAN_ID, run });
 
   const user = loadTranscript(room.id).filter((e) => e.kind === 'message' && e.role === 'user').pop();
   check('the message is in the room', Boolean(user));
@@ -80,7 +88,7 @@ console.log('\n[tagging two runs both]');
   const { run, ran } = spy();
   await runRoomTurn({
     conversationId: room.id,
-    text: '@windows and @linux compare notes',
+    text: '@windows-builder and @linux-builder compare notes',
     speakerId: LOCAL_HUMAN_ID,
     run,
   });
@@ -91,7 +99,7 @@ console.log('\n[tagging two runs both]');
 console.log('\n[continuity] an untagged follow-up continues');
 {
   const { run, ran } = spy();
-  await runRoomTurn({ conversationId: room.id, text: '@linux run the tests', speakerId: LOCAL_HUMAN_ID, run });
+  await runRoomTurn({ conversationId: room.id, text: '@linux-builder run the tests', speakerId: LOCAL_HUMAN_ID, run });
   check('the tagged agent ran', ran[0]?.agentId === linux.id);
 
   // Remembering the addressee is what makes a follow-up work without tagging.
@@ -138,7 +146,7 @@ console.log('\n[floor offer] agents that could answer are named, once');
   check('one line, not one per agent', events.length >= 1);
   // A user asked to approve every utterance stops reading, and then the
   // oversight is worthless.
-  check('naming them together', /@windows.*@linux|@linux.*@windows/.test(events.at(-1)?.text ?? ''),
+  check('naming them together', /@windows-builder.*@linux-builder|@linux-builder.*@windows-builder/.test(events.at(-1)?.text ?? ''),
     events.at(-1)?.text);
 }
 
@@ -164,7 +172,7 @@ console.log('\n[failure] one agent failing does not take down the other');
   const ran = [];
   await runRoomTurn({
     conversationId: room.id,
-    text: '@windows and @linux go',
+    text: '@windows-builder and @linux-builder go',
     speakerId: LOCAL_HUMAN_ID,
     run: async (agentId) => {
       ran.push(agentId);
@@ -175,7 +183,7 @@ console.log('\n[failure] one agent failing does not take down the other');
   check('both were attempted', ran.length === 2, String(ran.length));
   const error = loadTranscript(room.id).filter((e) => e.level === 'error').pop();
   check('the failure is reported', /could not finish/.test(error?.text ?? ''), error?.text);
-  check('naming which agent', /@windows/.test(error?.text ?? ''), error?.text);
+  check('naming which agent', /@windows-builder/.test(error?.text ?? ''), error?.text);
 }
 
 console.log('\n[announced] a room turn is not written silently');
@@ -199,7 +207,7 @@ console.log('\n[announced] a room turn is not written silently');
   updateConversation(room.id, { lastAddressed: {} });
   await runRoomTurn({
     conversationId: room.id,
-    text: '@windows say something',
+    text: '@windows-builder say something',
     speakerId: LOCAL_HUMAN_ID,
     run: async () => {},
   });

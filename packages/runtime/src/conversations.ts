@@ -28,6 +28,7 @@ import type {
 import { agentsIn, handleFor } from '@wispcrew/shared';
 import { fileLog } from './filelog.js';
 import * as store from './store.js';
+import { pushTranscript } from './transcript.js';
 
 /**
  * The person using this installation.
@@ -208,16 +209,37 @@ export function createRoom(patch: {
        *
        * Written as a notice so it renders immediately and reads as
        * something that happened TO the room, not as somebody's message.
+       *
+       * ## It names the cast, and that is the load-bearing part
+       *
+       * Saying only "continued from X" was not enough. The carried history
+       * is a whole conversation in which the agent was addressed — and
+       * addressed ITSELF — by its old handle. Reading that back, the model
+       * kept introducing itself as `@assistant` in a room where both the
+       * prompt and the member list said `@openclaw`. The prompt was right
+       * and lost anyway, because history is longer than a prompt.
+       *
+       * Listing who is now who, with the handles that apply HERE, gives the
+       * model the one fact it needs to reconcile the two.
        */
+      const cast = agents
+        .map((a) => {
+          const known = store.getAgent(a.id)?.name;
+          return known ? `${known} is @${a.handle}` : `@${a.handle}`;
+        })
+        .join(', ');
+
       store.saveTranscript(record.id, [
         ...carried,
         {
           kind: 'notice',
           id: store.newId('evt'),
           level: 'info',
-          text: source
-            ? `Continued from "${source.title}". Everything above was said before this room existed.`
-            : 'Continued from an earlier conversation. Everything above was said before this room existed.',
+          text:
+            (source
+              ? `Continued from "${source.title}". Everything above was said before this room existed.`
+              : 'Continued from an earlier conversation. Everything above was said before this room existed.') +
+            ` In this room: ${cast}. Those handles apply from here on, whatever was used above.`,
           createdAt: Date.now(),
         },
       ]);
@@ -356,7 +378,20 @@ export function recordRoomEvent(
     event,
     createdAt: Date.now(),
   };
-  store.upsertTranscriptEntry(conversationId, entry);
+
+  /*
+   * Pushed, not merely written.
+   *
+   * This used `store.upsertTranscriptEntry`, which saves and tells nobody —
+   * so the very events that exist to explain how a room reached its current
+   * state appeared only after a reload. Somebody added to a room in front
+   * of you produced no line at all until the window was reopened.
+   *
+   * It stayed that way because `pushTranscript` lived in the engine, which
+   * imports this module and therefore could not be imported back. It lives
+   * in `transcript.ts` now, which both can reach.
+   */
+  pushTranscript(conversationId, entry);
 }
 
 /** Add a participant, recording who did it. */
@@ -423,6 +458,115 @@ export function removeParticipant(
   recordRoomEvent(conversationId, 'left', actorId, text, participantId);
 
   return updated;
+}
+
+/**
+ * Keep a room's view of an agent in step with the agent itself.
+ *
+ * A handle and a direct chat's title were both fixed at creation, so
+ * renaming an agent left them behind: one called "OpenClaw AddOn Dev" still
+ * had a chat titled "Assistant", answered to `@assistant`, and introduced
+ * itself that way — in a room whose member list plainly said otherwise.
+ * From outside there was no telling whether the agent was confused or the
+ * application was.
+ *
+ * Returns the updated room when something moved, so callers can count and
+ * announce; null when it was already correct.
+ */
+function refreshAgentIn(
+  room: ConversationRecord,
+  agentId: string,
+  name: string,
+): ConversationRecord | null {
+  const agents = agentsIn(room);
+  const self = agents.find((p) => p.id === agentId);
+  if (!self) return null;
+
+  /*
+   * Unique within THIS room, ignoring the agent's own current handle —
+   * otherwise an agent whose handle is already right would collide with
+   * itself and be renumbered to `…2` on every pass.
+   */
+  const taken = agents.filter((p) => p.id !== agentId).map((p) => p.handle);
+  const handle = handleFor(name, taken);
+
+  /*
+   * A direct chat is titled after its agent, so it follows the rename. A
+   * GROUP title is the user's own words and is never touched — naming a
+   * room is the whole point of being able to.
+   */
+  const title = room.kind === 'group' ? room.title : name;
+
+  if (self.handle === handle && room.title === title) return null;
+
+  const participants = room.participants.map((p) =>
+    p.kind === 'agent' && p.id === agentId ? { ...p, handle } : p,
+  );
+
+  const updated = updateConversation(room.id, { participants, title });
+  if (!updated) return null;
+
+  /*
+   * Said out loud when the handle actually moved.
+   *
+   * Everyone here addresses everyone else by handle, and a transcript full
+   * of the old one is what an agent reads back. Without a line marking the
+   * change the history wins — the same failure as an agent reasoning from
+   * files in a workspace it no longer has.
+   */
+  if (self.handle !== handle) {
+    recordRoomEvent(
+      room.id,
+      'joined',
+      agentId,
+      `${name} is now addressed as @${handle} (was @${self.handle}).`,
+      agentId,
+    );
+  }
+
+  return updated;
+}
+
+/*
+ * Propagate a rename into every room the agent belongs to.
+ *
+ * A hook rather than a call from `store.ts`, which cannot import this
+ * module without a cycle — the same arrangement the agent-deleted and
+ * workspace-moved hooks use.
+ */
+store.setAgentRenamedHook((agentId, name) => {
+  for (const room of listConversations()) refreshAgentIn(room, agentId, name);
+});
+
+/**
+ * Bring stored handles up to date with the current naming rule.
+ *
+ * Handles used to keep only the first meaningful word, so two agents on one
+ * project — "OpenClaw AddOn Dev" and "OpenClaw Dev Version" — became
+ * `@openclaw` and `@openclaw2`. The numbering is the tell: the shortening
+ * manufactured a collision and then papered over it.
+ *
+ * Safe to run repeatedly. A handle that already matches is left alone, and
+ * so is the title of any room the user named themselves.
+ */
+export function migrateHandles(): number {
+  const names = new Map(store.listAgents().map((a) => [a.id, a.name]));
+  let changed = 0;
+
+  for (const room of listConversations()) {
+    for (const participant of agentsIn(room)) {
+      const name = names.get(participant.id);
+      if (!name) continue;
+
+      // Re-read each time: an earlier participant in this same room may
+      // have moved, and `taken` must reflect that.
+      const current = getConversation(room.id);
+      if (current && refreshAgentIn(current, participant.id, name)) changed++;
+    }
+  }
+
+  if (changed > 0) fileLog('[conversations] refreshed', String(changed), 'handle(s)');
+  return changed;
 }
 
 /**

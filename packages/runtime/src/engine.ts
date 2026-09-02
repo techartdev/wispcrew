@@ -33,13 +33,20 @@ import {
   PROVIDER_PRESETS,
   type UsageSnapshot,
 } from '@wispcrew/llm';
-import { ToolRegistry, readSkillTool } from '@wispcrew/tools';
+import { ToolRegistry, readSkillTool, makeRoomInstructionsTool } from '@wispcrew/tools';
 
 import * as store from './store.js';
 import { checkModelPairing } from './config-check.js';
 import { claimTurn, updateTurn } from './turns.js';
 import { host } from './host.js';
-import { getConversation } from './conversations.js';
+import {
+  getConversation,
+  listConversations,
+  recordRoomEvent,
+  setRoomGreeting,
+  visibleParticipants,
+} from './conversations.js';
+import { announceRooms, pushTranscript } from './transcript.js';
 import { downgradeNotice, resolvePolicy } from './approval-policy.js';
 import { readSettings } from './settings-file.js';
 import { readSecrets } from './secrets-store.js';
@@ -64,11 +71,15 @@ function dataDir(): string {
   return host().dataDir;
 }
 
-/** Persist a transcript entry and tell whoever is listening. */
-export function pushTranscript(agentId: string, entry: TranscriptEntry): void {
-  store.upsertTranscriptEntry(agentId, entry);
-  emitEngineEvent({ type: 'transcript', agentId, entry });
-}
+/*
+ * `pushTranscript` lives in `transcript.ts` now.
+ *
+ * It was defined here, which meant `conversations.ts` — the engine imports
+ * it, so it cannot import back — had to use `store.upsertTranscriptEntry`,
+ * which announces nothing. Every room event was therefore invisible until a
+ * reload. Re-exported so the existing callers are unaffected.
+ */
+export { pushTranscript, announceRooms } from './transcript.js';
 
 /*
  * Say so in the conversation when an agent's workspace moves.
@@ -844,6 +855,71 @@ export async function runPrompt(
    */
   if (store.listSkills().some((s) => s.enabled && s.sections?.length)) {
     tools.register(readSkillTool as never);
+  }
+
+  /*
+   * Rewriting the room's standing instructions — groups only.
+   *
+   * Asked to record the workflow it had just proposed, an agent answered
+   * "I can't directly edit this room's instructions from the tools
+   * available to me" and pasted the text for the user to copy by hand.
+   * Correct, and the wrong division of labour: agreeing what a room is for
+   * is exactly what the agents in it should be able to write down.
+   *
+   * Withheld from a one-to-one, where there is no greeting and the agent's
+   * own description holds its standing instructions. Same reasoning as
+   * `read_skill` above: a tool that is offered gets used, so one that
+   * cannot work here does not exist here.
+   *
+   * Built per run rather than installed globally, because a room turn runs
+   * its members concurrently and a shared "current conversation" would be
+   * whichever run set it last.
+   */
+  const roomForInstructions = getConversation(outputId);
+  if (roomForInstructions?.kind === 'group') {
+    tools.register(
+      makeRoomInstructionsTool({
+        title: () => getConversation(outputId)?.title ?? 'this room',
+        current: () => getConversation(outputId)?.greeting ?? '',
+        write: (instructions) => {
+          setRoomGreeting(outputId, instructions);
+
+          /*
+           * Announced from here, because this is where the change happens.
+           *
+           * The desktop bridge and the node's method table each wrap their
+           * own room mutations in an announcement — but neither is involved
+           * when an AGENT makes the change. Without this the room pane
+           * would show the old instructions until a reload, which is the
+           * same fault as every other unannounced write.
+           */
+          announceRooms(
+            listConversations().map((room) => ({
+              ...room,
+              participants: visibleParticipants(room),
+            })),
+          );
+
+          /*
+           * Said in the room, by name.
+           *
+           * These instructions are shown to everybody and shape every
+           * future turn, so a change to them is news — and the member that
+           * made it is the part somebody will want to know. Written as a
+           * room event for the same reason a join or a departure is: an
+           * agent reading back needs to know how the room reached its
+           * current state.
+           */
+          recordRoomEvent(
+            outputId,
+            'joined',
+            agentId,
+            `${agent.name} rewrote the room instructions.`,
+            agentId,
+          );
+        },
+      }) as never,
+    );
   }
 
   for (const name of agent?.disabledTools ?? []) tools.unregister(name);
