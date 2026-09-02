@@ -413,6 +413,11 @@ export interface WispBridge {
     title: string;
     agentIds: string[];
     greeting?: string;
+    /**
+     * Copy this conversation's history in, so a joining agent can see where
+     * things stand. The source is untouched.
+     */
+    fromConversationId?: string;
   }): Promise<ConversationRecord>;
 
   /**

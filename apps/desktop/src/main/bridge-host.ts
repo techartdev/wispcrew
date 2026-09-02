@@ -1357,7 +1357,12 @@ export function registerBridge(context: BridgeContext): void {
    */
   handle(
     'createRoom',
-    (patch: { title?: string; agentIds?: string[]; greeting?: string }) => {
+    (patch: {
+      title?: string;
+      agentIds?: string[];
+      greeting?: string;
+      fromConversationId?: string;
+    }) => {
       const title = String(patch?.title ?? '').trim();
       if (!title) throw new Error('A group needs a name.');
 
@@ -1368,7 +1373,14 @@ export function registerBridge(context: BridgeContext): void {
         return { id: agent.id, name: agent.name };
       });
 
-      return announceRooms(createRoom({ title, members, greeting: patch?.greeting }));
+      return announceRooms(
+        createRoom({
+          title,
+          members,
+          greeting: patch?.greeting,
+          fromConversationId: patch?.fromConversationId,
+        }),
+      );
     },
   );
 

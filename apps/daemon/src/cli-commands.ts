@@ -857,8 +857,29 @@ export async function roomsNew(ctx: CommandContext): Promise<Rendered> {
   const greeting =
     typeof ctx.args.greeting === 'string' ? ctx.args.greeting : undefined;
 
+  /*
+   * Start from an existing conversation, optionally carrying its history.
+   *
+   * The desktop asks this as a question when a second agent is added to a
+   * one-to-one. The CLI cannot ask, so it takes the answer as a flag —
+   * present means bring it, absent means start empty. Never inferred: the
+   * difference is whether a private conversation is handed to an agent that
+   * was not part of it.
+   */
+  const from =
+    typeof ctx.args.from === 'string' ? (await findRoom(ctx, ctx.args.from)).id : undefined;
+
+  if (ctx.args['with-history'] === true && !from) {
+    throw new Error('--with-history needs --from <room> to say which history to bring.');
+  }
+
   const room = await ctx.client.call<Record<string, unknown>>('createRoom', [
-    { title, agentIds: chosen.map((a) => a.id as string), greeting },
+    {
+      title,
+      agentIds: chosen.map((a) => a.id as string),
+      greeting,
+      fromConversationId: ctx.args['with-history'] === true ? from : undefined,
+    },
   ]);
 
   return {
@@ -1573,11 +1594,18 @@ const COMMAND_SCHEMA = [
       { name: 'name', required: true, positional: true },
       { name: 'agents', required: true, positional: true, description: 'two or more, by name' },
       { name: '--greeting', required: false, description: 'tone and purpose; every member reads it' },
+      { name: '--from', required: false, description: 'an existing conversation to start from' },
+      {
+        name: '--with-history',
+        required: false,
+        description: 'copy that conversation in, so a joining agent sees where things stand',
+      },
     ],
     returns: 'the new room',
     notes:
       'A room has no model or provider — agents arrive configured. Two agents minimum: ' +
-      'a group of one is a direct chat.',
+      'a group of one is a direct chat. --from without --with-history starts empty and ' +
+      'leaves the original untouched either way.',
   },
   {
     name: 'rooms greeting',

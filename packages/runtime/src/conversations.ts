@@ -152,6 +152,20 @@ export function createRoom(patch: {
   greeting?: string;
   mode?: ConversationRecord['mode'];
   id?: string;
+  /**
+   * Start the room with what has already been said in another conversation.
+   *
+   * The second creation path in `docs/ROOMS.md`: adding an agent to a
+   * one-to-one asks whether to start fresh or bring the history, because
+   * neither is right for every case. Without the history the newcomer
+   * arrives with no idea what has been discussed; with it, the user may be
+   * handing a whole private conversation to an agent that was not part of
+   * it. That is a decision, so it is a question.
+   *
+   * The source is COPIED, never moved. The original chat is untouched — the
+   * user asked to start a group, not to lose the conversation they were in.
+   */
+  fromConversationId?: string;
 }): ConversationRecord {
   if (patch.members.length < 2) {
     throw new Error('A group needs at least two agents. With one, use a direct chat.');
@@ -177,6 +191,39 @@ export function createRoom(patch: {
   };
 
   saveConversations([...listConversations(), record]);
+
+  if (patch.fromConversationId) {
+    const source = getConversation(patch.fromConversationId);
+    const carried = store.loadTranscript(patch.fromConversationId);
+
+    if (carried.length > 0) {
+      /*
+       * A line marking the seam.
+       *
+       * Without it the room opens mid-conversation with no explanation, and
+       * an agent added halfway through cannot tell that the earlier part
+       * happened somewhere else, with someone else, before it arrived. That
+       * is exactly the confusion the greeting exists to prevent, one level
+       * down.
+       *
+       * Written as a notice so it renders immediately and reads as
+       * something that happened TO the room, not as somebody's message.
+       */
+      store.saveTranscript(record.id, [
+        ...carried,
+        {
+          kind: 'notice',
+          id: store.newId('evt'),
+          level: 'info',
+          text: source
+            ? `Continued from "${source.title}". Everything above was said before this room existed.`
+            : 'Continued from an earlier conversation. Everything above was said before this room existed.',
+          createdAt: Date.now(),
+        },
+      ]);
+    }
+  }
+
   return record;
 }
 

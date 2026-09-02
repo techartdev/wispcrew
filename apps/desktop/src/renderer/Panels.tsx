@@ -12,6 +12,7 @@
 // automatic runtime Vite uses.
 import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useProviderModels } from './useProviderModels';
+import { isGroup } from '@wispcrew/shared';
 import type {
   AgentRecord,
   ApprovalPolicy,
@@ -248,6 +249,211 @@ function NewAgentPanel({
 }
 
 export { NewAgentPanel };
+
+/* ------------------------------------------------------------------ */
+/* New: an agent, or a group                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The plus button asks what you are making.
+ *
+ * It always made an agent, which was fine while a room was an agent. Now
+ * that a group is a thing in its own right, the button that creates things
+ * has to offer it — a feature reachable only from a menu nobody opens is a
+ * feature that does not exist.
+ *
+ * Two choices, each with the sentence that tells them apart. "Agent" and
+ * "Group" alone would be a guess on a first run, and this is the screen
+ * where a new user meets the distinction the whole app rests on.
+ */
+export function NewChoicePanel({
+  canGroup,
+  onAgent,
+  onGroup,
+  onClose,
+}: {
+  /** False with fewer than two agents — a group of one is not a group. */
+  canGroup: boolean;
+  onAgent(): void;
+  onGroup(): void;
+  onClose(): void;
+}) {
+  return (
+    <Modal title="What would you like to create?" onClose={onClose}>
+      <button type="button" className="choice-card" onClick={onAgent}>
+        <strong>An agent</strong>
+        <span className="muted">
+          A teammate with its own instructions, model and workspace. You talk to it
+          privately.
+        </span>
+      </button>
+
+      {/*
+        Disabled rather than hidden when there is only one agent.
+        
+        Hiding it would leave a new user unable to discover that groups
+        exist at all; disabling it with the reason attached teaches the rule
+        at the moment it applies.
+      */}
+      <button
+        type="button"
+        className="choice-card"
+        onClick={onGroup}
+        disabled={!canGroup}
+        title={canGroup ? undefined : 'A group needs at least two agents'}
+      >
+        <strong>A group</strong>
+        <span className="muted">
+          {canGroup
+            ? 'A place where agents you have already configured talk together. It has no model of its own — everyone brings their own.'
+            : 'Needs at least two agents. Create another one first.'}
+        </span>
+      </button>
+    </Modal>
+  );
+}
+
+/**
+ * Set up a group: a name, what it is for, and who is in it.
+ *
+ * There is no provider and no model field, and that absence is the design
+ * rather than an omission. A room does not reconfigure the agents in it;
+ * they arrive configured, and a room that could change that would make the
+ * same agent answer differently depending on where it was spoken to.
+ */
+export function NewGroupPanel({
+  agents,
+  nodes,
+  onCreate,
+  onClose,
+}: {
+  agents: AgentRecord[];
+  /** Paired machines, so a member's home can be named rather than guessed. */
+  nodes: NodeSummary[];
+  onCreate(patch: { title: string; agentIds: string[]; greeting?: string }): void;
+  onClose(): void;
+}) {
+  const [title, setTitle] = useState('');
+  const [greeting, setGreeting] = useState('');
+  const [chosen, setChosen] = useState<string[]>([]);
+
+  const live = useMemo(() => agents.filter((a) => !a.archived), [agents]);
+
+  /*
+   * Everyone in a room must live on the same machine.
+   *
+   * A room's transcript lives on one node, and an agent's conversation,
+   * files and keys live on its own. A room spanning two machines would need
+   * the transcript replicated, which is a distributed-systems feature, not
+   * a checkbox — so rather than let somebody build a room that half works,
+   * the first choice fixes the machine and the rest are disabled with the
+   * reason attached.
+   */
+  const homeOf = (a: AgentRecord) => a.nodeId ?? '';
+  const home = chosen.length ? homeOf(live.find((a) => a.id === chosen[0])!) : null;
+  const machineName = (id: string) =>
+    id ? (nodes.find((n) => n.id === id)?.name ?? 'another machine') : 'this computer';
+
+  const toggle = (id: string) =>
+    setChosen((current) =>
+      current.includes(id) ? current.filter((x) => x !== id) : [...current, id],
+    );
+
+  const ready = title.trim().length > 0 && chosen.length >= 2;
+
+  return (
+    <Modal title="New group" onClose={onClose}>
+      <label className="field">
+        <span>Name</span>
+        <input
+          value={title}
+          autoFocus
+          placeholder="e.g. Deploy review"
+          onChange={(e) => setTitle(e.target.value)}
+        />
+      </label>
+
+      <label className="field">
+        <span>
+          Room instructions <em className="muted">— optional</em>
+        </span>
+        <textarea
+          rows={3}
+          value={greeting}
+          placeholder="What is this room for, and in what tone? Everyone here will read it."
+          onChange={(e) => setGreeting(e.target.value)}
+        />
+      </label>
+      {/*
+        Said at the moment it is written, not only in the room afterwards.
+        Somebody typing standing instructions is entitled to know they are
+        not a private directive before they type them.
+      */}
+      <p className="muted small">
+        Visible to everyone in the room, including the agents. They are told to follow it,
+        to say what it is if asked, and to speak up if something in it is wrong.
+      </p>
+
+      <h3>Who is in it</h3>
+      <p className="muted small">
+        At least two. Each keeps its own model, instructions and workspace — a group does
+        not change how any of them are configured.
+      </p>
+
+      <div className="node-list">
+        {live.map((a) => {
+          const blocked = home !== null && homeOf(a) !== home && !chosen.includes(a.id);
+          return (
+            <label
+              key={a.id}
+              className={`field checkbox-field${blocked ? ' checkbox-blocked' : ''}`}
+              title={
+                blocked
+                  ? `Everyone in a room must run on the same machine. This group is on ${machineName(home)}.`
+                  : undefined
+              }
+            >
+              <input
+                type="checkbox"
+                checked={chosen.includes(a.id)}
+                disabled={blocked}
+                onChange={() => toggle(a.id)}
+              />
+              <span>
+                {a.name}
+                {a.nodeId && (
+                  <em className="muted"> — on {machineName(a.nodeId)}</em>
+                )}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+
+      <div className="row-actions">
+        <button type="button" className="btn" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!ready}
+          title={ready ? undefined : 'A group needs a name and at least two agents'}
+          onClick={() => {
+            onCreate({
+              title: title.trim(),
+              agentIds: chosen,
+              greeting: greeting.trim() || undefined,
+            });
+            onClose();
+          }}
+        >
+          Create group
+        </button>
+      </div>
+    </Modal>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* Subscription sign-in                                                */
@@ -1402,6 +1608,7 @@ export function RoomPanel({
   room,
   agents,
   onAdd,
+  onSplit,
   onRemove,
   onSetMode,
   onClose,
@@ -1409,12 +1616,77 @@ export function RoomPanel({
   room: ConversationRecord;
   agents: AgentRecord[];
   onAdd: (agentId: string) => void;
+  /**
+   * Turn a one-to-one into a group, with or without what has been said.
+   *
+   * Separate from `onAdd` because it is a different act: it creates a NEW
+   * conversation rather than changing the one you are in.
+   */
+  onSplit: (agentId: string, bringHistory: boolean) => void;
   onRemove: (participantId: string) => void;
   onSetMode: (mode: string) => void;
   onClose: () => void;
 }) {
   const inRoom = room.participants.filter((p) => p.kind === 'agent');
   const available = agents.filter((a) => !inRoom.some((p) => p.id === a.id));
+  const group = isGroup(room);
+
+  /*
+   * The agent chosen for a one-to-one, waiting on the question.
+   *
+   * Adding a second agent used to convert the chat in place, and the
+   * newcomer arrived with no idea what had been discussed. Neither answer
+   * is right for every case — starting fresh keeps a private conversation
+   * private; bringing the history is what lets the joining agent see where
+   * things stand — so it is a question rather than a default.
+   */
+  const [joining, setJoining] = useState<AgentRecord | null>(null);
+
+  if (joining && !group) {
+    return (
+      <Modal title={`Add ${joining.name} to this conversation`} onClose={() => setJoining(null)}>
+        <p className="muted">
+          This chat is between you and {inRoom.length === 1 ? room.title : 'one agent'}. Adding
+          someone makes a group, and the chat you are in now stays exactly as it is.
+        </p>
+
+        <button
+          type="button"
+          className="choice-card"
+          onClick={() => {
+            onSplit(joining.id, true);
+            onClose();
+          }}
+        >
+          <strong>Bring the history</strong>
+          <span className="muted">
+            The group starts with everything said so far, so {joining.name} can see where
+            things stand. It will be able to read the whole conversation.
+          </span>
+        </button>
+
+        <button
+          type="button"
+          className="choice-card"
+          onClick={() => {
+            onSplit(joining.id, false);
+            onClose();
+          }}
+        >
+          <strong>Start fresh</strong>
+          <span className="muted">
+            An empty group with the two of them. Nothing already said is shared.
+          </span>
+        </button>
+
+        <div className="row-actions">
+          <button type="button" className="btn" onClick={() => setJoining(null)}>
+            Cancel
+          </button>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal title={`Who is in "${room.title}"`} onClose={onClose} wide>
@@ -1462,11 +1734,18 @@ export function RoomPanel({
         <>
           <h3>Add an agent</h3>
           <p className="muted small">
-            Its conversation elsewhere is unaffected — an agent can be in several rooms.
+            {group
+              ? 'Its conversation elsewhere is unaffected — an agent can be in several rooms.'
+              : 'This is a private chat, so adding someone starts a group. You will be asked whether to bring the history across.'}
           </p>
           <div className="row-actions">
             {available.map((a) => (
-              <button key={a.id} type="button" className="btn" onClick={() => onAdd(a.id)}>
+              <button
+                key={a.id}
+                type="button"
+                className="btn"
+                onClick={() => (group ? onAdd(a.id) : setJoining(a))}
+              >
                 + {a.name}
               </button>
             ))}

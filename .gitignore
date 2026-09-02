@@ -59,10 +59,15 @@ ghostbot-agents.json
 ghostbot-transcript-*.json
 client-persistence.json
 
-# Debug screenshots at the repo root (GHOSTBOT_CAPTURE output)
+# Debug screenshots at the repo root (WISPCREW_CAPTURE output)
 /*.png
 .panels-test.mjs
 .history-test.mjs
+
+# Rendered panels from scripts/shot-panels.cjs — something to look at, not
+# something to keep. A panel can typecheck, style cleanly and still look
+# wrong, which is what that script exists to catch.
+/.shots/
 
 # Bot tokens and similar credentials used for live verification.
 *token*.txt

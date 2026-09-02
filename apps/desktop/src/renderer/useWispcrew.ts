@@ -553,7 +553,12 @@ export function useWispcrew() {
        * Selecting it is the point of doing it here: a room the user just
        * created and cannot see would look like a failure.
        */
-      async createRoom(patch: { title: string; agentIds: string[]; greeting?: string }) {
+      async createRoom(patch: {
+        title: string;
+        agentIds: string[];
+        greeting?: string;
+        fromConversationId?: string;
+      }) {
         try {
           const room = await api.createRoom(patch);
           setConversations((current) => [room, ...current.filter((c) => c.id !== room.id)]);

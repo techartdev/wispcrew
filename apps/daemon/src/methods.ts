@@ -312,6 +312,7 @@ export function nodeMethods(): MethodTable {
         title?: string;
         agentIds?: string[];
         greeting?: string;
+        fromConversationId?: string;
       };
 
       const title = String(input.title ?? '').trim();
@@ -326,7 +327,14 @@ export function nodeMethods(): MethodTable {
         return { id: agent.id, name: agent.name };
       });
 
-      return announceRooms(createRoom({ title, members, greeting: input.greeting }));
+      return announceRooms(
+        createRoom({
+          title,
+          members,
+          greeting: input.greeting,
+          fromConversationId: input.fromConversationId,
+        }),
+      );
     },
 
     /*

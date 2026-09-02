@@ -284,6 +284,69 @@ body {
 }
 
 /*
+ * A choice you make once, offered as a card rather than a row of buttons.
+ *
+ * Two of these carry every branching question in the app: agent or group,
+ * and bring the history or start fresh. Both are decisions where the
+ * one-word label is not enough — "Group" and "Start fresh" each need the
+ * sentence beside them — so the control is shaped to hold that sentence
+ * instead of hiding it in a tooltip a pointer has to find.
+ */
+.choice-card {
+  display: block;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.choice-card:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+
+.choice-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.choice-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.choice-card strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 13px;
+}
+
+.choice-card span {
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/*
+ * A member that cannot join, with the reason on the row.
+ *
+ * Everyone in a room must run on the same machine, and a greyed-out
+ * checkbox with no explanation is the kind of dead end that makes people
+ * assume the app is broken. The title attribute carries the why.
+ */
+.checkbox-blocked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/*
  * The room's standing instructions.
  *
  * Rendered as an ordinary field rather than a settings dialog, because it is

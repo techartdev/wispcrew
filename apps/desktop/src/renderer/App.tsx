@@ -21,6 +21,8 @@ import {
   AgentPanel,
   McpPanel,
   NewAgentPanel,
+  NewChoicePanel,
+  NewGroupPanel,
   HistoryPanel,
   RoomPanel,
   NodesPanel,
@@ -40,7 +42,10 @@ type Panel =
   | 'routines'
   | 'skills'
   | 'room'
+  /* The plus button asks first: an agent, or a group. */
+  | 'new'
   | 'new-agent'
+  | 'new-group'
   | null;
 
 export function App() {
@@ -109,7 +114,9 @@ export function App() {
       }
       if (mod && e.key.toLowerCase() === 'n') {
         e.preventDefault();
-        setPanel('new-agent');
+        // The same question the plus button asks, so the shortcut and the
+        // button do not lead to two different places.
+        setPanel('new');
       }
     };
     document.addEventListener('keydown', onKey);
@@ -290,7 +297,7 @@ export function App() {
         selectedId={selectedId}
         runStates={runStates}
         onSelect={actions.selectConversation}
-        onCreate={() => setPanel('new-agent')}
+        onCreate={() => setPanel('new')}
         onOpenSettings={() => setPanel('settings')}
         onOpenPanel={setPanel}
       />
@@ -566,6 +573,26 @@ export function App() {
         </div>
       )}
 
+      {panel === 'new' && (
+        <NewChoicePanel
+          // A group of one is a chat, so the option only appears once there
+          // is genuinely something to put in a room.
+          canGroup={agents.length >= 2}
+          onAgent={() => setPanel('new-agent')}
+          onGroup={() => setPanel('new-group')}
+          onClose={() => setPanel(null)}
+        />
+      )}
+
+      {panel === 'new-group' && (
+        <NewGroupPanel
+          agents={agents}
+          nodes={state.nodes}
+          onCreate={(patch) => void actions.createRoom(patch)}
+          onClose={() => setPanel(null)}
+        />
+      )}
+
       {panel === 'new-agent' && (
         <NewAgentPanel
           presets={presets}
@@ -625,6 +652,21 @@ export function App() {
           room={room}
           agents={state.agents}
           onAdd={(id) => void actions.addRoomAgent(id)}
+          /*
+            Adding an agent to a one-to-one makes a NEW room rather than
+            converting the one you are in. The chat you were having stays
+            exactly where it was — the user asked to start a group, not to
+            hand a private conversation to somebody by accident.
+          */
+          onSplit={(id, bringHistory) => {
+            const partner = roomMembers[0];
+            const joining = agents.find((a) => a.id === id);
+            void actions.createRoom({
+              title: `${partner?.name ?? room.title} & ${joining?.name ?? 'agent'}`,
+              agentIds: [...roomMembers.map((m) => m.id), id],
+              fromConversationId: bringHistory ? room.id : undefined,
+            });
+          }}
           onRemove={(id) => void actions.removeRoomParticipant(id)}
           onSetMode={(mode) => void actions.setRoomMode(mode)}
           onClose={() => setPanel(null)}
