@@ -7,8 +7,11 @@
 import type { ToolContext } from '@wispcrew/shared';
 import { setScheduler } from '@wispcrew/tools';
 import { describeCron, parseCron } from './cron.js';
+import path from 'node:path';
 import { fileLog } from './filelog.js';
+import { host } from './host.js';
 import { refreshNextRunTime } from './scheduler.js';
+import { resyncWatches } from './watch-manager.js';
 import * as store from './store.js';
 import { announceRoutines } from './transcript.js';
 
@@ -80,26 +83,57 @@ export function installScheduler(): void {
       return new Date(runAt).toLocaleString();
     },
 
-    async createRoutine(name, cron, prompt, ctx) {
+    async createRoutine(name, cron, prompt, ctx, watch) {
       const agent = agentFor(ctx);
       if (!agent) throw new Error('No agent owns this workspace, so nothing can be scheduled.');
 
-      // Validated before the user was asked, but re-checked here: approval
-      // and creation are separate steps and the value could differ.
-      describeCron(cron);
+      /*
+       * Re-checked here, not merely before the approval card.
+       *
+       * Approval and creation are separate steps, and a value that changed
+       * between them would be a routine the user did not agree to. For a
+       * watch that means the path must STILL be inside the workspace: an
+       * agent whose workspace moved between the ask and the answer must not
+       * end up with a watcher pointed outside it.
+       */
+      if (watch) {
+        const root = agent.workspaceRoot ?? host().defaultWorkspaceRoot;
+        const resolved = path.resolve(root, watch.path);
+        const inside =
+          resolved === root || resolved.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
+        if (!inside) {
+          throw new Error(`${watch.path} is outside this agent's workspace.`);
+        }
+      } else {
+        describeCron(cron);
+      }
 
       const routine = store.createRoutine({
         agentId: agent.id,
         name,
-        cron,
+        // A record carries one trigger or the other; a watch has no cron.
+        cron: watch ? '' : cron,
+        ...(watch
+          ? { watchPath: watch.path, ...(watch.pattern ? { watchPattern: watch.pattern } : {}) }
+          : {}),
         prompt,
         selfScheduled: true,
         enabled: true,
       });
 
-      refreshNextRunTime(routine.id);
+      /*
+       * A watch needs a watcher, not a next-run time.
+       *
+       * `refreshNextRunTime` on a routine with no cron would compute
+       * nothing and the routine would sit there looking scheduled and never
+       * fire — which is exactly how a feature that "exists" turns out not
+       * to work.
+       */
+      if (watch) resyncWatches();
+      else refreshNextRunTime(routine.id);
+
       announceRoutines();
-      fileLog('[schedule] routine approved:', name, cron);
+      fileLog('[schedule] routine approved:', name, watch ? `watch ${watch.path}` : cron);
       return routine.id;
     },
   });

@@ -25,6 +25,22 @@ let notify: (() => void) | undefined;
  * and it self-heals: a watcher that failed to start is retried on the next
  * sync rather than being lost until restart.
  */
+/**
+ * Re-sync using the runner already installed.
+ *
+ * A watch-triggered routine created after startup needs a watcher, and the
+ * code that creates one — an agent's approved `propose_routine` — has no
+ * runner to hand. Without this the record existed, the Scheduled list showed
+ * it, and nothing ever watched anything: a routine that looks scheduled and
+ * never fires, which is how a feature that "exists" turns out not to work.
+ *
+ * A no-op before the host has installed a runner, which is correct: startup
+ * calls `syncWatches` itself and will pick the routine up then.
+ */
+export function resyncWatches(): void {
+  if (runner) syncWatches(runner, notify);
+}
+
 export function syncWatches(run: RoutineRunner, onChange?: () => void): void {
   runner = run;
   notify = onChange;

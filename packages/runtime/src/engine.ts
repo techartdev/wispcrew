@@ -12,7 +12,7 @@
  * a headless box at 3am. That last case is the one that matters: the engine
  * must behave identically with no observer.
  */
-import type { SkillRecord } from '@wispcrew/shared';
+import { agentsIn, type SkillRecord } from '@wispcrew/shared';
 import type {
   AgentRecord,
   Attachment,
@@ -34,11 +34,16 @@ import {
   PROVIDER_PRESETS,
   type UsageSnapshot,
 } from '@wispcrew/llm';
-import { ToolRegistry, readSkillTool, makeRoomInstructionsTool } from '@wispcrew/tools';
+import {
+  ToolRegistry,
+  readSkillTool,
+  makeRoomInstructionsTool,
+  makeCheckAgentsTool,
+} from '@wispcrew/tools';
 
 import * as store from './store.js';
 import { checkModelPairing } from './config-check.js';
-import { claimTurn, updateTurn } from './turns.js';
+import { activeTurns, claimTurn, updateTurn } from './turns.js';
 import { host } from './host.js';
 import {
   getConversation,
@@ -1031,6 +1036,36 @@ export async function runPrompt(
    */
   const roomForInstructions = getConversation(outputId);
   if (roomForInstructions?.kind === 'group') {
+    /*
+     * Who else is here, and are they working?
+     *
+     * Registered per run alongside the instructions tool, and for the same
+     * reason: a room turn runs its members concurrently, so a shared
+     * "current room" would be whichever run set it last. Offered only in a
+     * group — in a one-to-one the answer is always "nobody else is here",
+     * and a tool that is offered gets used.
+     */
+    tools.register(
+      makeCheckAgentsTool({
+        others: () => {
+          // Read at call time, not at registration: the point of the tool is
+          // what is happening NOW, and a snapshot taken when the turn began
+          // would answer a question about the past.
+          const running = activeTurns(outputId);
+          const busy = new Map(running.map((t) => [t.agentId, t.startedAt]));
+
+          return agentsIn(getConversation(outputId) ?? roomForInstructions)
+            .filter((m) => m.id !== agentId)
+            .map((m) => ({
+              handle: m.handle,
+              name: store.getAgent(m.id)?.name ?? m.handle,
+              busy: busy.has(m.id),
+              since: busy.get(m.id),
+            }));
+        },
+      }),
+    );
+
     tools.register(
       makeRoomInstructionsTool({
         title: () => getConversation(outputId)?.title ?? 'this room',

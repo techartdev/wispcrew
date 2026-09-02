@@ -4,3 +4,4 @@ export * from './observation.js';
 export * from './notify.js';
 export * from './schedule.js';
 export * from './skill.js';
+export * from './roommates.js';

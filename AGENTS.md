@@ -274,8 +274,17 @@ assumed.
   against the real API, including that punctuation-heavy agent output
   survives MarkdownV2 escaping.
 - **Waking itself**: cron routines, one-shot follow-ups an agent schedules
-  for itself, and debounced filesystem watches. A recurring routine needs the
-  user's approval; a single follow-up does not.
+  for itself, and debounced filesystem watches. An agent may propose either
+  kind — `propose_routine` takes a cron OR a `watch` path, which is
+  confined to its workspace and re-synced immediately so a routine approved
+  after startup is actually watched. A recurring routine needs the user's
+  approval; a single follow-up does not.
+- **Agents in a room can see each other.** `check_agents` reports who else
+  is present and whether a turn of theirs is running, and is offered only in
+  a group. There is deliberately no `wait_for_agent`: two agents each
+  waiting for the other is a deadlock no budget can unwind. Waiting is
+  expressed by asking in the room — a reply that names somebody routes to
+  them, bounded by the room's turn budget.
 - **Recovering a conversation**: any write that removes entries keeps the
   previous version, reachable from a History panel.
 
@@ -292,7 +301,7 @@ OpenAI-compatible endpoint keeps chat-completions. `test:attachments` pins the
 routing, including that a local server borrowing an OpenAI model name is not
 rerouted.
 
-**Test coverage**: 85 offline suites — no API key, no network.
+**Test coverage**: 86 offline suites — no API key, no network.
 Several caught real bugs when written, and a few caught bugs that had already
 shipped; keep them green. Notable ones: `single-writer` (two engines on one
 store), `shell-timeout` (a killed process emits `exit` with no `close` on
