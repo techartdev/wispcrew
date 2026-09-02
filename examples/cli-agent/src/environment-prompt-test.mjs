@@ -117,7 +117,20 @@ console.log('\n[the workspace it is told about is the one it is confined to]');
   // The line itself must still be produced, or none of the above matters.
   const prompt = defaultSystemPrompt({ persistent: true, workspace: 'D:\\Projects\\thing' });
   check('the prompt names the root', prompt.includes('D:\\Projects\\thing'));
-  check('and says paths outside it are refused', /Paths outside it are refused/.test(prompt));
+  check('and says a path outside is refused', /a path outside is refused/.test(prompt));
+
+  /*
+   * And says it of the FILE tools only.
+   *
+   * This used to claim "your file and shell tools are confined", which is
+   * false of a shell: `cd`, `git -C` and an absolute path all still reach
+   * the machine, and containing that needs the operating system rather than
+   * a string check. An agent that believed the stronger claim ran
+   * `git remote -v`, got a repository from another folder, and reasoned
+   * confidently from it. See `test:containment`.
+   */
+  check('the shell is described honestly', /working directory, not a sandbox/.test(prompt));
+  check('and not as confined', !/file and shell tools are confined/.test(prompt));
 }
 
 console.log('\n[every persona, not just the default]');

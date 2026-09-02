@@ -70,6 +70,36 @@ export function pushTranscript(agentId: string, entry: TranscriptEntry): void {
   emitEngineEvent({ type: 'transcript', agentId, entry });
 }
 
+/*
+ * Say so in the conversation when an agent's workspace moves.
+ *
+ * Pointing an existing agent at a project folder is the ordinary way to
+ * start work on one, and nothing recorded it. The agent kept a history full
+ * of true answers about the OLD folder and went on reasoning from them —
+ * asked which repository it was in, it named the previous one, having read
+ * that from its own earlier turn rather than from the disk.
+ *
+ * A prompt describes the present and says nothing about a change, so the
+ * model has no way to tell which of its earlier observations are now stale.
+ * One line at the point it happened is what makes that visible.
+ *
+ * Registered as a hook because `store.ts` cannot import this module without
+ * a cycle — the same arrangement `setAgentDeletedHook` uses.
+ */
+store.setWorkspaceMovedHook((agentId, from, to) => {
+  const where = to ?? 'the default workspace';
+  pushTranscript(agentId, {
+    kind: 'notice',
+    id: store.newId('evt'),
+    level: 'info',
+    text: from
+      ? `Workspace changed from ${from} to ${where}. Anything said above about files or ` +
+        'repositories refers to the previous folder — check before relying on it.'
+      : `Workspace set to ${where}.`,
+    createdAt: Date.now(),
+  });
+});
+
 /**
  * Ask a human to approve a tool call.
  *
@@ -886,6 +916,18 @@ export async function runPrompt(
     },
   });
 
+  /**
+   * What each tool call was asked to do, by call id.
+   *
+   * The result event carries no arguments and its transcript entry replaces
+   * the one written at the start, so without this the record of *what* a
+   * tool was told to do is destroyed the moment it finishes.
+   *
+   * Cleared per entry as results arrive, so a long turn does not accumulate
+   * every argument it has ever sent.
+   */
+  const calledWith = new Map<string, Record<string, unknown> | undefined>();
+
   // The Agent is reused across turns, so rebind the sink for this run.
   session.setEventSink((e) => {
     if (e.type === 'delta') {
@@ -895,6 +937,7 @@ export async function runPrompt(
       // Close any prose written before this call so the card lands *after*
       // it, and the answer the model writes next lands after the card.
       settleSegment();
+      calledWith.set(e.call.id, e.call.args);
       pushTranscript(outputId, {
         kind: 'tool-call',
         id: e.call.id,
@@ -908,10 +951,26 @@ export async function runPrompt(
         kind: 'tool-call',
         id: e.result.id,
         toolName: e.result.name,
+        /*
+         * Carried across from the start event, because this entry REPLACES
+         * that one — `upsertTranscriptEntry` overwrites by id rather than
+         * merging. So every completed call lost its arguments the moment it
+         * finished, and the transcript recorded that `shell` had run
+         * without recording what it ran.
+         *
+         * That cost a real diagnosis. An agent reported the wrong
+         * repository from inside its workspace, and the question "did it
+         * pass a cwd, or did it cd out?" was unanswerable from the record —
+         * the two have different causes and different fixes. The tool cards
+         * in the UI had been showing arguments only while a call was still
+         * running, which is exactly when nobody is reading them.
+         */
+        args: calledWith.get(e.result.id),
         status: e.result.ok ? 'completed' : e.result.errorCode === 'denied' ? 'denied' : 'failed',
         content: e.result.content.slice(0, 4000),
         createdAt: Date.now(),
       });
+      calledWith.delete(e.result.id);
     } else if (e.type === 'error') {
       // A fatal error is rethrown by `Agent.run` and reported below with a
       // message the user can act on. Emitting the raw text here too would

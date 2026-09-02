@@ -5,6 +5,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Tool, ToolContext, ToolResult } from '@wispcrew/shared';
 import { noteObserved } from './observation.js';
+import { resolveInRoot, PathOutsideWorkspaceError } from './workspace.js';
 
 interface EditArgs {
   path: string;
@@ -32,10 +33,19 @@ export const editFileTool: Tool<EditArgs> = {
   },
 
   async run(args: EditArgs, ctx: ToolContext): Promise<ToolResult> {
-    const root = path.resolve(ctx.workspaceRoot || process.cwd());
-    const full = path.resolve(root, args.path);
-    if (full !== root && !full.startsWith(root + path.sep)) {
-      return { id: '', name: 'edit_file', ok: false, errorCode: 'outside_workspace', content: `Path ${args.path} is outside the workspace root` };
+    // The shared rule, not a third private copy of it. See `workspace.ts`.
+    let full: string;
+    try {
+      full = resolveInRoot(ctx, args.path);
+    } catch (err) {
+      if (!(err instanceof PathOutsideWorkspaceError)) throw err;
+      return {
+        id: '',
+        name: 'edit_file',
+        ok: false,
+        errorCode: 'outside_workspace',
+        content: err.message,
+      };
     }
     if (!args.oldText) {
       return { id: '', name: 'edit_file', ok: false, errorCode: 'bad_args', content: 'oldText must not be empty' };

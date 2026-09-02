@@ -160,9 +160,30 @@ function environmentSection(opts: SystemPromptOptions): string[] {
   }
 
   if (opts.workspace) {
+    /*
+     * Two sentences, because the two halves are not equally true.
+     *
+     * This said "your file and shell tools are confined to X. Paths outside
+     * it are refused." The first half holds for the file tools, which
+     * resolve every path against the root and refuse anything outside it.
+     * It does NOT hold for a shell: `cd`, `git -C` and an absolute path in
+     * a command all still reach the rest of the machine, and no amount of
+     * argument checking changes that — containing a shell needs the
+     * operating system, not a string check.
+     *
+     * Overstating it was expensive. An agent told it was confined to one
+     * folder ran `git remote -v`, got a different repository, and reasoned
+     * confidently from an answer it had no way to know came from outside
+     * its boundary. Saying what is actually guaranteed lets it notice.
+     */
     lines.push(
-      `- Your file and shell tools are confined to ${opts.workspace}.`,
-      '  Paths outside it are refused — that is a boundary, not a bug.',
+      `- Your workspace is ${opts.workspace}.`,
+      '- File tools are confined to it: a path outside is refused, which is a',
+      '  boundary rather than a bug.',
+      '- Shell commands START there. That is a working directory, not a sandbox —',
+      '  a command you write can still reach elsewhere on this machine. Stay inside',
+      '  the workspace unless the user asked otherwise, and check where you are',
+      '  before trusting what a command tells you about "the" repository or project.',
     );
   }
 

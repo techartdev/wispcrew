@@ -3,6 +3,7 @@
  */
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { resolveInRoot, workspaceRootOf, PathOutsideWorkspaceError } from './workspace.js';
 import type { Tool, ToolContext, ToolResult } from '@wispcrew/shared';
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', '.venv', '__pycache__']);
@@ -44,8 +45,29 @@ export const grepTool: Tool<GrepArgs> = {
       return { id: '', name: 'grep', ok: false, errorCode: 'bad_pattern', content: `Invalid regex: ${(err as Error).message}` };
     }
     const maxResults = Math.min(args.maxResults ?? MAX_RESULTS, MAX_RESULTS);
-    const root = path.resolve(ctx.workspaceRoot || process.cwd());
-    const start = path.resolve(root, args.path ?? '.');
+    const root = workspaceRootOf(ctx);
+
+    /*
+     * `path.resolve(root, args.path)` is NOT containment.
+     *
+     * It discards everything left of an absolute segment, so an absolute
+     * `path` argument was honoured in full and `grep` happily searched any
+     * directory on the machine. It reads like a containment expression,
+     * which is why it survived so long.
+     */
+    let start: string;
+    try {
+      start = resolveInRoot(ctx, args.path ?? '.');
+    } catch (err) {
+      if (!(err instanceof PathOutsideWorkspaceError)) throw err;
+      return {
+        id: '',
+        name: 'grep',
+        ok: false,
+        errorCode: 'outside_workspace',
+        content: err.message,
+      };
+    }
 
     const matches: string[] = [];
     let searchedFiles = 0;

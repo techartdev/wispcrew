@@ -8,6 +8,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { retainText } from './retention.js';
+import { resolveInRoot, workspaceRootOf, PathOutsideWorkspaceError } from './workspace.js';
 import type { Tool, ToolContext, ToolResult } from '@wispcrew/shared';
 
 interface ShellArgs {
@@ -29,7 +30,12 @@ export const shellTool: Tool<ShellArgs> = {
       type: 'object',
       properties: {
         command: { type: 'string', description: 'The command to execute' },
-        cwd: { type: 'string', description: 'Working directory; defaults to workspace root' },
+        cwd: {
+          type: 'string',
+          description:
+            'Working directory, relative to the workspace root and confined to it. ' +
+            'Defaults to the workspace root.',
+        },
         timeoutMs: { type: 'number', description: 'Timeout in ms (default 30000, max 300000)' },
         noApproval: {
           type: 'boolean',
@@ -41,12 +47,41 @@ export const shellTool: Tool<ShellArgs> = {
   },
 
   async run(args: ShellArgs, ctx: ToolContext): Promise<ToolResult> {
+    /*
+     * Resolve the working directory BEFORE asking for approval.
+     *
+     * Two reasons. The approval card quotes the cwd, and a card that showed
+     * a directory the command would not actually run in would be asking the
+     * user to agree to the wrong thing. And a request that is going to be
+     * refused should not cost somebody a decision first.
+     *
+     * `args.cwd` used to be taken verbatim — a model-supplied absolute path,
+     * used with no check, and advertised in this tool's own description. An
+     * agent confined to `D:\Mine\OpenClawHomeAssistant` ran `git remote -v`
+     * and reported a completely different repository, because the command
+     * had run in a completely different folder. It was not hallucinating; it
+     * was reading a real answer from outside its boundary.
+     */
+    let cwd: string;
+    try {
+      cwd = args.cwd ? resolveInRoot(ctx, args.cwd) : workspaceRootOf(ctx);
+    } catch (err) {
+      if (!(err instanceof PathOutsideWorkspaceError)) throw err;
+      return {
+        id: '',
+        name: 'shell',
+        ok: false,
+        errorCode: 'outside_workspace',
+        content: err.message,
+      };
+    }
+
     const approved =
       args.noApproval === true ||
       (await ctx.requestApproval({
         toolName: 'shell',
         summary: `Run command: ${args.command.slice(0, 200)}`,
-        detail: `cwd: ${args.cwd ?? ctx.workspaceRoot ?? process.cwd()}`,
+        detail: `cwd: ${cwd}`,
         payload: { command: args.command },
       }));
     if (!approved) {
@@ -60,7 +95,6 @@ export const shellTool: Tool<ShellArgs> = {
     }
 
     const timeoutMs = Math.min(Math.max(args.timeoutMs ?? ctx.defaultTimeoutMs, 100), 300_000);
-    const cwd = args.cwd ?? ctx.workspaceRoot ?? process.cwd();
 
     // Refuse to run when the working directory does not exist.
     //

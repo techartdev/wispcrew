@@ -251,6 +251,11 @@ export function updateAgent(id: string, patch: AgentPatch): AgentRecord {
   const agents = listAgents();
   const idx = agents.findIndex((a) => a.id === id);
   if (idx === -1) throw new Error(`No such agent: ${id}`);
+
+  // Read before the merge, so the comparison at the end is against what the
+  // workspace actually was rather than what it has just become.
+  const previousRoot = agents[idx]!.workspaceRoot;
+
   // `id`/`createdAt` are identity, never patchable.
   const next: AgentRecord = {
     ...agents[idx]!,
@@ -290,7 +295,45 @@ export function updateAgent(id: string, patch: AgentPatch): AgentRecord {
 
   agents[idx] = next;
   saveAgents(agents);
+
+  /*
+   * A moved workspace is news, and the conversation has to hear it.
+   *
+   * Pointing an existing agent at a project folder is the normal way to
+   * start work on one — and until now nothing recorded it. The agent kept
+   * its whole history, which was full of true answers about the OLD folder,
+   * and went on reasoning from them: asked which repository it was in, it
+   * confidently named the previous one, having read that from its own
+   * earlier turn rather than from the disk.
+   *
+   * The prompt does say where the workspace is, but a prompt describes the
+   * present and says nothing about a change, so the model has no way to
+   * tell which of its earlier observations are now stale. One line in the
+   * transcript, at the point it happened, is what makes that visible.
+   */
+  if (previousRoot !== next.workspaceRoot) {
+    notifyWorkspaceMoved?.(next.id, previousRoot, next.workspaceRoot);
+  }
+
   return next;
+}
+
+/**
+ * Announce a workspace change into the agent's conversation.
+ *
+ * A hook for the same reason as `setAgentDeletedHook`: writing a transcript
+ * entry needs `pushTranscript`, which lives in the engine and already
+ * imports this module. Optional, so a host that never installs it still
+ * updates agents cleanly.
+ */
+let notifyWorkspaceMoved:
+  | ((agentId: string, from: string | undefined, to: string | undefined) => void)
+  | undefined;
+
+export function setWorkspaceMovedHook(
+  hook: (agentId: string, from: string | undefined, to: string | undefined) => void,
+): void {
+  notifyWorkspaceMoved = hook;
 }
 
 /**

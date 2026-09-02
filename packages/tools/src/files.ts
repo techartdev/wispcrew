@@ -5,24 +5,18 @@ import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
 import type { Tool, ToolContext, ToolResult } from '@wispcrew/shared';
 import { checkWrite, noteObserved } from './observation.js';
+import { resolveInRoot, workspaceRootOf, PathOutsideWorkspaceError } from './workspace.js';
 
 const MAX_READ_BYTES = 300_000;
 
-function resolveInRoot(ctx: ToolContext, p: string): string {
-  const root = path.resolve(ctx.workspaceRoot || process.cwd());
-  const target = path.resolve(root, p);
-  if (target !== root && !target.startsWith(root + path.sep)) {
-    throw new PathOutsideWorkspaceError(target, root);
-  }
-  return target;
-}
-
-class PathOutsideWorkspaceError extends Error {
-  constructor(target: string, root: string) {
-    super(`Path ${target} is outside the workspace root ${root}`);
-    this.name = 'PathOutsideWorkspaceError';
-  }
-}
+/*
+ * The containment rule lives in `workspace.ts` now.
+ *
+ * It was correct here and duplicated in `edit.ts`, while `grep` and `shell`
+ * had no version of it at all — which is exactly what two copies of a rule
+ * predict: the next tool gets a third, or none. One implementation, imported
+ * by everything that touches a model-supplied path.
+ */
 
 /**
  * Turn a filesystem error into something the model (and user) can act on.
