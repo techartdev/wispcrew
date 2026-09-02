@@ -345,6 +345,28 @@ export const shellTool: Tool<ShellArgs> = {
           .filter(Boolean)
           .join('\n');
 
+        /*
+         * A non-zero exit is reported as not-ok, and that is a decision.
+         *
+         * Plenty of commands use a non-zero exit to mean something other
+         * than failure: `git merge` returns 1 on conflicts, `git diff
+         * --check` on findings, `grep` on no match. All three show as
+         * "Failed" in the transcript despite having done exactly what was
+         * asked, which was noticed on a real merge.
+         *
+         * Left as it is, deliberately. There is no way to tell those apart
+         * from a genuine failure without a per-command table of exit-code
+         * meanings — which would be wrong for anything not in it, and this
+         * tool runs arbitrary commands. The exit code and the full output
+         * are in `content`, so the model has what it needs to interpret it,
+         * and it did: the agent that hit this read the conflict list and
+         * carried on correctly.
+         *
+         * What would be worth building is a status the UI can show that is
+         * neither "Done" nor "Failed" — "exit 1" is a fact rather than a
+         * judgement. That needs `data` to reach the transcript entry, which
+         * it currently does not.
+         */
         resolve({
           id: '',
           name: 'shell',

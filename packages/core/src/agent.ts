@@ -26,6 +26,20 @@ export interface AgentOptions {
   tools?: ToolRegistry;
   systemPrompt?: string;
   workspaceRoot?: string;
+  /**
+   * How many model calls one turn may make. Default 30.
+   *
+   * It was 12, which is enough to answer a question and not enough to do a
+   * job. Measured on a real task — resolve a git merge across two files —
+   * the agent spent its budget reading, merging, inspecting the conflicts
+   * and editing, and ran out mid-way; a third of those steps went on tool
+   * failures it could not have avoided.
+   *
+   * Raised rather than removed. The bound is what stops a model that has
+   * misunderstood something from looping at the user's expense, and running
+   * out is no longer a dead end — the last step is spent on a summary of
+   * where things got to. See `summariseUnfinished`.
+   */
   maxSteps?: number;
   maxTokens?: number;
   temperature?: number;
@@ -67,7 +81,7 @@ export class Agent {
     this.tools = options.tools ?? new ToolRegistry();
     this.workspaceRoot = options.workspaceRoot ?? process.cwd();
     this.systemPrompt = options.systemPrompt ?? defaultSystemPrompt({ modelHint: options.provider.label });
-    this.maxSteps = options.maxSteps ?? 12;
+    this.maxSteps = options.maxSteps ?? 30;
     this.maxTokens = options.maxTokens;
     this.temperature = options.temperature;
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
@@ -269,12 +283,27 @@ export class Agent {
         }
       }
 
-      const last = this.history.at(-1);
-      const message: ChatMessage = last?.role === 'assistant'
-        ? last
-        : { role: 'assistant', content: 'Reached the maximum number of tool steps without a final answer.' };
+      /*
+       * The budget ran out. Spend one last call on an ANSWER.
+       *
+       * This used to return "Reached the maximum number of tool steps
+       * without a final answer" and stop. Reported by a user whose agent was
+       * half-way through resolving a merge conflict: it had already run
+       * `git checkout --ours` on two files, and the turn ended with a
+       * sentence that said nothing about what had been done or what state
+       * the repository was in. The work was real and the report was absent,
+       * which is the worst of both — somebody now has to reconstruct it.
+       *
+       * The final call passes NO tool definitions, so the model cannot ask
+       * for another one and must write prose. That is the whole mechanism:
+       * a tool that is offered gets used, so it is not offered.
+       *
+       * One extra model call, only on the path that was previously a dead
+       * end, and the turn is bounded either way.
+       */
+      const summary = await this.summariseUnfinished(turnId, controller);
       this.onEvent({ type: 'turn_end', turnId });
-      return message;
+      return summary;
     } catch (err) {
       const message = (err as Error).message;
       this.onEvent({ type: 'error', message, fatal: true });
@@ -286,6 +315,76 @@ export class Agent {
 
   private handleChunk(chunk: ProviderChunk, emit: (e: AgentEvent) => void): void {
     if (chunk.kind === 'text') emit({ type: 'delta', text: chunk.text });
+  }
+
+  /**
+   * One final call, with no tools, so a turn that ran out of steps still
+   * reports what happened.
+   *
+   * The instruction is pushed as a user message rather than swapped into the
+   * system prompt: the system prompt is the agent's standing identity, and
+   * rewriting it for one call would make this turn's history disagree with
+   * every other. A plain instruction at the end of the conversation is also
+   * what the model is best at answering.
+   *
+   * Streams like any other reply, so the user watches the summary arrive
+   * rather than waiting on a silent pause after a wall of tool cards.
+   *
+   * If this call fails there is nothing further to try, so the honest
+   * fallback is the old sentence plus the reason.
+   */
+  private async summariseUnfinished(
+    turnId: string,
+    controller: AbortController,
+  ): Promise<ChatMessage> {
+    this.history.push({
+      role: 'user',
+      content:
+        `You have used all ${this.maxSteps} tool steps for this turn, so you cannot ` +
+        'call any more tools. Stop working and reply now, in plain text:\n' +
+        '- what you actually changed, if anything, and where;\n' +
+        '- what state things are in right now, especially anything half-finished;\n' +
+        '- what still needs doing, so it can be picked up.\n' +
+        'Be specific and do not offer to continue — this turn is over.',
+    });
+
+    let text = '';
+    try {
+      for await (const chunk of this.provider.chat({
+        system: this.systemPrompt,
+        messages: this.history,
+        // No tools. A tool that is offered gets used, and this call exists
+        // precisely because there are no calls left.
+        toolDefs: [],
+        maxTokens: this.maxTokens,
+        temperature: this.temperature,
+        stream: true,
+        signal: controller.signal,
+      })) {
+        this.handleChunk(chunk, (e) => this.onEvent(e));
+        if (chunk.kind === 'text') text += chunk.text;
+        else if (chunk.kind === 'done' && !text && chunk.message.content) {
+          text = chunk.message.content;
+          this.onEvent({ type: 'delta', text });
+        } else if (chunk.kind === 'error') throw new Error(chunk.message);
+      }
+    } catch (err) {
+      const why = controller.signal.aborted ? 'the turn was interrupted' : (err as Error).message;
+      const fallback = `Ran out of tool steps (${this.maxSteps}), and the summary could not be produced: ${why}`;
+      const message: ChatMessage = { role: 'assistant', content: fallback };
+      this.history.push(message);
+      return message;
+    }
+
+    const message: ChatMessage = {
+      role: 'assistant',
+      content:
+        text ||
+        `Ran out of tool steps (${this.maxSteps}) before finishing, and produced no summary.`,
+    };
+    this.history.push(message);
+    this.onEvent({ type: 'model_message', message });
+    return message;
   }
 
   /**
