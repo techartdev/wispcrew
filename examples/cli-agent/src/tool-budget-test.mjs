@@ -184,6 +184,83 @@ console.log('\n[budget] running out produces a report, not a shrug');
   check('while the earlier ones did', seen[0] > 0, JSON.stringify(seen));
 }
 
+console.log('\n[streaming] a full final message never repeats the deltas');
+{
+  /*
+   * Seen in a real room: one assistant entry containing its sentence twice,
+   * with no separator — "…what day is it today?@openclaw-addon-dev-version,
+   * what day is it today?".
+   *
+   * Every stage of our own pipeline was read for it and none can double a
+   * reply: the engine appends only on `delta`, segments reset when they
+   * close, retries happen before a body is read, and the SSE parser
+   * consumes each line exactly once. The one place it COULD happen is here
+   * — a provider that streams deltas and then also sends the whole text on
+   * the `done` chunk, which several do. The fallback that adopts `done`
+   * content is guarded on nothing having streamed, and this is what keeps
+   * that guard honest.
+   *
+   * The observed case was therefore the model emitting the sentence twice,
+   * not the client duplicating it. Pinned anyway: the guard is one `!text`
+   * away from being wrong, and the symptom is unmistakable but the cause is
+   * not.
+   */
+  const SENTENCE = '@dev, what day is it today?';
+  const provider = {
+    async *chat() {
+      yield { kind: 'text', text: SENTENCE.slice(0, 10) };
+      yield { kind: 'text', text: SENTENCE.slice(10) };
+      // The same text again, as a complete final message.
+      yield { kind: 'done', message: { role: 'assistant', content: SENTENCE } };
+    },
+  };
+
+  const streamed = [];
+  const agent = new Agent({
+    provider,
+    tools: new ToolRegistry(),
+    systemPrompt: 'test',
+    onEvent: (e) => {
+      if (e.type === 'delta') streamed.push(e.text);
+    },
+  });
+
+  const reply = await agent.run('hi');
+
+  check('what streamed is said once', streamed.join('') === SENTENCE, streamed.join(''));
+  check('and the returned message is not doubled', reply.content === SENTENCE, reply.content);
+}
+
+console.log('\n[streaming] but a provider that only sends a final message still works');
+{
+  /*
+   * The other half of the same guard. Some providers deliver nothing until
+   * the end — non-streaming endpoints, and a few local runtimes — and their
+   * whole answer arrives on the `done` chunk. Dropping it would turn every
+   * reply from those into a blank bubble.
+   */
+  const provider = {
+    async *chat() {
+      yield { kind: 'done', message: { role: 'assistant', content: 'All of it, at once.' } };
+    },
+  };
+
+  const streamed = [];
+  const agent = new Agent({
+    provider,
+    tools: new ToolRegistry(),
+    systemPrompt: 'test',
+    onEvent: (e) => {
+      if (e.type === 'delta') streamed.push(e.text);
+    },
+  });
+
+  const reply = await agent.run('hi');
+  check('the answer still arrives', reply.content === 'All of it, at once.', reply.content);
+  check('and it is streamed to the UI once', streamed.join('') === 'All of it, at once.',
+    streamed.join(''));
+}
+
 console.log('\n[budget] the instruction forbids asking to continue');
 {
   /*
