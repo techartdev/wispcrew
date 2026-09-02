@@ -187,8 +187,17 @@ export function RoomPane({
 
   return (
     <aside className="room-pane" aria-label="About this conversation">
+      {/*
+        The room's own name first, then who is in it, then the standing
+        instructions, then what is scheduled.
+        
+        The order used to put the heading "In this room" above the NAME and
+        the instructions, with the member list third — so the heading
+        labelled the wrong thing and you read two blocks before reaching the
+        people the panel is named after. Identity, then cast, then rules.
+      */}
       <div className="room-pane-head">
-        <h2>In this room</h2>
+        <h2>{members.length > 1 ? 'Room' : 'Conversation'}</h2>
         <button
           type="button"
           className="room-pane-close"
@@ -230,51 +239,6 @@ export function RoomPane({
             }
           }}
         />
-      )}
-
-      {/*
-        The room's standing instructions.
-        
-        The one piece of content a room owns: its tone, its purpose, and why
-        these particular agents are here. It travels with the conversation,
-        so an agent added halfway through knows what kind of place it walked
-        into without reading the whole scrollback.
-        
-        Shown in plain sight, editable in place, with a line saying who can
-        read it — because everyone can. A hidden system instruction would
-        mean the user reads a reply shaped by a rule they cannot find, and
-        an agent asked "what were you told?" would have to deflect. A rule
-        nobody can see is a rule nobody can correct.
-        
-        Offered for a group only. A one-to-one chat already has a place for
-        standing instructions — the agent's own description — and a second
-        one would just be two ways to say the same thing.
-      */}
-      {isGroup(room) && (
-        <div className="room-greeting">
-          <label className="room-greeting-label" htmlFor="room-greeting-input">
-            Room instructions
-          </label>
-          <textarea
-            id="room-greeting-input"
-            className="room-greeting-input"
-            value={draftGreeting}
-            rows={3}
-            placeholder="What is this room for, and in what tone? Everyone here will read it."
-            onChange={(e) => setDraftGreeting(e.target.value)}
-            onBlur={commitGreeting}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setDraftGreeting(room.greeting ?? '');
-                e.currentTarget.blur();
-              }
-            }}
-          />
-          <p className="room-greeting-note">
-            Visible to everyone here, including the agents. They are told to follow it
-            and to say what it is if you ask.
-          </p>
-        </div>
       )}
 
       <ul className="room-pane-members">
@@ -350,6 +314,51 @@ export function RoomPane({
           );
         })}
       </ul>
+
+      {/*
+        The room's standing instructions.
+        
+        The one piece of content a room owns: its tone, its purpose, and why
+        these particular agents are here. It travels with the conversation,
+        so an agent added halfway through knows what kind of place it walked
+        into without reading the whole scrollback.
+        
+        Shown in plain sight, editable in place, with a line saying who can
+        read it — because everyone can. A hidden system instruction would
+        mean the user reads a reply shaped by a rule they cannot find, and
+        an agent asked "what were you told?" would have to deflect. A rule
+        nobody can see is a rule nobody can correct.
+        
+        Offered for a group only. A one-to-one chat already has a place for
+        standing instructions — the agent's own description — and a second
+        one would just be two ways to say the same thing.
+      */}
+      {isGroup(room) && (
+        <div className="room-greeting">
+          <label className="room-greeting-label" htmlFor="room-greeting-input">
+            Room instructions
+          </label>
+          <textarea
+            id="room-greeting-input"
+            className="room-greeting-input"
+            value={draftGreeting}
+            rows={4}
+            placeholder="What is this room for, and in what tone? Everyone here will read it."
+            onChange={(e) => setDraftGreeting(e.target.value)}
+            onBlur={commitGreeting}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setDraftGreeting(room.greeting ?? '');
+                e.currentTarget.blur();
+              }
+            }}
+          />
+          <p className="room-greeting-note">
+            Visible to everyone here, including the agents. They are told to follow it
+            and to say what it is if you ask.
+          </p>
+        </div>
+      )}
 
       <div className="room-pane-head">
         <h2>Scheduled</h2>

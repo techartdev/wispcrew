@@ -27,6 +27,7 @@ fs.writeFileSync(
   `
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { RoomPane } from '${path.join(repo, "apps/desktop/src/renderer/RoomPane.tsx").replace(/\\/g, "/")}';
 import { NewChoicePanel, NewGroupPanel, RoomPanel, NewAgentPanel, AgentPanel } from '${path
     .join(repo, 'apps/desktop/src/renderer/Panels.tsx')
     .replace(/\\/g, '/')}';
@@ -38,17 +39,28 @@ const agents = [
 ];
 
 const room = {
-  id: 'a1',
-  title: 'Assistant',
-  kind: 'direct',
+  id: 'r1',
+  title: 'OpenClaw AddOn Dev & OpenClaw Dev Version',
+  kind: 'group',
+  greeting: 'Repository workflow - @openclaw-addon-dev manages the main techartdev/OpenClawHomeAssistant repository: watches issues, pull requests, releases and CI.',
   mode: 'open',
   createdAt: 1,
   updatedAt: 1,
   participants: [
     { kind: 'human', id: 'human:local', name: 'You', channels: ['app'] },
-    { kind: 'agent', id: 'a1', handle: 'assistant' },
+    { kind: 'agent', id: 'a1', handle: 'openclaw-addon-prod-version' },
+    { kind: 'agent', id: 'a2', handle: 'openclaw-addon-dev-version' },
   ],
 };
+
+const roomReports = [
+  { conversationId: 'r1', agentId: 'a1', agentName: 'OpenClaw AddOn Prod Version',
+    used: 45468, measured: false, limit: 400000, fraction: 0.1136,
+    systemTokens: 1016, toolTokens: 2010, messageTokens: 42442, model: 'gpt-5.6-terra' },
+  { conversationId: 'r1', agentId: 'a2', agentName: 'OpenClaw AddOn Dev Version',
+    used: 45431, measured: false, limit: 400000, fraction: 0.1135,
+    systemTokens: 979, toolTokens: 2010, messageTokens: 42442, model: 'gpt-5.6-terra' },
+];
 
 const noop = () => {};
 
@@ -105,6 +117,16 @@ globalThis.__PANELS__ = {
       onPickDirectory: async () => null, onClose: noop,
     }),
   ),
+  'room-pane': renderToStaticMarkup(
+    React.createElement('div', { style: { display: 'flex', height: '760px' } },
+      React.createElement(RoomPane, {
+        room, agents, routines: [], runStates: { a1: 'idle', a2: 'idle' },
+        contextReports: roomReports,
+        onCompact: noop, onMention: noop, onOpenRoutines: noop,
+        onRename: noop, onSetGreeting: noop, onConfigure: noop, onClose: noop,
+      }),
+    ),
+  ),
   'new-choice': renderToStaticMarkup(
     React.createElement(NewChoicePanel, {
       canGroup: true, onAgent: noop, onGroup: noop, onClose: noop,
@@ -118,7 +140,10 @@ globalThis.__PANELS__ = {
   ),
   'room-direct': renderToStaticMarkup(
     React.createElement(RoomPanel, {
-      room, agents, onAdd: noop, onSplit: noop, onRemove: noop, onSetMode: noop, onClose: noop,
+      room, agents, routines: [], runStates: {}, contextReports: roomReports,
+      onCompact: noop, onMention: noop, onConfigure: noop, onOpenRoutines: noop,
+      onRename: noop, onSetGreeting: noop,
+      onAdd: noop, onSplit: noop, onRemove: noop, onSetMode: noop, onClose: noop,
     }),
   ),
 };
