@@ -10,6 +10,7 @@ import { describeCron, parseCron } from './cron.js';
 import { fileLog } from './filelog.js';
 import { refreshNextRunTime } from './scheduler.js';
 import * as store from './store.js';
+import { announceRoutines } from './transcript.js';
 
 /**
  * How many self-scheduled routines one agent may hold.
@@ -74,6 +75,7 @@ export function installScheduler(): void {
       });
 
       refreshNextRunTime(routine.id);
+      announceRoutines();
       fileLog('[schedule] follow-up in', String(minutes), 'min for', agent.name);
       return new Date(runAt).toLocaleString();
     },
@@ -96,6 +98,7 @@ export function installScheduler(): void {
       });
 
       refreshNextRunTime(routine.id);
+      announceRoutines();
       fileLog('[schedule] routine approved:', name, cron);
       return routine.id;
     },

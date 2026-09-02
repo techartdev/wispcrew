@@ -60,10 +60,30 @@ export const IconAttach = (p: SVGProps<SVGSVGElement>) => (
   </Glyph>
 );
 
+/**
+ * A cog, and it has to read as one.
+ *
+ * This was a small hub with eight thin rays radiating into empty space,
+ * which is the universal drawing of BRIGHTNESS. Reported exactly that way:
+ * "looks like a sun, not like a gear, makes me think that's some lightness
+ * setting". Two icons a hair apart in geometry are miles apart in meaning,
+ * and this one sits beside a theme toggle.
+ *
+ * What separates them is not the number of spokes but where they live: a
+ * sun's rays are thin and detached, a cog's teeth are thick and grow out of
+ * a rim. So — a rim, eight stubby teeth drawn at nearly twice the stroke
+ * width and butt-capped so they read as blocks rather than pins, and a hub
+ * small enough to be a bore rather than a second sun.
+ */
 export const IconSettings = (p: SVGProps<SVGSVGElement>) => (
   <Glyph {...p}>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
+    <circle cx="12" cy="12" r="6" />
+    <circle cx="12" cy="12" r="2.25" />
+    <path
+      strokeWidth="3.25"
+      strokeLinecap="butt"
+      d="M12 6.2V4M12 17.8V20M6.2 12H4M17.8 12H20M7.9 7.9 6.3 6.3M16.1 16.1l1.6 1.6M16.1 7.9 17.7 6.3M7.9 16.1 6.3 17.7"
+    />
   </Glyph>
 );
 

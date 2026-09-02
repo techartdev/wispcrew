@@ -116,6 +116,42 @@ console.log('\n[the desktop] it announces the same things');
   }
 }
 
+console.log('\n[the engine] what an AGENT changes is announced too');
+{
+  /*
+   * The doors a CLIENT knocks on — the node's method table and the desktop
+   * bridge — both announce what they change. Neither is involved when an
+   * AGENT changes something itself, and that path kept being forgotten:
+   *
+   *  - a room's instructions, rewritten by `set_room_instructions`;
+   *  - a room EVENT: a join, a departure, a handle following a rename;
+   *  - a ROUTINE, from `propose_routine` or `schedule_follow_up`.
+   *
+   * The last was reported as "I told the agent to create a cron, nothing
+   * appeared in routines… I had to do reload and then the routine
+   * appeared". It was on disk and the agent had said so; the Scheduled list
+   * simply never heard.
+   */
+  const src = (p) => fs.readFileSync(path.join(repo, p), 'utf8');
+
+  const schedule = src('packages/runtime/src/schedule-host.ts');
+  check('both self-scheduling paths announce',
+    (schedule.match(/announceRoutines\(\)/g) ?? []).length >= 2,
+    'one of the two creation paths is still silent');
+
+  const transcript = src('packages/runtime/src/transcript.ts');
+  check('and the announcement reads the list itself',
+    /export function announceRoutines[\s\S]{0,300}store\.listRoutines\(\)/.test(transcript),
+    'a caller-supplied list would be a second door onto one fact');
+
+  const engine = src('packages/runtime/src/engine.ts');
+  check('rewritten room instructions are announced', /announceRooms\(/.test(engine));
+
+  const conversations = src('packages/runtime/src/conversations.ts');
+  check('and room events are pushed, not merely written',
+    /pushTranscript\(conversationId, entry\)/.test(conversations));
+}
+
 console.log('');
 if (failures) {
   console.error(`ANNOUNCE TEST FAILED — ${failures} assertion(s)\n`);

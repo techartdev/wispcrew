@@ -31,6 +31,24 @@ export function pushTranscript(agentId: string, entry: TranscriptEntry): void {
 }
 
 /**
+ * Tell every attached client that the routines changed.
+ *
+ * The event was emitted from exactly two places — the node's method table
+ * and the desktop bridge — and both of them are doors a CLIENT knocks on.
+ * Neither is involved when an AGENT schedules something for itself, which
+ * is the whole point of `propose_routine` and `schedule_follow_up`. So a
+ * routine an agent created appeared only after a reload: it was on disk, the
+ * agent said it had made it, and the Scheduled list showed nothing.
+ *
+ * The list is read here rather than passed in, because the callers that
+ * schedule do not have one and building it at each call site is how two
+ * doors onto one fact begin to disagree.
+ */
+export function announceRoutines(): void {
+  emitEngineEvent({ type: 'routines-changed', routines: store.listRoutines() });
+}
+
+/**
  * Tell every attached client that the rooms changed.
  *
  * Takes the list rather than reading it, because the two callers that have
