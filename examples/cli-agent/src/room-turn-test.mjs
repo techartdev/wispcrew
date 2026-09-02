@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { handleFor } from '@wispcrew/shared';
+import { DEFAULT_TURN_BUDGET } from '@wispcrew/runtime';
 import {
   addEventSink,
   addParticipant,
@@ -226,6 +227,120 @@ console.log('\n[announced] a room turn is not written silently');
   check('including the message that started it', Boolean(userMessage));
   check('addressed to the room, not an agent', userMessage?.agentId === room.id,
     userMessage?.agentId);
+}
+
+console.log('\n[a room is a place] an agent can ask another agent');
+{
+  /*
+   * Reported from real use: the user asked two agents to collaborate, the
+   * first correctly wrote "@other-agent, please give me three ideas", and
+   * the second never ran. `routeAgentMessage` had been written, exported
+   * and left uncalled — only a HUMAN message was ever routed — so an agent
+   * addressing a colleague was talking to nobody.
+   */
+  updateConversation(room.id, { lastAddressed: {} });
+
+  const ran = [];
+  await runRoomTurn({
+    conversationId: room.id,
+    text: '@windows-builder ask linux for a second opinion',
+    speakerId: LOCAL_HUMAN_ID,
+    run: async (agentId) => {
+      ran.push(agentId);
+      // What the first agent says is what gets routed next.
+      return agentId === windows.id ? '@linux-builder what do you think?' : 'I think so too.';
+    },
+  });
+
+  check('the addressed agent ran', ran.includes(windows.id));
+  check('and the one IT addressed ran too', ran.includes(linux.id),
+    `only ${ran.length} agent(s) ran`);
+  check('each exactly once', ran.length === 2, JSON.stringify(ran));
+}
+
+console.log('\n[silence is the default] a reply that names nobody ends there');
+{
+  /*
+   * The rule that keeps two helpful agents from talking forever: an agent
+   * acts because it was ADDRESSED, not because somebody spoke.
+   */
+  updateConversation(room.id, { lastAddressed: {} });
+
+  const ran = [];
+  await runRoomTurn({
+    conversationId: room.id,
+    text: '@windows-builder go',
+    speakerId: LOCAL_HUMAN_ID,
+    run: async (agentId) => {
+      ran.push(agentId);
+      return 'Done. Nothing else needed.';
+    },
+  });
+
+  check('only the addressed agent ran', ran.length === 1 && ran[0] === windows.id,
+    JSON.stringify(ran));
+
+  // And no notice: not replying is the normal case, so saying so under
+  // every answer would be relentless noise about nothing happening.
+  const last = loadTranscript(room.id).at(-1);
+  check('and the room stays quiet about it',
+    !/do not reply unless addressed/.test(last?.text ?? ''), last?.text);
+}
+
+console.log('\n[no self-reply] an agent naming itself is not a loop');
+{
+  updateConversation(room.id, { lastAddressed: {} });
+
+  const ran = [];
+  await runRoomTurn({
+    conversationId: room.id,
+    text: '@windows-builder go',
+    speakerId: LOCAL_HUMAN_ID,
+    run: async (agentId) => {
+      ran.push(agentId);
+      // Quoting its own handle must not wake it again.
+      return 'As @windows-builder I have finished.';
+    },
+  });
+
+  check('it runs once and stops', ran.length === 1, JSON.stringify(ran));
+}
+
+console.log('\n[the backstop] a chain stops, and says that it stopped');
+{
+  /*
+   * Two agents each naming the other is an unbounded loop that costs real
+   * money. The budget counts consecutive agent turns since a person last
+   * spoke, so the failure mode is a pause rather than a bill.
+   */
+  updateConversation(room.id, { lastAddressed: {} });
+
+  const ran = [];
+  await runRoomTurn({
+    conversationId: room.id,
+    text: '@windows-builder start',
+    speakerId: LOCAL_HUMAN_ID,
+    run: async (agentId) => {
+      ran.push(agentId);
+      // Each one hands straight back to the other, forever, if permitted.
+      return agentId === windows.id ? '@linux-builder your turn' : '@windows-builder your turn';
+    },
+  });
+
+  check('the chain is bounded', ran.length <= DEFAULT_TURN_BUDGET + 1,
+    `${ran.length} turns ran`);
+  check('and it actually ran a chain', ran.length > 2, `${ran.length} turns ran`);
+
+  /*
+   * Said out loud. A conversation that halts mid-thought with no
+   * explanation is indistinguishable from a broken app, and the difference
+   * between "they finished" and "I stopped them" is the whole point of
+   * having a budget.
+   */
+  const notice = loadTranscript(room.id).filter((e) => e.kind === 'notice').pop();
+  check('the room says it stopped them', /stopping to check/.test(notice?.text ?? ''),
+    notice?.text);
+  check('and how to continue', /Say something/.test(notice?.text ?? ''), notice?.text);
 }
 
 console.log('\n[missing room] a deleted conversation is handled');

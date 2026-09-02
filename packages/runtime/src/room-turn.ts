@@ -32,7 +32,7 @@ import type { ChannelId, ConversationRecord } from '@wispcrew/shared';
 import { createConversation, getConversation, recordRoomEvent, updateConversation } from './conversations.js';
 import { pushTranscript, runPrompt } from './engine.js';
 import { fileLog } from './filelog.js';
-import { rememberAddressee, routeHumanMessage } from './floor.js';
+import { rememberAddressee, routeAgentMessage, routeHumanMessage } from './floor.js';
 import * as store from './store.js';
 import { claimTurn, updateTurn } from './turns.js';
 import { placeSpeakers, runRemote } from './room-dispatch.js';
@@ -53,6 +53,34 @@ export interface RoomTurnInput {
    * the same id rather than a fresh one.
    */
   entryId?: string;
+  /**
+   * Set when the message came from an AGENT rather than a person.
+   *
+   * A room is meant to be a place where agents can ask each other things,
+   * and until now they could not: the first agent wrote "@other, please
+   * give me three ideas", exactly as asked, and nothing happened — because
+   * only a human message was ever routed.
+   *
+   * Two consequences follow from this being set. The reply is NOT written
+   * to the transcript (running the agent already wrote it; writing it again
+   * would duplicate it), and routing uses `routeAgentMessage`, whose
+   * default is silence: an agent acts because it was addressed, never
+   * because somebody spoke.
+   */
+  authorId?: string;
+
+  /**
+   * How many agent turns have already run since a person last spoke.
+   *
+   * Carried explicitly along a chain rather than recounted from the
+   * transcript at each step. It CAN be derived from what has been written —
+   * and is, for the first turn — but making the loop bound depend on
+   * another function's side effect is how a backstop stops backstopping.
+   * Found the hard way: a test stub that returned text without writing a
+   * message left the count at zero and recursed until it was killed.
+   */
+  agentTurnsSoFar?: number;
+
   /** Injected by tests. */
   run?: typeof runPrompt;
 }
@@ -138,6 +166,14 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
    */
   const triggerEntryId = input.entryId ?? store.newId('usr');
 
+  /*
+   * An agent's words are already in the transcript.
+   *
+   * `runPrompt` wrote them as it streamed. Writing them again here — as a
+   * user message, no less — would show the same paragraph twice and put it
+   * in the wrong voice.
+   */
+  if (!input.authorId) {
   pushTranscript(conversation.id, {
     kind: 'message',
     id: triggerEntryId,
@@ -165,6 +201,7 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
         }
       : {}),
   });
+  }
 
   /*
    * A message is activity, so the conversation counts as touched.
@@ -181,14 +218,67 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
    */
   updateConversation(conversation.id, {});
 
-  const routing = routeHumanMessage({
-    conversation,
-    text,
-    speakerId: input.speakerId,
-    agentTurnsSoFar: agentTurnsSinceHuman(conversation.id),
-  });
+  /*
+   * A person's message and an agent's are routed by different rules.
+   *
+   * A human gets the room's mode: the agent they last addressed continues,
+   * `@all` wakes everyone. An agent gets silence by default — it acts only
+   * when explicitly named — plus a budget on how many turns may follow one
+   * another before the room stops and asks. Both rules already existed in
+   * `floor.ts`; only the human half was ever called.
+   */
+  // Explicit when carried along a chain; derived for the first turn.
+  const turnsSoFar = input.agentTurnsSoFar ?? agentTurnsSinceHuman(conversation.id);
+
+  const routing = input.authorId
+    ? routeAgentMessage({
+        conversation,
+        text,
+        speakerId: input.speakerId,
+        authorId: input.authorId,
+        agentTurnsSoFar: turnsSoFar,
+      })
+    : routeHumanMessage({
+        conversation,
+        text,
+        speakerId: input.speakerId,
+        agentTurnsSoFar: turnsSoFar,
+      });
+
+  /*
+   * The backstop, said out loud.
+   *
+   * A chain of mentions that runs out of budget must not simply stop: the
+   * user would see a conversation halt mid-thought with no explanation, and
+   * the difference between "they finished" and "I cut them off" is the
+   * whole point of having a budget.
+   */
+  if (routing.budgetExhausted) {
+    pushTranscript(conversation.id, {
+      kind: 'notice',
+      id: store.newId('note'),
+      level: 'info',
+      text: `${routing.reason}. Say something to let them carry on.`,
+      createdAt: Date.now(),
+    });
+    return { ran: [], notice: routing.reason };
+  }
 
   if (routing.speakers.length === 0) {
+    /*
+     * An agent that addressed nobody is the NORMAL case, and silent.
+     *
+     * Not replying is what agents do almost every turn — it is the rule
+     * that keeps two helpful ones from talking to each other forever. A
+     * notice saying "agents do not reply unless addressed" under every
+     * single answer would be relentless noise about nothing happening.
+     *
+     * A person's message is different: it was addressed to the room and
+     * produced nothing, which is indistinguishable from a broken app unless
+     * the room says why.
+     */
+    if (input.authorId) return { ran: [] };
+
     /*
      * Nobody acted. Say why in the room rather than silently doing nothing —
      * a message that vanishes into a conversation with three agents in it is
@@ -337,7 +427,7 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
          * a second agent's replies never appear in the room — measured:
          * `@all` ran two agents and showed nothing.
          */
-        await run(
+        const reply = await run(
           agent.id,
           text,
           input.attachments ?? [],
@@ -346,6 +436,36 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
           conversation.id,
         );
         updateTurn(turn.id, { state: 'completed' });
+
+        /*
+         * And now route what it said, exactly as if it were any other
+         * message in the room.
+         *
+         * This is what makes a room a place rather than a list of private
+         * chats sharing a scrollback. Asked to consult a colleague, an
+         * agent writes "@other, what do you think?" — and until this
+         * existed, that was where it ended: the words appeared, the
+         * colleague never heard them, and the user saw one agent talking to
+         * nobody.
+         *
+         * Recursion is bounded by `routeAgentMessage`: silence unless
+         * explicitly addressed, never the author itself, and a budget of
+         * consecutive agent turns that resets when a person speaks. Awaited
+         * so the caller's promise covers the whole exchange, which is what
+         * lets the CLI and Telegram wait for a room to settle.
+         */
+        if (reply?.trim()) {
+          await runRoomTurn({
+            conversationId: conversation.id,
+            text: reply,
+            speakerId: agent.id,
+            authorId: agent.id,
+            // One more turn has happened; the chain carries the count.
+            agentTurnsSoFar: turnsSoFar + 1,
+            channel: input.channel,
+            run: input.run,
+          });
+        }
       } catch (err) {
         // One agent failing must not take down the others.
         const message = (err as Error).message;
