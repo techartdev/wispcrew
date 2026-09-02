@@ -194,6 +194,36 @@ console.log('\n[adding to a one-to-one asks] fresh, or with the history');
   check('a group still adds directly', /group \? onAdd\(a\.id\) : setJoining\(a\)/.test(panels));
 }
 
+console.log('\n[a way out] a group that outlived its members can still be removed');
+{
+  const methods = read('apps/daemon/src/methods.ts');
+  const panels = read('apps/desktop/src/renderer/Panels.tsx');
+  const sidebar = read('apps/desktop/src/renderer/Sidebar.tsx');
+
+  /*
+   * A group now survives its founder, which introduced a state that did not
+   * exist before: a room with no agents. The first version of the sidebar
+   * simply dropped it — hiding the transcript, and leaving no way to delete
+   * a room the CLI still listed. Two doors onto one fact, disagreeing.
+   */
+  check('a memberless room is still shown', /no agents left/.test(sidebar));
+  check('and can be deleted', /deleteRoom/.test(methods));
+
+  /*
+   * Groups only. A private chat goes with its agent, so a second route to
+   * the same end would only be a way to leave an agent with no
+   * conversation — refused, and told which command to use.
+   */
+  check('a private chat is refused', /is a private chat, not a group/.test(methods));
+  check('naming what to do instead', /Delete the agent to remove it/.test(methods));
+
+  check('the panel offers it for a group only', /\{group && \(\s*<footer/.test(panels));
+  check('behind a confirmation', /Really delete this room and its messages/.test(panels));
+  // The agents are not the room's to delete, and saying so is what stops
+  // somebody hesitating over the one button that fixes their sidebar.
+  check('and says the agents are kept', /the agents are kept/.test(panels));
+}
+
 console.log('\n[the CLI can do it too] not a crippled desktop');
 {
   const commands = read('apps/daemon/src/cli-commands.ts');
@@ -201,6 +231,28 @@ console.log('\n[the CLI can do it too] not a crippled desktop');
 
   check('rooms new exists', /'rooms new': roomsNew/.test(cli));
   check('and rooms greeting', /'rooms greeting': roomsGreeting/.test(cli));
+  check('and rooms delete', /'rooms delete': roomsDelete/.test(cli));
+
+  /*
+   * The CLI could reach an agent and not a group, which made every group a
+   * desktop-only feature — and `rooms new` printed a hint naming a
+   * `wispcrew room` command that did not exist. A hint pointing at nothing
+   * is worse than none: it tells the reader the gap is theirs.
+   */
+  check('a group can be spoken to', /'rooms say': roomsSay/.test(cli));
+  check('and the hint names a real command',
+    /wispcrew rooms say/.test(commands) && !/wispcrew room "/.test(commands));
+
+  // Sending and waiting is written once. Two copies is how two commands
+  // drift into disagreeing about when a turn has finished.
+  check('sending and waiting is shared', /async function sendAndWait/.test(commands));
+  /*
+   * A room turn can involve several agents, so filtering approvals to one
+   * of them would hide a request from another — and an unseen request is a
+   * denial once it times out.
+   */
+  check('a room reports every agent\u2019s approvals',
+    /!input\.agentId \|\| p\.agentId === input\.agentId/.test(commands));
   check('it takes --from', /--from/.test(commands));
   check('and --with-history', /--with-history/.test(commands));
 

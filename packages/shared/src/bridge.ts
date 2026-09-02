@@ -421,6 +421,18 @@ export interface WispBridge {
   }): Promise<ConversationRecord>;
 
   /**
+   * Delete a room and its transcript.
+   *
+   * Groups only. A one-to-one chat goes with its agent and has no separate
+   * existence to remove — offering it there would be a second, confusing
+   * way to do what deleting the agent already does.
+   *
+   * Needed because a group now survives its founder: without this, deleting
+   * every member left a room nobody could remove and nothing could answer.
+   */
+  deleteRoom(conversationId: string): Promise<ConversationRecord[]>;
+
+  /**
    * Send a message to a ROOM rather than an agent.
    *
    * Who acts is decided by the floor rules: tagged agents speak, `@all`

@@ -48,6 +48,7 @@ import {
   listSkills,
   addParticipant,
   createRoom,
+  deleteConversation,
   setRoomGreeting,
   getConversation,
   listCheckpoints,
@@ -285,6 +286,30 @@ export function nodeMethods(): MethodTable {
           mode: mode as unknown as 'directed' | 'open' | 'free',
         }),
       ),
+
+    /*
+     * Remove a group.
+     *
+     * Groups only, and refused for a direct chat: that one belongs to its
+     * agent and goes when the agent does, so a second route to the same end
+     * would only be a way to leave an agent with no conversation.
+     *
+     * This exists because a group now survives its founder. Without it,
+     * deleting every member left a room nobody could remove.
+     */
+    deleteRoom: (conversationId: never) => {
+      const id = conversationId as unknown as string;
+      const room = getConversation(id);
+      if (!room) throw new Error('No such conversation.');
+      if (room.kind !== 'group') {
+        throw new Error(
+          `"${room.title}" is a private chat, not a group. Delete the agent to remove it.`,
+        );
+      }
+
+      deleteConversation(id);
+      return announceRooms(listConversations());
+    },
 
     /*
      * The room's standing instructions.

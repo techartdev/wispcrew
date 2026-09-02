@@ -123,6 +123,7 @@ const bridge: WispBridge = {
     greeting?: string;
     fromConversationId?: string;
   }) => ipcRenderer.invoke('wc:createRoom', patch),
+  deleteRoom: (conversationId: string) => ipcRenderer.invoke('wc:deleteRoom', conversationId),
   sendToRoom: (conversationId: string, text: string, attachmentPaths?: string[]) =>
     ipcRenderer.invoke('wc:sendToRoom', conversationId, text, attachmentPaths),
 

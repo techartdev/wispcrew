@@ -1611,6 +1611,7 @@ export function RoomPanel({
   onSplit,
   onRemove,
   onSetMode,
+  onDelete,
   onClose,
 }: {
   room: ConversationRecord;
@@ -1625,8 +1626,11 @@ export function RoomPanel({
   onSplit: (agentId: string, bringHistory: boolean) => void;
   onRemove: (participantId: string) => void;
   onSetMode: (mode: string) => void;
+  /** Remove the whole room. Groups only — see the footer. */
+  onDelete: () => void;
   onClose: () => void;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const inRoom = room.participants.filter((p) => p.kind === 'agent');
   const available = agents.filter((a) => !inRoom.some((p) => p.id === a.id));
   const group = isGroup(room);
@@ -1766,6 +1770,36 @@ export function RoomPanel({
         Agents never reply to each other unless addressed, in any mode, and a run of agent
         turns stops to check with you before it can get away from itself.
       </p>
+
+      {/*
+        A group can be deleted; a private chat cannot.
+        
+        A chat goes with its agent and has no separate existence to remove,
+        so offering it there would be a second and more confusing route to
+        what deleting the agent already does.
+        
+        A group needs this because it now survives its founder — without a
+        way out, removing every member left a room nobody could delete and
+        nothing could answer. The agents themselves are untouched; only the
+        room and its transcript go.
+      */}
+      {group && (
+        <footer className="modal-foot">
+          {confirmDelete ? (
+            <button type="button" className="btn btn-danger" onClick={onDelete}>
+              Really delete this room and its messages — the agents are kept
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => setConfirmDelete(true)}
+            >
+              Delete room
+            </button>
+          )}
+        </footer>
+      )}
     </Modal>
   );
 }

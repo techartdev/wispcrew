@@ -87,15 +87,35 @@ export function Sidebar({
         .filter((p) => p.kind === 'agent')
         .map((p) => ({ handle: (p as { handle: string }).handle, agent: byId.get(p.id), id: p.id }));
 
-      /*
-       * A room whose members have all been deleted has nothing to show and
-       * nothing to answer with. Dropping it here rather than leaving a row
-       * that looks alive and is not.
-       */
       const live = members.filter((m) => m.agent && !m.agent.archived);
-      if (live.length === 0) continue;
-
       const group = isGroup(conversation);
+
+      /*
+       * A room whose members have all been deleted.
+       *
+       * Possible now that a group survives its founder, and the first
+       * version simply dropped it — which hid the transcript and left the
+       * user no way to delete a room the CLI still listed. Two doors onto
+       * one fact, disagreeing.
+       *
+       * Shown instead, and labelled: a row that says "no agents left" is
+       * honest about why nothing answers, and is the way back to its
+       * history and its Delete button.
+       */
+      if (live.length === 0) {
+        rows.push({
+          id: conversation.id,
+          title: conversation.title,
+          subtitle: 'no agents left',
+          seeds: [conversation.id],
+          group,
+          pinned: false,
+          updatedAt: conversation.updatedAt,
+          state: 'idle',
+        });
+        continue;
+      }
+
       const solo = live[0]!.agent!;
 
       /*

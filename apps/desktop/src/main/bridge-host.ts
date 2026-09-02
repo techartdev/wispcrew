@@ -69,6 +69,7 @@ import {
   getSecret,
   addParticipant,
   createRoom,
+  deleteConversation,
   setRoomGreeting,
   getConversation,
   listCheckpoints,
@@ -1334,6 +1335,27 @@ export function registerBridge(context: BridgeContext): void {
   handle('setRoomMode', (conversationId: string, mode: string) =>
     announceRooms(updateConversation(conversationId, { mode: mode as never })),
   );
+
+  /*
+   * Remove a group.
+   *
+   * Groups only. A private chat goes with its agent, and a second route to
+   * the same end would only let somebody leave an agent with no
+   * conversation. Needed because a group now survives its founder: without
+   * it, deleting every member left a room nobody could remove.
+   */
+  handle('deleteRoom', (conversationId: string) => {
+    const room = getConversation(conversationId);
+    if (!room) throw new Error('No such conversation.');
+    if (room.kind !== 'group') {
+      throw new Error(
+        `"${room.title}" is a private chat, not a group. Delete the agent to remove it.`,
+      );
+    }
+
+    deleteConversation(conversationId);
+    return announceRooms(listConversations());
+  });
 
   /*
    * The room's standing instructions — its tone, purpose and cast.

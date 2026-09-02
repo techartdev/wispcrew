@@ -55,6 +55,7 @@ const AGENT_SCOPED = new Set([
   'removeRoomParticipant',
   'setRoomMode',
   'setRoomGreeting',
+  'deleteRoom',
   'renameConversation',
   'listTurns',
   'cancelTurn',

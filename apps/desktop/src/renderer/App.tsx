@@ -669,6 +669,10 @@ export function App() {
           }}
           onRemove={(id) => void actions.removeRoomParticipant(id)}
           onSetMode={(mode) => void actions.setRoomMode(mode)}
+          onDelete={() => {
+            void actions.deleteRoom(room.id);
+            setPanel(null);
+          }}
           onClose={() => setPanel(null)}
         />
       )}

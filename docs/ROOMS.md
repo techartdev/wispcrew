@@ -127,14 +127,52 @@ group and its transcript**, while deleting any other member was harmless.
 Silent data loss that depended on which member you removed. A group now
 survives its founder; only a `direct` chat goes with its agent.
 
-## Order of work
+## Order of work — done
 
 1. ✅ A room id of its own, `kind`, derived membership, and the migration —
-   shape only, with `test:room-shape` pinning it and pinning that
-   one-to-one chats are untouched.
-2. The greeting: stored, editable, shown to members.
-3. Header and Configure move from the agent to the room.
-4. The two creation paths.
+   shape only. `test:room-shape`.
+2. ✅ The greeting: stored, editable, shown in the room and placed in every
+   member's prompt, marked as something the user can read too.
+   `test:room-greeting`.
+3. ✅ The sidebar lists conversations; the header and Configure belong to the
+   room; a reply wears its own name. `test:room-nav`.
+4. ✅ The two creation paths, in the desktop and the CLI. `test:room-create`.
+
+## What the work turned up
+
+Four defects, each of which typechecked cleanly and was visible only by
+launching the app and looking at it. They are recorded because they share a
+shape: every one is the room-is-its-first-agent shortcut showing through
+somewhere nobody had thought to look.
+
+- **A group would have been invisible.** The sidebar listed agents, with a
+  shared room drawn as decoration on whichever agent it was rooted at. A room
+  with an id of its own has no agent to hang from, so it would have been
+  created, saved, and absent from the list.
+- **Every reply wore the wrong name.** `authorId` had been on the transcript
+  entry type since rooms existed, and nothing ever wrote it on an assistant
+  message or read it back — so in a room holding two agents, both spoke as
+  the founding one.
+- **The app opened on the wrong row.** The selection was repaired inside the
+  `agents-changed` handler against the agent roster, which a group is not in;
+  and at startup that event can arrive before the initial load, where an
+  empty selection was read as "deleted".
+- **The list was ordered by whichever agent you last configured.** Neither
+  `agent.updatedAt` nor `conversation.updatedAt` moved when a message
+  arrived, so the conversation you were actually talking in drifted down.
+
+And one that was silent data loss: deleting the agent a group was started
+from destroyed the group and its transcript, because the agent-deleted hook
+removed any room whose id matched. Deleting any other member was harmless.
+
+## Deliberately not done
+
+**A room cannot span two machines.** A room's transcript lives on one node
+and an agent's conversation, files and keys live on its own; a room across
+two would need the transcript replicated, which is a distributed-systems
+feature rather than a checkbox. The group form disables members from another
+machine and says why, rather than letting somebody build a room that half
+works.
 
 ## Not part of this
 

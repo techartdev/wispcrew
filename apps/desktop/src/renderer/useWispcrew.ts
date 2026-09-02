@@ -548,6 +548,22 @@ export function useWispcrew() {
       },
 
       /**
+       * Remove a group.
+       *
+       * The whole list comes back, and goes through `applyConversations`,
+       * which moves the selection off the room that no longer exists — a
+       * deleted room left selected would render an empty chat with no
+       * explanation.
+       */
+      async deleteRoom(conversationId: string) {
+        try {
+          applyConversations(await api.deleteRoom(conversationId));
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      /**
        * Make a group, and select it.
        *
        * Selecting it is the point of doing it here: a room the user just
@@ -874,7 +890,7 @@ export function useWispcrew() {
       dismissToast: () => setToast(null),
       notify: (text: string, level: 'info' | 'error' = 'info') => setToast({ level, text }),
     }),
-    [api, fail],
+    [api, fail, replaceRoom, applyConversations],
   );
 
   return {

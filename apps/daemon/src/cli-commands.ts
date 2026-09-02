@@ -432,7 +432,69 @@ export async function ask(ctx: CommandContext): Promise<Rendered> {
 
   const agents = await ctx.client.call<Record<string, unknown>[]>('listAgents');
   const agent = findAgent(agents, wanted);
-  const roomId = String(agent.id);
+
+  return sendAndWait(ctx, {
+    conversationId: String(agent.id),
+    label: String(agent.name),
+    agentId: String(agent.id),
+    message,
+  });
+}
+
+/**
+ * Say something in a room, and wait for whoever answers.
+ *
+ * The CLI could reach an agent and not a group, which made every group a
+ * desktop-only feature — and `rooms new` printed a "send to it with" line
+ * naming a `wispcrew room` command that did not exist. A hint pointing at
+ * nothing is worse than no hint: it tells the reader the gap is theirs.
+ *
+ * Who replies is the room's business, not this command's: address someone
+ * with `@handle`, use `@all`, or type nothing special to continue with
+ * whoever you last addressed.
+ */
+export async function roomsSay(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  const message = ctx.positional.slice(1).join(' ') || text(ctx.args, 'message');
+
+  if (!wanted || !message) {
+    throw new Error('Usage: wispcrew rooms say <room> "your message"');
+  }
+
+  const room = await findRoom(ctx, wanted);
+  return sendAndWait(ctx, {
+    conversationId: String(room.id),
+    label: String(room.title),
+    message,
+  });
+}
+
+/**
+ * Send, then wait for the transcript to settle.
+ *
+ * Shared by `ask` and `rooms say` because the waiting is the hard part and
+ * writing it twice is how two commands drift into disagreeing about when a
+ * turn has finished — one of them would eventually stop honouring the
+ * approval pause below, and only on a machine with approvals enabled.
+ */
+async function sendAndWait(
+  ctx: CommandContext,
+  input: {
+    conversationId: string;
+    /** What to call the answerer in the result. */
+    label: string;
+    /**
+     * Whose approvals to report, when exactly one agent can be answering.
+     *
+     * Absent for a room: several agents may act on one message, and
+     * filtering to one of them would hide a request from another.
+     */
+    agentId?: string;
+    message: string;
+  },
+): Promise<Rendered> {
+  const roomId = input.conversationId;
+  const message = input.message;
 
   /*
    * Where the reply will start.
@@ -486,7 +548,7 @@ export async function ask(ctx: CommandContext): Promise<Rendered> {
      */
     const blocked = (
       await ctx.client.call<Record<string, unknown>[]>('listApprovals')
-    ).filter((p) => p.agentId === agent.id);
+    ).filter((p) => !input.agentId || p.agentId === input.agentId);
 
     if (blocked.length > 0) {
       /*
@@ -550,7 +612,7 @@ export async function ask(ctx: CommandContext): Promise<Rendered> {
 
   return {
     value: {
-      agent: agent.name,
+      agent: input.label,
       answer,
       // Reported rather than hidden: a caller that got an answer AND an error
       // deserves to know a tool failed along the way.
@@ -886,7 +948,9 @@ export async function roomsNew(ctx: CommandContext): Promise<Rendered> {
     value: room,
     lines: [
       `Created "${title}" with ${chosen.map((a) => a.name).join(', ')}.`,
-      `Send to it with:  wispcrew room "${title}" "@${(chosen[0] as { name: string }).name.split(/\s+/)[0]?.toLowerCase()} …"`,
+      // A hint has to name a command that exists. This one used to point at
+      // `wispcrew room`, which never did.
+      `Say something:  wispcrew rooms say "${title}" "..."`,
     ],
   };
 }
@@ -931,6 +995,32 @@ export async function roomsGreeting(ctx: CommandContext): Promise<Rendered> {
         ? `Cleared the instructions for "${room.title}".`
         : `Everyone in "${room.title}" will now read that on arrival.`,
     ],
+  };
+}
+
+/**
+ * Delete a group and its transcript.
+ *
+ * Groups only. A private chat goes with its agent, so a second route to the
+ * same end would only be a way to leave an agent with no conversation — the
+ * node refuses it and says which command to use instead.
+ *
+ * Exists because a group now survives its founder: without it, deleting
+ * every member left a room nobody could remove and nothing could answer.
+ */
+export async function roomsDelete(ctx: CommandContext): Promise<Rendered> {
+  const wanted = ctx.positional[0];
+  if (!wanted) throw new Error('Which room? Usage: wispcrew rooms delete <room> --yes');
+
+  const room = await findRoom(ctx, wanted);
+  if (ctx.args.yes !== true) {
+    throw new Error(`This deletes "${room.title}" and everything said in it. Re-run with --yes.`);
+  }
+
+  await ctx.client.call('deleteRoom', [room.id]);
+  return {
+    value: { ok: true, room: room.id },
+    lines: [`Deleted "${room.title}". The agents that were in it are untouched.`],
   };
 }
 
@@ -1608,6 +1698,20 @@ const COMMAND_SCHEMA = [
       'leaves the original untouched either way.',
   },
   {
+    name: 'rooms say',
+    summary: 'Say something in a room, and wait for whoever answers.',
+    args: [
+      { name: 'room', required: true, positional: true },
+      { name: 'message', required: true, positional: true },
+      { name: '--timeout', required: false, description: 'seconds; default 180' },
+    ],
+    returns: '{ agent, answer, errors, timedOut }',
+    notes:
+      'Who replies is the room\u2019s business: address someone with @handle, use @all, or ' +
+      'say nothing special to continue with whoever you last addressed. `ask` is the ' +
+      'same thing aimed at one agent.',
+  },
+  {
     name: 'rooms greeting',
     summary: "Read or set a room's standing instructions.",
     args: [
@@ -1661,6 +1765,18 @@ const COMMAND_SCHEMA = [
     summary: 'Interrupt whatever an agent is doing.',
     args: [{ name: 'agent', required: true, positional: true }],
     returns: '{ ok, agent }',
+  },
+  {
+    name: 'rooms delete',
+    summary: 'Delete a group and everything said in it.',
+    args: [
+      { name: 'room', required: true, positional: true },
+      { name: '--yes', required: true, description: 'destructive; required in scripts' },
+    ],
+    returns: '{ ok, room }',
+    notes:
+      'Groups only — a private chat goes with its agent, so use `agents delete` for that. ' +
+      'The agents that were in the room are untouched.',
   },
   {
     name: 'rooms clear',

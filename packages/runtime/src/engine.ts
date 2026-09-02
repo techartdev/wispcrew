@@ -206,7 +206,9 @@ async function effectiveConfig(agent: AgentRecord | undefined, settings: GlobalS
     baseUrl:
       agent?.baseUrl ??
       (presetId === settings.presetId || presetId === 'custom' ? settings.baseUrl : undefined),
-    workspaceRoot: agent?.workspaceRoot ?? settings.workspaceRoot ?? host().defaultWorkspaceRoot,
+    // The same resolution the prompt uses, so what an agent is TOLD about
+    // its boundary and where it is actually confined cannot drift apart.
+    workspaceRoot: resolveWorkspaceRoot(agent),
     approvalPolicy: agent?.approvalPolicy ?? settings.approvalPolicy ?? 'ask',
     persona: agent?.persona ?? settings.persona,
     apiKey: credential.apiKey,
@@ -321,7 +323,22 @@ function environmentOptions(agent: AgentRecord | undefined, conversationId?: str
      */
     machineName: host().nodeName,
     platform: platformName(),
-    workspace: agent?.workspaceRoot ?? host().defaultWorkspaceRoot,
+    /*
+     * The SAME root the tools are actually confined to.
+     *
+     * This skipped the global `workspaceRoot` setting and fell straight to
+     * the host default, while `effectiveConfig` — which is what the file and
+     * shell tools receive — reads the setting first. So an installation with
+     * a global workspace told every agent it lived in `~/.wispcrew/workspace`
+     * and then let it read and write somewhere else entirely.
+     *
+     * Found live: an agent asked about its room searched a source tree it
+     * had just been told it could not see. The prompt was wrong, not the
+     * sandbox — but a prompt that misstates the boundary is the same class
+     * of failure as one that misstates a capability, and this file's whole
+     * rule is that every line is the host's real state.
+     */
+    workspace: resolveWorkspaceRoot(agent),
 
     // A daemon owns the engine whenever one is attached, which is what makes
     // unattended work possible at all.
@@ -334,6 +351,19 @@ function environmentOptions(agent: AgentRecord | undefined, conversationId?: str
       : [],
     room,
   };
+}
+
+/**
+ * Where an agent's file and shell tools are confined.
+ *
+ * One function because two answers is how the prompt and the sandbox came
+ * to disagree: the agent's own root, then the global setting, then the
+ * host's default. `effectiveConfig` resolves it the same way for the tools,
+ * and both now read from here.
+ */
+function resolveWorkspaceRoot(agent: AgentRecord | undefined): string {
+  const settings = readSettings(dataDir(), defaultSettings()) as GlobalSettings;
+  return agent?.workspaceRoot ?? settings.workspaceRoot ?? host().defaultWorkspaceRoot;
 }
 
 /** The operating system in the words a person would use. */

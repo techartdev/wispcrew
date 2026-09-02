@@ -12,7 +12,12 @@
  *
  * Offline: prompt construction only.
  */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defaultSystemPrompt, personaById } from '@wispcrew/core';
+
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 let failures = 0;
 const check = (label, cond, detail) => {
@@ -72,6 +77,47 @@ console.log('\n[channels]');
 
   const silent = defaultSystemPrompt({ persistent: true });
   check('and stays quiet when nothing is configured', !/may reach the user/i.test(silent));
+}
+
+console.log('\n[the workspace it is told about is the one it is confined to]');
+{
+  /*
+   * Found live, and worth a suite of its own.
+   *
+   * The prompt read `agent.workspaceRoot ?? host default` and skipped the
+   * GLOBAL workspace setting, while `effectiveConfig` — what the file and
+   * shell tools actually receive — reads the setting first. So on an
+   * installation with a global workspace, every agent was told it lived in
+   * `~/.wispcrew/workspace` and could then read and write somewhere else
+   * entirely.
+   *
+   * The symptom was an agent asked about its room searching a source tree
+   * it had just been told it could not see. The sandbox was correct; the
+   * prompt was lying about where the boundary was, which is the same class
+   * of failure as claiming a capability that does not exist.
+   */
+  const engine = fs.readFileSync(
+    path.join(repo, 'packages/runtime/src/engine.ts'),
+    'utf8',
+  );
+
+  check('there is one resolver', /function resolveWorkspaceRoot/.test(engine));
+  check('and it consults the global setting', /settings\.workspaceRoot/.test(engine));
+
+  /*
+   * Both callers must use it. Counted rather than merely present: the bug
+   * was two call sites resolving the same fact two different ways, so one
+   * of them still doing so is exactly what this must catch.
+   */
+  const uses = engine.match(/resolveWorkspaceRoot\(agent\)/g) ?? [];
+  check('used by the prompt and by the tools', uses.length === 2, `${uses.length} call(s)`);
+  check('and nothing resolves it the old way',
+    !/agent\?\.workspaceRoot \?\? host\(\)\.defaultWorkspaceRoot/.test(engine));
+
+  // The line itself must still be produced, or none of the above matters.
+  const prompt = defaultSystemPrompt({ persistent: true, workspace: 'D:\\Projects\\thing' });
+  check('the prompt names the root', prompt.includes('D:\\Projects\\thing'));
+  check('and says paths outside it are refused', /Paths outside it are refused/.test(prompt));
 }
 
 console.log('\n[every persona, not just the default]');
