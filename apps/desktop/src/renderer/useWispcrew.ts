@@ -831,8 +831,10 @@ export function useWispcrew() {
       async discoverChatId() {
         try {
           return await api.discoverChatId();
-        } catch {
-          return null;
+        } catch (err) {
+          // The reason travels with the answer; a swallowed one becomes
+          // "no messages" on screen, which points at the wrong thing.
+          return { error: (err as Error).message };
         }
       },
 

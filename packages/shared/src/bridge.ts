@@ -507,7 +507,7 @@ export interface WispBridge {
   testTelegram(): Promise<{ ok: boolean; error?: string }>;
 
   /** Read the chat id from a bot the user has already messaged. */
-  discoverChatId(): Promise<string | null>;
+  discoverChatId(): Promise<{ chatId?: string; error?: string }>;
 
   /* -- history recovery ----------------------------------------- */
 

@@ -673,7 +673,7 @@ interface SettingsPanelProps {
   /** Send a real Telegram message, so a wrong chat id is caught at setup. */
   onTestTelegram(): Promise<{ ok: boolean; error?: string }>;
   /** Read the chat id from a bot the user has already messaged. */
-  onDiscoverChatId(): Promise<string | null>;
+  onDiscoverChatId(): Promise<{ chatId?: string; error?: string }>;
   onClose(): void;
 }
 
@@ -709,7 +709,7 @@ function ChannelsSection({
   settings: SettingsView;
   onSave: (patch: Partial<GlobalSettings> & { telegramToken?: string }) => void;
   onTestTelegram: () => Promise<{ ok: boolean; error?: string }>;
-  onDiscoverChatId: () => Promise<string | null>;
+  onDiscoverChatId: () => Promise<{ chatId?: string; error?: string }>;
 }) {
   const [enabled, setEnabled] = useState<string[]>(settings.channels?.enabled ?? []);
   const [token, setToken] = useState('');
@@ -832,13 +832,22 @@ function ChannelsSection({
             setResult(null);
             void onDiscoverChatId().then((found) => {
               setBusy(null);
-              if (found) {
-                setChatId(found);
+              if (found.chatId) {
+                setChatId(found.chatId);
                 setResult({ ok: true, text: 'Found your chat. Press Save to keep it.' });
               } else {
+                /*
+                 * Whatever actually went wrong, verbatim.
+                 *
+                 * This said "No message found. Send your bot something
+                 * first" for every failure alike — including the one the
+                 * reporter hit, where no token had ever been stored. They
+                 * had already sent three messages, so the single piece of
+                 * advice on screen was the one thing that could not help.
+                 */
                 setResult({
                   ok: false,
-                  text: 'No message found. Send your bot something first, then try again.',
+                  text: found.error ?? 'Telegram returned nothing, and gave no reason.',
                 });
               }
             });

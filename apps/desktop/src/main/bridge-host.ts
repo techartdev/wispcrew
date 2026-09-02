@@ -84,6 +84,7 @@ import {
   updateConversation,
   LOCAL_HUMAN_ID,
   TELEGRAM_TOKEN_KEY,
+  withTelegramTruth,
   testTelegram,
   listNodes,
   pairWithNode,
@@ -429,8 +430,26 @@ function hasStoredKey(presetId: string): boolean {
 
 function settingsView(): SettingsView {
   const s = readSettings(ctx.userDataDir, ctx.defaults()) as GlobalSettings;
+
+  /*
+   * `configured` means "a bot token is stored", so it is DERIVED from the
+   * store rather than believed from the settings file.
+   *
+   * It used to be a flag the Settings panel set to true whenever Save was
+   * pressed, with or without a token attached. The result was a lie the
+   * user could not see through: the field read "saved; enter a new one to
+   * replace it", and Find my chat answered "No message found. Send your bot
+   * something first" — after they had sent it three messages. Every
+   * explanation on screen pointed at Telegram instead of at the missing
+   * credential.
+   *
+   * Measured on the reporter's profile: the settings file said
+   * `configured: true` while the encrypted store held no token at all, its
+   * file untouched for a week. Two records of one fact, and the writable
+   * one drifted.
+   */
   return {
-    ...s,
+    ...withTelegramTruth(ctx.userDataDir, s),
     hasApiKey: hasStoredKey(s.presetId ?? 'deepseek'),
     isEncrypted: isEncryptionAvailable(),
   };
@@ -1491,7 +1510,22 @@ export function registerBridge(context: BridgeContext): void {
    */
   handle('discoverChatId', async () => {
     const token = getSecret(ctx.userDataDir, TELEGRAM_TOKEN_KEY);
-    return token ? discoverChatId(token) : null;
+
+    /*
+     * The missing-token case is answered HERE, because only this side can
+     * tell the difference. Returning the same empty answer as "no messages"
+     * is what sent the reporter to Telegram to send a fourth message when
+     * the real problem was that no token had ever been stored.
+     */
+    if (!token) {
+      return {
+        error:
+          'No bot token is saved yet. Paste the token from @BotFather above and press ' +
+          'Save, then try this again.',
+      };
+    }
+
+    return discoverChatId(token);
   });
 
   handle('getAppInfo', () => ({

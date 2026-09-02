@@ -147,16 +147,60 @@ export async function testTelegram(config: TelegramConfig): Promise<{ ok: boolea
  * first experience. Telegram will report it once they have sent the bot any
  * message, so Settings can say "message your bot, then press this".
  */
-export async function discoverChatId(token: string): Promise<string | null> {
+/**
+ * What discovery found, or why it found nothing.
+ *
+ * A bare `null` used to cover four completely different situations — no
+ * token stored, a rejected token, a webhook holding the updates, and simply
+ * no messages yet — and the UI could only guess at one of them. It guessed
+ * "send your bot something first", which is unhelpful when the user has
+ * just sent three messages and infuriating when the real problem is that no
+ * token was ever saved.
+ */
+export interface ChatDiscovery {
+  chatId?: string;
+  /** Present when there is nothing to report; written for a person. */
+  error?: string;
+}
+
+export async function discoverChatId(token: string): Promise<ChatDiscovery> {
   try {
     const response = await fetch(`https://api.telegram.org/bot${token}/getUpdates`, {
       signal: AbortSignal.timeout(15_000),
     });
-    if (!response.ok) return null;
 
-    const payload = (await response.json()) as {
+    const payload = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      description?: string;
       result?: { message?: { chat?: { id?: number } } }[];
     };
+
+    /*
+     * Telegram answers 200 with `ok: false` for some failures and a real
+     * status for others, so both are checked. Its `description` is written
+     * for developers but is specific and true, which beats a friendly
+     * sentence that names the wrong cause.
+     */
+    if (!response.ok || payload.ok === false) {
+      const detail = payload.description ?? `HTTP ${response.status}`;
+
+      if (response.status === 401) {
+        return { error: `Telegram rejected this bot token (${detail}). Check it and save again.` };
+      }
+      if (response.status === 409) {
+        /*
+         * 409 means something else is already polling this bot — usually a
+         * webhook, occasionally a second copy of WispCrew. Telegram allows
+         * exactly one reader, and the other one is taking the messages.
+         */
+        return {
+          error:
+            `Something else is already receiving this bot's messages (${detail}). ` +
+            'Delete its webhook, or stop the other program, then try again.',
+        };
+      }
+      return { error: `Telegram said: ${detail}` };
+    }
 
     // The most recent message wins: if several people have written to the
     // bot, the person setting it up just now is the relevant one.
@@ -164,8 +208,22 @@ export async function discoverChatId(token: string): Promise<string | null> {
       .map((update) => update.message?.chat?.id)
       .filter((id): id is number => typeof id === 'number');
 
-    return chats.length ? String(chats[chats.length - 1]) : null;
-  } catch {
-    return null;
+    if (!chats.length) {
+      return {
+        error:
+          'Telegram has no recent messages for this bot. Send it one — anything — and ' +
+          'press this again. Messages older than a day are dropped, and a bot only sees ' +
+          'a group chat if you make it an administrator.',
+      };
+    }
+
+    return { chatId: String(chats[chats.length - 1]) };
+  } catch (err) {
+    /*
+     * Named rather than swallowed. A timeout, a DNS failure and a proxy
+     * refusing the connection all used to arrive as "no message found",
+     * which sent the user looking at Telegram instead of at their network.
+     */
+    return { error: `Could not reach Telegram: ${(err as Error).message}` };
   }
 }

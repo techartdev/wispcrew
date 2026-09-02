@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   bindEndpoint,
   createAgent,
@@ -183,6 +184,68 @@ console.log('\n[replay] the same Telegram message is not acted on twice');
 
 globalThis.fetch = realFetch;
 fs.rmSync(dir, { recursive: true, force: true });
+
+console.log('\n[find my chat] a reason, not a shrug');
+{
+  /*
+   * Reported: a bot created, /start and two messages sent, "Find my chat"
+   * pressed, and the answer was "No message found. Send your bot something
+   * first, then try again" — the one piece of advice that could not help.
+   *
+   * The real cause was that NO TOKEN had ever been stored. The Settings
+   * panel wrote `configured: true` whenever Save was pressed, with or
+   * without a token attached, and the field then read "saved; enter a new
+   * one to replace it". Measured on the reporter's profile: the settings
+   * file said configured, the encrypted store held no token, and its file
+   * had not been written for a week.
+   */
+  const repo = fileURLToPath(new URL('../../../', import.meta.url));
+  const read = (p) => fs.readFileSync(path.join(repo, p), 'utf8');
+
+  /*
+   * Both hosts derive it, through one function.
+   *
+   * The desktop and the daemon each build their own settings view, and only
+   * the desktop's was fixed first — so the app told the truth while any
+   * client connecting to the same node still saw the lie. Checking both is
+   * the whole point: this bug IS two records of one fact.
+   */
+  const notify = read('packages/runtime/src/notify-host.ts');
+  check('the runtime owns the derivation',
+    /export function hasTelegramToken/.test(notify) &&
+      /export function withTelegramTruth/.test(notify));
+
+  for (const [label, file] of [
+    ['the desktop view', 'apps/desktop/src/main/bridge-host.ts'],
+    ['the daemon view', 'apps/daemon/src/methods.ts'],
+  ]) {
+    check(`${label} derives configured`, /withTelegramTruth\(/.test(read(file)),
+      'this view can still claim a token that is not there');
+  }
+
+  const bridge = read('apps/desktop/src/main/bridge-host.ts');
+  check('and a missing token is named as such', /No bot token is saved yet/.test(bridge));
+
+  /*
+   * Four different situations used to arrive as the same empty answer: no
+   * token, a rejected token, something else already reading the bot, and
+   * genuinely no messages. Only the last matched what the UI said.
+   */
+  const channel = read('packages/runtime/src/channel-telegram.ts');
+  check('a rejected token says so', /Telegram rejected this bot token/.test(channel));
+  check('a competing reader says so', /already receiving this bot/.test(channel));
+  check('an unreachable API says so', /Could not reach Telegram:/.test(channel));
+  check('and "no messages" keeps its own advice',
+    /no recent messages for this bot/.test(channel));
+
+  // Telegram answers 200 with ok:false for some failures, so both are read.
+  check('both failure shapes are checked',
+    /!response\.ok \|\| payload\.ok === false/.test(channel));
+
+  const panels = read('apps/desktop/src/renderer/Panels.tsx');
+  check('the panel shows the reason it was given', /text: found\.error \?\?/.test(panels),
+    'the panel still invents its own explanation');
+}
 
 console.log('');
 if (failures) {

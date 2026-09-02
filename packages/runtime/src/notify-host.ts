@@ -19,6 +19,42 @@ import * as store from './store.js';
 export const TELEGRAM_TOKEN_KEY = 'WISPCREW_TELEGRAM_TOKEN';
 
 /**
+ * Is a Telegram bot token actually stored?
+ *
+ * The settings file carries a `configured` flag, and it was a SECOND record
+ * of this fact — set to true whenever the Settings panel saved, with or
+ * without a token attached. On the reporter's profile it claimed a token
+ * that was not there; the panel duly said "saved; enter a new one to
+ * replace it", and every failure downstream blamed Telegram.
+ *
+ * Both hosts derive it from the store now, through this one function. The
+ * desktop and the daemon each build their own settings view — they already
+ * report `hasApiKey` this derived way — and two copies of one rule is how
+ * this class of bug starts.
+ */
+export function hasTelegramToken(dataDir: string): boolean {
+  return Boolean(getSecret(dataDir, TELEGRAM_TOKEN_KEY));
+}
+
+/**
+ * A settings object whose `configured` flag tells the truth.
+ *
+ * Applied by both hosts as the last step of building their settings view.
+ */
+export function withTelegramTruth<T extends GlobalSettings>(dataDir: string, settings: T): T {
+  const telegram = settings.channels?.telegram;
+  if (!telegram) return settings;
+
+  return {
+    ...settings,
+    channels: {
+      ...settings.channels,
+      telegram: { ...telegram, configured: hasTelegramToken(dataDir) },
+    },
+  };
+}
+
+/**
  * Which channels this agent may use.
  *
  * A per-agent list overrides the global one entirely, including an empty

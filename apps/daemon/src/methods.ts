@@ -68,6 +68,7 @@ import {
   pushTranscript,
   statuses as mcpStatuses,
   readSettings,
+  withTelegramTruth,
   revokeAll,
   revoke as revokeGrant,
   runPrompt,
@@ -112,7 +113,13 @@ function settingsView(): unknown {
   const settings = readSettings(host().dataDir, defaultSettings()) as Record<string, unknown>;
   const presetId = (settings.presetId as string | undefined) ?? 'deepseek';
   return {
-    ...settings,
+    /*
+     * configured for Telegram is derived from the encrypted store, not
+     * believed from the settings file — the flag was written on every save,
+     * with or without a token, so it could claim one that was not there.
+     * The desktop view derives it through the same function.
+     */
+    ...(withTelegramTruth(host().dataDir, settings as never) as Record<string, unknown>),
     apiKey: undefined,
     hasApiKey: hasProviderKey(host().dataDir, presetId),
     isEncrypted: host().crypto.available(),
