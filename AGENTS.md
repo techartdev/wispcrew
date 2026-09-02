@@ -165,6 +165,23 @@ An agent can be pointed at any directory instead — Configure → Workspace, or
 `wispcrew agents set <agent> --workspace <path>` — which is how it works
 inside a real project. Its file and shell tools are confined to that root.
 
+**An agent carries its own provider and model, and nothing inherits.** Both
+are required on every agent; the Settings provider tab is credentials only.
+These *were* inherited until that proved unstable: the two fell back to
+global settings **independently**, so the model was typically set on the
+agent while the provider was not — and an OpenAI model ended up aimed at
+NVIDIA, a permanent `404 page not found`. Worse, changing the global provider
+silently moved every inheriting agent, so one that worked yesterday failed
+today with nothing about it edited.
+
+`packages/shared/src/model-pairing.ts` holds the one rule that keeps the two
+coherent, used by the engine before a turn, the CLI before it saves, and the
+Configure panel while you type. It judges **ownership, not absence**: a
+preset's model list is curated and short (NVIDIA serves 84, the preset names
+six), so "not in my list" proves nothing and refusing on it would block every
+model newer than this repo. Only a model another vendor explicitly claims is
+refused — which is why typing one by hand is still allowed.
+
 The platform locations Electron used to pick (`%APPDATA%`, `~/Library/
 Application Support`, `~/.config`) are still read once on a first run, so an
 existing profile migrates rather than being abandoned.
