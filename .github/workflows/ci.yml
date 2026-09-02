@@ -1,9 +1,20 @@
 name: CI
 
+# MANUAL ONLY. Nothing here starts by itself.
+#
+# This ran on every push to main and on every pull request, and the matrix is
+# six jobs — three operating systems times two Node versions — so an ordinary
+# day of small commits could spend a large part of a free account's monthly
+# allowance. Exhausting it stops ALL CI until the quota resets, which has
+# already happened once on this project.
+#
+# `npm run verify` does locally everything this does except the macOS and
+# Linux halves of the matrix, in about two minutes and for nothing. So:
+# verify locally on every change, and spend CI once, deliberately, at the end
+# of a body of work — from the Actions tab, or `gh workflow run ci.yml`.
+#
+# Do not add `push` or `pull_request` back without being asked for it.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 # Cancel superseded runs on the same branch to keep queues short.
@@ -143,10 +154,19 @@ jobs:
 
       # Catch identifiers from the proprietary application this project no
       # longer derives from, in tracked source and docs.
+      #
+      # The two files that NAME the patterns are excluded, or the check
+      # reports itself. This one was missing `scripts/verify.mjs`, which is
+      # where the same list lives for the local run — so every CI run since
+      # that script was written failed on the guard's own source code, while
+      # `npm run verify` passed, because it excludes both. A comment in
+      # verify.mjs even claimed "CI has the same shape and the same
+      # exclusion". It did not. Two records of one fact, drifted.
       - name: Reject proprietary identifiers
         run: |
           if git grep -nEI 'Anysphere|sand-protocol|dune-rpc' -- \
-               ':!*.lock' ':!package-lock.json' ':!.github/workflows/ci.yml'; then
+               ':!*.lock' ':!package-lock.json' \
+               ':!.github/workflows/ci.yml' ':!scripts/verify.mjs'; then
             echo "::error::Found identifiers from a proprietary codebase."
             exit 1
           fi

@@ -144,16 +144,31 @@ the provenance and credential guards. About two minutes, and it costs
 nothing. If you touched `apps/desktop`, also launch the app once and confirm
 it boots and chats.
 
-**CI is a final gate, not a test loop.** A round trip takes ten minutes and
-spends GitHub Actions minutes, which are a hard monthly allowance on a free
-account. Exhausting them stops *all* CI until the quota resets — which
-happened during development, from running CI after individual commits when
-`npm run verify` would have caught the same things.
+**CI RUNS ONLY WHEN THE USER ASKS FOR IT.** Both workflows are
+`workflow_dispatch` only — no `push` trigger, no `pull_request` trigger, no
+tag trigger. Do not add one back, and do not start a run unprompted. When
+asked: `gh workflow run ci.yml`, or the Actions tab.
 
-So: push and watch CI **once**, at the end of a body of work. The only thing
-it judges that this machine cannot is **macOS and Linux** — window painting,
-native dialogs, platform process behaviour. If a change does not touch that,
-local verification is the whole story.
+The reason is arithmetic. The matrix is six jobs — three operating systems
+times two Node versions — so a day of ordinary commits can spend a large part
+of a free account's monthly allowance, and exhausting it stops *all* CI until
+the quota resets. That has already happened once here.
+
+`npm run verify` does locally everything CI does except the macOS and Linux
+halves of the matrix, in about two minutes and for nothing. The only thing CI
+judges that this machine cannot is **macOS and Linux** — window painting,
+native dialogs, platform process behaviour, path handling. If a change does
+not touch those, local verification is the whole story.
+
+**When CI does run, read the result.** Eight consecutive runs failed
+unnoticed here while `verify` was green, on two faults only a remote run
+could show. A suite used `new URL(import.meta.url).pathname.slice(1)`, which
+is correct on Windows and yields a *relative* path on POSIX. And the
+provenance grep excluded the workflow that names its patterns but not the
+script that names them, so the guard reported its own source — while a
+comment in `verify.mjs` claimed the two had "the same shape and the same
+exclusion". Both are pinned statically by `test:platform-audit` now, so the
+next one costs two local minutes instead of a red build nobody looked at.
 
 **Everything lives in `~/.wispcrew`** — one path on every platform, and one
 a person can find, back up and delete. Config is

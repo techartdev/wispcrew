@@ -10,10 +10,14 @@
 # artifact list before anything becomes public. Publishing is one click.
 name: Release
 
+# MANUAL ONLY, like CI.
+#
+# The tag trigger is gone. It was the smaller spender — a release is rare and
+# deliberate — but "push a tag" and "spend three platform builds" were the
+# same gesture, so a tag pushed for any other reason paid for installers
+# nobody asked for. Nothing is lost: the version this builds is an input, and
+# it defaults to package.json exactly as the tag path did.
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       version:

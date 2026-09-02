@@ -23,8 +23,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { editFileTool, ToolRegistry } from '@wispcrew/tools';
 import { Agent } from '@wispcrew/core';
+
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 let failures = 0;
 const check = (label, cond, detail) => {
@@ -188,7 +191,16 @@ console.log('\n[budget] the instruction forbids asking to continue');
    * an offer to continue reads as a question the user must answer before
    * anything is recoverable.
    */
-  const repo = path.resolve(path.dirname(new URL(import.meta.url).pathname.slice(1)), '..', '..', '..');
+  /*
+   * `fileURLToPath`, not `new URL(...).pathname.slice(1)`.
+   *
+   * That slice strips the leading separator, which is right on Windows —
+   * `/D:/x` becomes `D:/x` — and wrong everywhere else, where `/Users/x`
+   * becomes the RELATIVE `Users/x` and resolves against the working
+   * directory. It passed on the machine it was written on and failed on
+   * macOS and Linux, which is precisely what CI is for and the only thing
+   * it judges that this machine cannot.
+   */
   const agentSrc = fs.readFileSync(path.join(repo, 'packages/core/src/agent.ts'), 'utf8');
 
   check('it asks what changed', /what you actually changed/.test(agentSrc));
