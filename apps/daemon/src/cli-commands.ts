@@ -210,7 +210,8 @@ export async function agentsUpdate(ctx: CommandContext): Promise<Rendered> {
     throw new Error(
       'Usage: wispcrew agents set <agent> [--provider id] [--model x]\n' +
         '                              [--policy ask|auto|readonly]\n' +
-        '                              [--description "..."] [--workspace <path>]',
+        '                              [--description "..."] [--workspace <path>]\n' +
+        '                              [--context-window <tokens>]',
     );
   }
 
@@ -230,9 +231,43 @@ export async function agentsUpdate(ctx: CommandContext): Promise<Rendered> {
     if (value !== undefined) patch[field] = value;
   }
 
+  /*
+   * How large a context this agent's model has.
+   *
+   * Only needed when this build cannot work it out from the model name — a
+   * self-hosted endpoint, or a model newer than the table. Without it the
+   * meter shows no percentage and nothing is compacted automatically, both
+   * because guessing a window is how a tool ends up discarding history with
+   * most of the context still free.
+   *
+   * Numeric, and refused rather than coerced: `--context-window huge`
+   * silently becoming NaN would produce exactly the wrong-denominator bug
+   * this setting exists to prevent.
+   */
+  const window = text(ctx.args, 'context-window');
+  if (window !== undefined) {
+    /*
+     * `auto` puts it back, because a setting that cannot be unset is a
+     * trap: somebody who guesses a window wrong has no way back to the
+     * value this build would work out for itself.
+     */
+    if (window.trim().toLowerCase() === 'auto') {
+      patch.clear = ['contextWindow'];
+    } else {
+      const tokens = Number(window);
+      if (!Number.isFinite(tokens) || tokens <= 0) {
+        throw new Error(
+          `--context-window needs a number of tokens, or "auto", not "${window}".`,
+        );
+      }
+      patch.contextWindow = Math.round(tokens);
+    }
+  }
+
   if (Object.keys(patch).length === 0) {
     throw new Error(
-      'Nothing to change. Pass at least one of --provider, --model, --policy, --description.',
+      'Nothing to change. Pass at least one of --provider, --model, --policy, ' +
+        '--description, --workspace, --context-window.',
     );
   }
 
@@ -1992,7 +2027,11 @@ const COMMAND_SCHEMA = [
     notes:
       'Provider and model are checked as a PAIR, taking the missing half from the ' +
       'record — so `--model` alone cannot land a model this agent\u2019s provider does ' +
-      'not serve. Refused at this point rather than at the first message.',
+      'not serve. Refused at this point rather than at the first message. ' +
+      'A context window is only needed for a model this build does not know — a ' +
+      'self-hosted endpoint, or one newer than the table. Without it there is no ' +
+      'percentage and no automatic compaction, because guessing a window is how a ' +
+      'tool ends up discarding history with most of the context still free.',
     args: [
       { name: 'agent', required: true, positional: true },
       { name: '--provider', required: false, description: 'preset id; see `providers`' },
@@ -2001,6 +2040,11 @@ const COMMAND_SCHEMA = [
       { name: '--description', required: false },
       { name: '--workspace', required: false },
       { name: '--name', required: false },
+      {
+        name: '--context-window',
+        required: false,
+        description: 'tokens this model accepts, or uto to work it out',
+      },
     ],
     returns: 'the updated agent',
   },
