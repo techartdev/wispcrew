@@ -11,13 +11,26 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
-import type { AgentRecord, AgentRunState, SkillRecord, TranscriptEntry } from '@wispcrew/shared';
+import type { AgentRunState, SkillRecord, TranscriptEntry } from '@wispcrew/shared';
 import { IconSend, IconStop, IconAttach, IconCheck, IconDeny } from './Icons.js';
 import { Markdown } from './Markdown';
 import { parseMention } from './mention';
 
 interface ChatProps {
-  agent: AgentRecord | null;
+  /**
+   * What this conversation IS — an agent, or a room.
+   *
+   * It used to be an `AgentRecord`, which was true only because a room was
+   * its first agent. Every consequence of that shortcut showed up here: the
+   * welcome heading, the composer placeholder and — worst — the name on
+   * every assistant message came from one agent, so in a room holding Nudge
+   * and Local Test, a reply from Local Test was labelled "Nudge".
+   *
+   * A narrow shape rather than a record, because that is all this component
+   * needs. Nothing here reads a model, a policy or a workspace, and taking
+   * a whole agent invited exactly the coupling being removed.
+   */
+  subject: { id: string; name: string; description?: string } | null;
   transcript: TranscriptEntry[];
   runState: AgentRunState;
   skills: SkillRecord[];
@@ -257,7 +270,7 @@ function ApprovalCard({
 /* ------------------------------------------------------------------ */
 
 export function Chat({
-  agent,
+  subject,
   transcript,
   runState,
   skills,
@@ -428,7 +441,7 @@ export function Chat({
       el.removeEventListener('scroll', update);
       observer.disconnect();
     };
-  }, [agent?.id, transcript.length]);
+  }, [subject?.id, transcript.length]);
 
   const jumpToLatest = useCallback(() => {
     const el = scrollRef.current;
@@ -441,7 +454,7 @@ export function Chat({
   // Reset the pin when switching agents so a new conversation starts at the end.
   useEffect(() => {
     pinnedRef.current = true;
-  }, [agent?.id]);
+  }, [subject?.id]);
 
   // "Retry from here" removes a message and hands its text back; drop it into
   // the composer so the user can edit rather than retype.
@@ -509,10 +522,59 @@ export function Chat({
    * does NOT open the menu (an email address, a price, a closed mention) are
    * where this kind of feature goes wrong.
    */
+  /**
+   * Who said this, by name.
+   *
+   * The transcript has recorded `authorId` since rooms existed, and nothing
+   * ever read it: every assistant message wore the name of whichever agent
+   * the conversation was rooted at. In a room holding Nudge and Local Test,
+   * a reply from Local Test was labelled "Nudge" — the room-is-its-first-agent
+   * shortcut showing through at the one place it is least excusable, on the
+   * words themselves.
+   *
+   * An unknown or absent author falls back to the room's own name, which is
+   * exactly what an entry written before authors existed meant: "the single
+   * agent in this room".
+   */
+  const authorOf = useCallback(
+    (entry: Extract<TranscriptEntry, { kind: 'message' }>): string => {
+      if (entry.role === 'user') {
+        // The door is worth naming: a message typed on a train reads
+        // differently from one typed at the desk, and both are "You".
+        return entry.via && entry.via !== 'app' ? `You · via ${entry.via}` : 'You';
+      }
+      const author = entry.authorId
+        ? members.find((m) => m.id === entry.authorId)
+        : undefined;
+      if (author) return author.name;
+
+      /*
+       * Nobody recorded. With one agent in the room that is not ambiguous —
+       * it said it — and that is exactly what an entry written before
+       * authors existed meant.
+       *
+       * With several it IS ambiguous, and the room's own name must not be
+       * used: labelling a reply "Deploy review" claims the room spoke.
+       * Better to admit the transcript does not say.
+       */
+      if (members.length === 1) return members[0]!.name;
+      return members.length > 1 ? 'Agent' : (subject?.name ?? 'Agent');
+    },
+    [members, subject?.name],
+  );
+
   const mentionQuery = useMemo(() => parseMention(draft, caret), [draft, caret]);
 
   const mentionMatches = useMemo(() => {
-    if (mentionQuery === null) return [];
+    /*
+     * Nobody to disambiguate between in a one-to-one, so `@` stays quiet.
+     *
+     * The gate moved here from the caller. `members` is now passed for every
+     * conversation, because it is also how a message finds its author's name
+     * — and a list that was empty for a direct chat would have left those
+     * messages nameless.
+     */
+    if (mentionQuery === null || members.length < 2) return [];
     const q = mentionQuery.toLowerCase();
     return members
       .filter((m) => m.handle.toLowerCase().startsWith(q))
@@ -693,7 +755,7 @@ export function Chat({
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
   };
 
-  if (!agent) {
+  if (!subject) {
     // Reachable by deleting the last agent while the app is running. A bare
     // "No agent selected." would strand the user with no way forward, so
     // offer the one action that fixes it.
@@ -756,7 +818,7 @@ export function Chat({
       */}
       <div className="sr-only" role="status" aria-live="polite">
         {runState === 'thinking'
-          ? `${agent?.name ?? 'Agent'} is working`
+          ? `${subject?.name ?? 'Agent'} is working`
           : runState === 'awaiting-approval'
             ? 'Permission required'
             : ''}
@@ -783,9 +845,9 @@ export function Chat({
       >
         {transcript.length === 0 && (
           <div className="chat-welcome">
-            <h2>{agent.name}</h2>
+            <h2>{subject.name}</h2>
             <p className="muted">
-              {agent.description?.trim() ||
+              {subject.description?.trim() ||
                 'Ask a question, or give it a task. It can read and write files, run commands, and search the web — with your approval.'}
             </p>
             {!hasProvider && (
@@ -802,7 +864,7 @@ export function Chat({
               return (
                 <div key={entry.id} className={`msg msg-${entry.role}`}>
                   <div className="msg-head">
-                    <span className="msg-role">{entry.role === 'user' ? 'You' : agent.name}</span>
+                    <span className="msg-role">{authorOf(entry)}</span>
                     {!entry.isStreaming && (
                       <MessageActions
                         entryId={entry.id}
@@ -949,7 +1011,7 @@ export function Chat({
                 ? 'Configure a provider in Settings to start chatting…'
                 : busy
                   ? 'Agent is working — Esc to stop'
-                  : `Message ${agent.name}…`
+                  : `Message ${subject.name}…`
             }
             onChange={(e) => {
               setDraft(e.target.value);

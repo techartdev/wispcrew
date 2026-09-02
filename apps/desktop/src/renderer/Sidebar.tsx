@@ -1,63 +1,63 @@
 /**
- * Sidebar.tsx — the agent roster.
+ * Sidebar.tsx — the conversation list.
  *
- * Agents are durable teammates, not disposable chats, so the list is the
- * app's primary navigation: pinned agents first, then most-recently-updated.
+ * The app's primary navigation. It listed AGENTS until the room restructure,
+ * with a shared room shown as decoration on whichever agent it happened to be
+ * rooted at — which worked only because a room's id was an agent's id, and
+ * left a room belonging to nobody with no row at all.
+ *
+ * Now every row is a conversation: a private chat with one agent, or a group.
+ * Pinned first, then most recently updated.
+ *
+ * The colour-and-initials helpers that used to live here went with that
+ * change. Avatars are drawn creatures seeded by agent id — see `Avatar.tsx` —
+ * because "Local Test" and "Local Infrastructure Eye" produced the same grey
+ * pill with the same two letters, indistinguishable in a list that is scanned
+ * far more often than it is read.
  */
 import { useMemo, useState } from 'react';
 import { IconPlus, IconClock, IconSkill, IconPlug, IconMachine, IconSettings } from './Icons.js';
 import { Avatar, AvatarStack } from './Avatar.js';
-import type { AgentRecord, AgentRunState } from '@wispcrew/shared';
+import { isGroup } from '@wispcrew/shared';
+import type { AgentRecord, AgentRunState, ConversationRecord } from '@wispcrew/shared';
 
-/** Deterministic accent colour from the agent id, so avatars stay stable. */
-function avatarColor(agent: AgentRecord): string {
-  if (agent.avatarColor) return agent.avatarColor;
-  // FNV-1a — tiny, well-distributed, no dependency.
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < agent.id.length; i++) {
-    hash ^= agent.id.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  const palette = [
-    '#39c2f0',
-    '#7c8cf8',
-    '#f0793a',
-    '#4ec98a',
-    '#e05c8a',
-    '#c79a3a',
-    '#9b6cf0',
-    '#3ad0c0',
-  ];
-  return palette[hash % palette.length]!;
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
+/**
+ * One row: a conversation, resolved to the things a row needs.
+ *
+ * Built once per render rather than reached for in the markup, so the
+ * difference between a private chat and a group is decided in one place
+ * instead of five times in JSX.
+ */
+interface Row {
+  /** The CONVERSATION id — what selecting one means. */
+  id: string;
+  title: string;
+  subtitle: string | null;
+  /** Member agent ids, for the avatar. */
+  seeds: string[];
+  group: boolean;
+  pinned: boolean;
+  updatedAt: number;
+  /** The worst state among the members: any of them working occupies the row. */
+  state: AgentRunState;
 }
 
 interface SidebarProps {
+  /**
+   * Every conversation — this list IS the navigation.
+   *
+   * It used to be the agent roster, with a room shown as decoration on
+   * whichever agent it was rooted at. That worked only because a room's id
+   * was an agent's id, and it meant a room belonging to nobody in
+   * particular had no row at all: a group created from the plus button
+   * would simply not have appeared.
+   */
+  conversations: ConversationRecord[];
+  /** The roster, for names, descriptions and pinning. */
   agents: AgentRecord[];
+  /** The selected CONVERSATION. */
   selectedId: string | null;
   runStates: Record<string, AgentRunState>;
-  /**
-   * Handles of the OTHER agents sharing each agent's room.
-   *
-   * Keyed by agent id, and absent for the ordinary one-to-one case, which
-   * is most of them. The sidebar is the only place a person sees every
-   * conversation at once, so it is the only place the difference between a
-   * private chat and a group can be noticed without opening each one.
-   */
-  companions?: Record<string, { id: string; handle: string }[]>;
-  /**
-   * A room's own name, when the user has given it one.
-   *
-   * Absent for every conversation still called after its first agent, which
-   * is the default and most of them.
-   */
-  roomTitles?: Record<string, string>;
   onSelect(id: string): void;
   onCreate(): void;
   onOpenSettings(): void;
@@ -65,9 +65,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({
+  conversations,
   agents,
-  companions,
-  roomTitles,
   selectedId,
   runStates,
   onSelect,
@@ -79,14 +78,80 @@ export function Sidebar({
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return agents
-      .filter((a) => !a.archived)
-      .filter((a) => !q || a.name.toLowerCase().includes(q))
+    const byId = new Map(agents.map((a) => [a.id, a]));
+
+    const rows: Row[] = [];
+
+    for (const conversation of conversations) {
+      const members = (conversation.participants ?? [])
+        .filter((p) => p.kind === 'agent')
+        .map((p) => ({ handle: (p as { handle: string }).handle, agent: byId.get(p.id), id: p.id }));
+
+      /*
+       * A room whose members have all been deleted has nothing to show and
+       * nothing to answer with. Dropping it here rather than leaving a row
+       * that looks alive and is not.
+       */
+      const live = members.filter((m) => m.agent && !m.agent.archived);
+      if (live.length === 0) continue;
+
+      const group = isGroup(conversation);
+      const solo = live[0]!.agent!;
+
+      /*
+       * The busiest member wins.
+       *
+       * Waiting for a decision outranks working, because it is the one that
+       * needs the person — a row that says "working" when an approval card
+       * is sitting unanswered hides the only actionable state.
+       */
+      let state: AgentRunState = 'idle';
+      for (const m of live) {
+        const s = runStates[m.id] ?? 'idle';
+        if (s === 'awaiting-approval') state = s;
+        else if (s !== 'idle' && state === 'idle') state = s;
+      }
+
+      rows.push({
+        id: conversation.id,
+        title: group ? conversation.title : solo.name,
+        /*
+         * A group lists everyone; a chat shows the agent's description.
+         *
+         * Not "with @…" for a group — there is no "self" for the others to
+         * be with. The row IS the room, and the handles are what somebody
+         * scanning for the right one is actually reading.
+         */
+        subtitle: group
+          ? live.map((m) => `@${m.handle}`).join(', ')
+          : (solo.description?.slice(0, 48) ?? null),
+        seeds: live.map((m) => m.id),
+        group,
+        // A group is nobody's, so nobody's pin applies to it.
+        pinned: !group && Boolean(solo.pinned),
+        /*
+         * The CONVERSATION's timestamp for both, so one rule orders the
+         * list. Mixing in the agent's would have sorted private chats by
+         * when their settings were last edited and groups by when the room
+         * was — two different meanings in one column.
+         */
+        updatedAt: conversation.updatedAt,
+        state,
+      });
+    }
+
+    return rows
+      .filter(
+        (r) =>
+          !q ||
+          r.title.toLowerCase().includes(q) ||
+          (r.subtitle?.toLowerCase().includes(q) ?? false),
+      )
       .sort((a, b) => {
-        if (Boolean(b.pinned) !== Boolean(a.pinned)) return a.pinned ? -1 : 1;
+        if (b.pinned !== a.pinned) return a.pinned ? -1 : 1;
         return b.updatedAt - a.updatedAt;
       });
-  }, [agents, query]);
+  }, [conversations, agents, runStates, query]);
 
   return (
     <aside className="sidebar">
@@ -135,40 +200,35 @@ export function Sidebar({
         </div>
       </div>
 
-      {agents.length > 4 && (
+      {conversations.length > 4 && (
         <input
           className="sidebar-search"
-          placeholder="Search agents…"
+          placeholder="Search conversations…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
       )}
 
-      <nav className="agent-list" aria-label="Agents">
-        {visible.map((agent) => {
-          const state = runStates[agent.id] ?? 'idle';
-          // Empty for the ordinary one-to-one chat, which is most of them.
-          const roomMates = companions?.[agent.id] ?? [];
-          const roomMateIds = roomMates.map((m) => m.id);
-          const roomTitle = roomTitles?.[agent.id];
+      <nav className="agent-list" aria-label="Conversations">
+        {visible.map((row) => {
           /*
            * Any state but idle counts as occupied for the avatar's motion.
            * The exact state is already named by the dot beside it, and a
            * creature that breathes differently for "thinking" and "working"
            * would be inventing a distinction nobody asked to see.
            */
-          const active = state !== 'idle';
+          const active = row.state !== 'idle';
           return (
             <button
-              key={agent.id}
+              key={row.id}
               type="button"
-              className={`agent-row ${agent.id === selectedId ? 'selected' : ''}`}
-              onClick={() => onSelect(agent.id)}
-              aria-current={agent.id === selectedId ? 'true' : undefined}
+              className={`agent-row ${row.id === selectedId ? 'selected' : ''}`}
+              onClick={() => onSelect(row.id)}
+              aria-current={row.id === selectedId ? 'true' : undefined}
               aria-label={
-                state === 'idle'
-                  ? agent.name
-                  : `${agent.name}, ${state === 'awaiting-approval' ? 'needs approval' : state}`
+                row.state === 'idle'
+                  ? row.title
+                  : `${row.title}, ${row.state === 'awaiting-approval' ? 'needs approval' : row.state}`
               }
             >
               {/*
@@ -181,60 +241,47 @@ export function Sidebar({
                 peripheral vision; two letters are not.
                 
                 Seeded by the AGENT ID, not the name, so renaming an agent
-                does not hand it a new face.
+                does not hand it a new face. A group stacks its members'
+                faces, which is what makes it recognisable as a group
+                without reading anything.
               */}
-              {roomMates.length > 0 ? (
-                <AvatarStack seeds={[agent.id, ...roomMateIds]} busy={active} />
+              {row.seeds.length > 1 ? (
+                <AvatarStack seeds={row.seeds} busy={active} />
               ) : (
-                <Avatar seed={agent.id} busy={active} />
+                <Avatar seed={row.seeds[0]!} busy={active} />
               )}
               <span className="agent-meta">
                 <span className="agent-name">
-                  {agent.pinned && <span className="pin-dot" title="Pinned" />}
-                  {/*
-                    A named room wears its own name.
-                    
-                    Otherwise a room is described by whichever agent happens
-                    to be listed first — "Nudge" for a conversation that is
-                    really the deploy review, and identical to the row for
-                    Nudge alone.
-                    
-                    Only when the user has actually named it: an unnamed
-                    room still shows the agent, which is the truthful
-                    default and what a one-to-one chat always shows.
-                  */}
-                  {roomTitle ?? agent.name}
+                  {row.pinned && <span className="pin-dot" title="Pinned" />}
+                  {row.title}
                 </span>
                 {/*
-                  Who else is in there, rather than a count.
+                  Who is in there, rather than a count.
                   
                   "+1" says a group exists but not whether it is the one you
                   want; the handles are what somebody is actually scanning
-                  for, and they fit in the space the description used.
-                  
-                  It REPLACES the description, because the description is
-                  the same on every visit and the company is not.
+                  for, and they fit in the space a description would use.
                 */}
-                {roomMates.length > 0 ? (
-                  <span className="agent-sub agent-room">
-                    with {roomMates.map((m) => `@${m.handle}`).join(', ')}
+                {row.subtitle && (
+                  <span className={`agent-sub${row.group ? ' agent-room' : ''}`}>
+                    {row.subtitle}
                   </span>
-                ) : (
-                  agent.description && (
-                    <span className="agent-sub">{agent.description.slice(0, 48)}</span>
-                  )
                 )}
               </span>
-              {state !== 'idle' && (
+              {row.state !== 'idle' && (
                 <span
-                  className={`state-dot state-${state}`}
-                  title={state === 'awaiting-approval' ? 'Needs approval' : state}
+                  className={`state-dot state-${row.state}`}
+                  title={row.state === 'awaiting-approval' ? 'Needs approval' : row.state}
                 />
               )}
             </button>
           );
         })}
-        {visible.length === 0 && <p className="muted sidebar-empty">No agents match.</p>}
+        {visible.length === 0 && (
+          <p className="muted sidebar-empty">
+            {query ? 'Nothing matches.' : 'No conversations yet.'}
+          </p>
+        )}
       </nav>
 
       <div className="sidebar-foot">

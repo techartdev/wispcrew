@@ -117,6 +117,28 @@ export function useWispcrew() {
     setToast({ level: 'error', text });
   }, []);
 
+  /**
+   * Take a whole conversation list, and keep the selection honest.
+   *
+   * One function because the two must happen together. The selection used to
+   * be repaired inside the `agents-changed` handler, against the AGENT
+   * roster — which was wrong twice over. A group is not in that roster, so a
+   * group could be "repaired" away the moment any agent changed; and at
+   * startup the roster event can land before the initial load, where an
+   * empty selection was read as "deleted" and replaced with the first agent.
+   *
+   * The visible symptom was small and constant: the app opened on a row in
+   * the middle of the sidebar rather than the one at the top.
+   */
+  const applyConversations = useCallback((list: ConversationRecord[]) => {
+    setConversations(list);
+    setSelectedId((prev) => {
+      if (prev && list.some((c) => c.id === prev)) return prev;
+      // Newest first, which is the order the sidebar shows.
+      return list[0]?.id ?? null;
+    });
+  }, []);
+
   /* -- initial load --------------------------------------------- */
 
   useEffect(() => {
@@ -155,8 +177,14 @@ export function useWispcrew() {
         setOauthStatuses(arr<OAuthStatusView>(oa));
         setDetectedSignIns(arr<DetectedSignIn>(det));
         setNodes(arr<NodeSummary>(nd));
-        setConversations(arr<ConversationRecord>(cv));
-        setSelectedId((prev) => prev ?? agentList[0]?.id ?? null);
+        /*
+         * Open a CONVERSATION, not the first agent.
+         *
+         * The sidebar lists conversations, so defaulting to `agents[0]`
+         * opened a row somewhere down the list — and a group, which has no
+         * agent to be first, could never be the default at all.
+         */
+        applyConversations(arr<ConversationRecord>(cv));
         setReady(true);
       } catch (err) {
         if (!cancelled) {
@@ -168,7 +196,7 @@ export function useWispcrew() {
     return () => {
       cancelled = true;
     };
-  }, [api, fail]);
+  }, [api, fail, applyConversations]);
 
   /* -- push events ---------------------------------------------- */
 
@@ -214,10 +242,6 @@ export function useWispcrew() {
           return;
         case 'agents-changed':
           setAgents(event.agents);
-          // If the selected agent was deleted elsewhere, fall back to the first.
-          setSelectedId((prev) =>
-            prev && event.agents.some((a) => a.id === prev) ? prev : (event.agents[0]?.id ?? null),
-          );
 
           /*
            * The rooms changed too. Deleting an agent removes it from every
@@ -226,8 +250,13 @@ export function useWispcrew() {
            *
            * Re-read rather than carry the rooms in the event: one frame
            * stays one fact, and the client asks for what that fact implies.
+           *
+           * The SELECTION is repaired from that answer, not from the roster
+           * in this event — a group is not in the roster, so checking the
+           * selection against it would throw the user out of a room every
+           * time any agent changed.
            */
-          void api.listConversations().then(setConversations).catch(() => {
+          void api.listConversations().then(applyConversations).catch(() => {
             // A refresh that fails leaves the previous list, which is stale
             // but coherent. The next event tries again.
           });
@@ -241,8 +270,11 @@ export function useWispcrew() {
            * because the sender already has it and a round trip here would
            * leave a visible gap between the change and the screen catching
            * up.
+           *
+           * Through the same door as every other list, so a room deleted
+           * elsewhere cannot leave the selection pointing at nothing.
            */
-          setConversations(event.conversations);
+          applyConversations(event.conversations);
           return;
         case 'mcp-changed':
           setMcpServers(event.servers);
@@ -267,7 +299,7 @@ export function useWispcrew() {
       }
     });
     return off;
-  }, [api]);
+  }, [api, applyConversations]);
 
   /* -- transcript loading on selection --------------------------- */
 
@@ -321,11 +353,43 @@ export function useWispcrew() {
     [agents, selectedId],
   );
 
-  const runState: AgentRunState = selectedId ? (runStates[selectedId] ?? 'idle') : 'idle';
+  /**
+   * The state of the conversation on screen.
+   *
+   * Run states are keyed by AGENT, and a direct chat shares its agent's id,
+   * so that case reads straight off the map. A group has an id of its own
+   * and no state of its own: it is busy when any member is, and waiting for
+   * a decision outranks working — a header that says "working" while an
+   * approval card sits unanswered hides the one state that needs the person.
+   */
+  const runState: AgentRunState = useMemo(() => {
+    if (!selectedId) return 'idle';
+    const own = runStates[selectedId];
+    if (own) return own;
+
+    const room = conversations.find((c) => c.id === selectedId);
+    if (!room) return 'idle';
+
+    let worst: AgentRunState = 'idle';
+    for (const p of room.participants ?? []) {
+      if (p.kind !== 'agent') continue;
+      const s = runStates[p.id] ?? 'idle';
+      if (s === 'awaiting-approval') return s;
+      if (s !== 'idle' && worst === 'idle') worst = s;
+    }
+    return worst;
+  }, [selectedId, runStates, conversations]);
 
   const actions = useMemo(
     () => ({
-      selectAgent: setSelectedId,
+      /*
+       * Selecting picks a CONVERSATION, not an agent.
+       *
+       * The id is the same thing for a direct chat — a migrated room reuses
+       * its agent's id — but a group has an id of its own, and calling this
+       * `selectAgent` was how a group ended up with no way to be opened.
+       */
+      selectConversation: setSelectedId,
 
       async createAgent(patch: Partial<AgentRecord> = {}) {
         try {

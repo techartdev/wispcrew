@@ -154,6 +154,21 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
       : {}),
   });
 
+  /*
+   * A message is activity, so the conversation counts as touched.
+   *
+   * The sidebar orders by this, and until now nothing moved it: both
+   * `agent.updatedAt` and `conversation.updatedAt` recorded only that
+   * something had been CONFIGURED. So the list was ordered by whichever
+   * agent you last edited the settings of, which is not how anybody expects
+   * a list of conversations to behave — the one you are actually talking in
+   * drifted to the bottom.
+   *
+   * Written once per human message, not per streamed token: a write per
+   * delta would be thousands of file writes in a single reply.
+   */
+  updateConversation(conversation.id, {});
+
   const routing = routeHumanMessage({
     conversation,
     text,

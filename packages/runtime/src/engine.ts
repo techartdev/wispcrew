@@ -617,6 +617,20 @@ export async function runPrompt(
       id: segmentId,
       role: 'assistant',
       content: text,
+      /*
+       * WHO said it.
+       *
+       * User messages have carried an author since rooms existed; assistant
+       * messages never did, because a conversation had exactly one agent by
+       * construction. In a room with several, the transcript therefore did
+       * not record who spoke at all — so every reply was displayed under
+       * whichever agent the room was rooted at, and after the room got a
+       * name of its own it would have been displayed under the ROOM.
+       *
+       * Recorded on the entry rather than inferred from the turn: a
+       * transcript is read long after the turn is gone, and by other hosts.
+       */
+      authorId: agentId,
       isStreaming: streaming,
       createdAt: Date.now(),
     };

@@ -28,6 +28,7 @@ import {
   SettingsPanel,
   SkillsPanel,
 } from './Panels';
+import { isGroup } from '@wispcrew/shared';
 import type { AgentRecord, HistoryPoint } from '@wispcrew/shared';
 
 type Panel =
@@ -137,6 +138,79 @@ export function App() {
   );
 
   /*
+   * Everyone in the room, resolved to real agents.
+   *
+   * Passed to the Chat for EVERY conversation, not only shared ones: it is
+   * how a message finds the name of whoever wrote it, and a one-to-one chat
+   * has an author too. The `@` menu stays quiet for a room of one — that
+   * gate lives in the Chat now, where the menu is.
+   */
+  const roomMembers = useMemo(() => {
+    if (!room) return [];
+    return (room.participants ?? [])
+      .filter((p) => p.kind === 'agent')
+      .map((p) => ({
+        id: p.id,
+        handle: (p as { handle: string }).handle,
+        name: agents.find((a) => a.id === p.id)?.name ?? (p as { handle: string }).handle,
+      }));
+  }, [room, agents]);
+
+  /**
+   * A group is not an agent.
+   *
+   * `selected` is the agent a DIRECT chat is with, and null for a group.
+   * Everything that genuinely belongs to an agent — Configure, the model in
+   * the header — keys off this, so a group cannot silently borrow whichever
+   * member happened to be listed first.
+   */
+  const isRoom = room ? isGroup(room) : false;
+  const soloAgent = isRoom ? null : (selected ?? null);
+
+  /**
+   * What the conversation IS, for the chat view: a name and a description.
+   *
+   * A group describes itself by who is in it. A direct chat describes
+   * itself with the agent's own description, exactly as before.
+   */
+  const subject = useMemo(() => {
+    if (isRoom && room) {
+      return {
+        id: room.id,
+        name: room.title,
+        description:
+          room.greeting?.trim() ||
+          (roomMembers.length
+            ? `A room with ${roomMembers.map((m) => m.name).join(', ')}. Address someone with @, or just type — the room decides who answers.`
+            : undefined),
+      };
+    }
+    return soloAgent
+      ? { id: soloAgent.id, name: soloAgent.name, description: soloAgent.description }
+      : null;
+  }, [isRoom, room, roomMembers, soloAgent]);
+
+  /**
+   * Which agent the Configure panel is editing.
+   *
+   * Deliberately NOT the selection. A member's cog used to select that
+   * agent before opening its settings, which threw the user out of the room
+   * they were configuring it from — and the room is precisely where somebody
+   * notices an agent is misbehaving. Configuring is now something you do
+   * *to* an agent while staying where you are.
+   */
+  const [configuringId, setConfiguringId] = useState<string | null>(null);
+  const configuring = useMemo(
+    () => agents.find((a) => a.id === configuringId) ?? null,
+    [agents, configuringId],
+  );
+
+  const openConfigure = useCallback((agentId: string) => {
+    setConfiguringId(agentId);
+    setPanel('agent');
+  }, []);
+
+  /*
    * The other agents sharing each agent's room.
    *
    * Derived here because the sidebar has agents but not conversations, and
@@ -148,56 +222,6 @@ export function App() {
    * group can be noticed without opening each one — which it could not be:
    * a room holding Nudge and Local Test showed a row saying "Nudge".
    */
-  const companions = useMemo(() => {
-    /*
-     * The id AND the handle. The id seeds each room-mate's avatar; the
-     * handle is what the row shows. Carrying handles alone left the stacked
-     * avatar with nothing stable to draw the other members from.
-     */
-    const map: Record<string, { id: string; handle: string }[]> = {};
-
-    for (const conversation of state.conversations) {
-      const members = conversation.participants.filter((p) => p.kind === 'agent');
-      // One agent is not company; that is the ordinary chat.
-      if (members.length < 2) continue;
-
-      for (const self of members) {
-        map[self.id] = members
-          .filter((p) => p.id !== self.id)
-          .map((p) => ({ id: p.id, handle: p.handle }));
-      }
-    }
-
-    return map;
-  }, [state.conversations]);
-
-  /*
-   * Rooms the user has actually named.
-   *
-   * A conversation's title defaults to its first agent's name, so showing
-   * every title would change nothing for most rows and would go stale the
-   * moment that agent was renamed. Only a title that DIFFERS is a name
-   * somebody chose.
-   *
-   * Declared up here with the other memos, above the `if (!ready)` early
-   * return. Placed below it, this hook ran only on some renders — React
-   * counts hooks by call order, so the first paint after startup rendered
-   * more than the boot screen had and the whole window went blank. It
-   * typechecked perfectly; only launching the app showed it.
-   */
-  const roomTitles = useMemo(() => {
-    const map: Record<string, string> = {};
-
-    for (const conversation of state.conversations) {
-      const owner = agents.find((a) => a.id === conversation.id);
-      if (conversation.title && conversation.title !== owner?.name) {
-        map[conversation.id] = conversation.title;
-      }
-    }
-
-    return map;
-  }, [state.conversations, agents]);
-
   /*
    * A mention the composer should insert.
    *
@@ -261,12 +285,11 @@ export function App() {
   return (
     <div className="app">
       <Sidebar
+        conversations={state.conversations}
         agents={agents}
-        companions={companions}
-        roomTitles={roomTitles}
         selectedId={selectedId}
         runStates={runStates}
-        onSelect={actions.selectAgent}
+        onSelect={actions.selectConversation}
         onCreate={() => setPanel('new-agent')}
         onOpenSettings={() => setPanel('settings')}
         onOpenPanel={setPanel}
@@ -282,19 +305,47 @@ export function App() {
         <div className="chat-column">
         <header className="topbar">
           <div className="topbar-title">
-            <strong>{selected?.name ?? 'WispCrew'}</strong>
-            {selected && (
+            <strong>{subject?.name ?? 'WispCrew'}</strong>
+            {/*
+              A room has no model, so it must not show one.
+              
+              The header read `selected.model` because a room WAS its first
+              agent — so a conversation between three agents on three
+              different models announced one of them, chosen by nothing more
+              than who happened to be listed first. A room says who is in it
+              instead, which is the fact it actually has.
+            */}
+            {isRoom ? (
               <span className="muted topbar-sub">
-                {selected.model || settings?.model || 'default model'}
+                {roomMembers.length} agents · {room?.mode}
               </span>
+            ) : (
+              soloAgent && (
+                <span className="muted topbar-sub">
+                  {soloAgent.model || settings?.model || 'default model'}
+                </span>
+              )
             )}
           </div>
           <div className="topbar-actions">
-            {selected && (
+            {subject && (
               <>
-                <button type="button" className="btn" onClick={() => setPanel('agent')}>
+                {/*
+                  Configure means something different in each place, so it
+                  goes to a different place. In a direct chat it is the
+                  agent's own settings; in a room it is the room — who is in
+                  it, how much it constrains who speaks — and each member
+                  keeps its own cog in the side panel.
+                */}
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() =>
+                    isRoom ? setPanel('room') : soloAgent && openConfigure(soloAgent.id)
+                  }
+                >
                   <IconSettings />
-                  Configure
+                  {isRoom ? 'Room settings' : 'Configure'}
                 </button>
                 {/* Beside Clear chat on purpose: this is where someone
                     realises they have lost something and looks for a way
@@ -443,26 +494,17 @@ export function App() {
         )}
 
         <Chat
-          agent={selected}
+          subject={subject}
           transcript={transcript}
           runState={runState}
           skills={skills}
           /*
-            Who can be addressed here. Empty for a room with one agent —
-            there is nobody to disambiguate between, and offering a mention
-            of the only participant is noise.
+            Everyone here, always — this is how a message finds the name of
+            whoever wrote it, and a one-to-one chat has an author too. The
+            `@` menu stays quiet for a room of one; that gate lives in the
+            Chat, beside the menu it governs.
           */
-          members={
-            room && room.participants.filter((p) => p.kind === 'agent').length > 1
-              ? room.participants
-                  .filter((p) => p.kind === 'agent')
-                  .map((p) => ({
-                    id: p.id,
-                    handle: (p as { handle: string }).handle,
-                    name: agents.find((a) => a.id === p.id)?.name ?? p.id,
-                  }))
-              : []
-          }
+          members={roomMembers}
           onOpenRoutines={() => setPanel('routines')}
           onOpenHistory={() => setPanel('history')}
           onOpenRoom={() => setPanel('room')}
@@ -503,7 +545,7 @@ export function App() {
             routines={routines}
             runStates={runStates}
             onMention={(handle) => setDraftMention(`@${handle}`)}
-            onConfigure={(id) => { actions.selectAgent(id); setPanel('agent'); }}
+            onConfigure={openConfigure}
             onRename={(title) => void actions.renameConversation(room.id, title)}
             onSetGreeting={(text) => void actions.setRoomGreeting(room.id, text)}
             onOpenRoutines={() => setPanel('routines')}
@@ -557,20 +599,20 @@ export function App() {
         />
       )}
 
-      {panel === 'agent' && selected && (
+      {panel === 'agent' && configuring && (
         <AgentPanel
           globalPolicy={state.settings?.approvalPolicy}
-          agent={selected}
+          agent={configuring}
           nodes={state.nodes}
           presets={presets}
           personas={personas}
-          onSave={(patch) => void actions.updateAgent(selected.id, patch)}
+          onSave={(patch) => void actions.updateAgent(configuring.id, patch)}
           onDelete={() => {
-            void actions.deleteAgent(selected.id);
+            void actions.deleteAgent(configuring.id);
             setPanel(null);
           }}
           onDuplicate={() => {
-            void actions.duplicateAgent(selected.id);
+            void actions.duplicateAgent(configuring.id);
             setPanel(null);
           }}
           onPickDirectory={actions.pickDirectory}
