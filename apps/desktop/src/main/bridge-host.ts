@@ -70,6 +70,7 @@ import {
   addParticipant,
   createRoom,
   deleteConversation,
+  getContextReport,
   setRoomGreeting,
   getConversation,
   listCheckpoints,
@@ -1344,6 +1345,16 @@ export function registerBridge(context: BridgeContext): void {
    * conversation. Needed because a group now survives its founder: without
    * it, deleting every member left a room nobody could remove.
    */
+  /*
+   * How full a conversation's context is.
+   *
+   * Routed to the owning node like every other conversation-scoped call:
+   * the measurement needs that machine's transcript, provider config and
+   * MCP tool list, and computing it here would measure a request this
+   * machine never sends.
+   */
+  handle('getContextReport', (conversationId: string) => getContextReport(conversationId));
+
   handle('deleteRoom', (conversationId: string) => {
     const room = getConversation(conversationId);
     if (!room) throw new Error('No such conversation.');

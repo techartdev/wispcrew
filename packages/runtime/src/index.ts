@@ -24,6 +24,7 @@ export * from './conversation-edit.js';
 export * from './test-connection.js';
 export * from './model-catalogue.js';
 export * from './config-check.js';
+export * from './context-report.js';
 export * from './provider-migration.js';
 export * from './approval-policy.js';
 export * from './approval-clients.js';

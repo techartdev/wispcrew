@@ -1001,6 +1001,139 @@ body {
   font-size: 11.5px;
 }
 
+/* ---- context meter ------------------------------------------------
+ *
+ * How full the conversation's context is. Sits above the hint line, on
+ * the same 860px column as the composer, so it reads as belonging to the
+ * box you are typing in rather than to the transcript.
+ *
+ * Quiet by default and coloured only near the limit: the number is worth
+ * a glance every turn and worth acting on perhaps twice in a project.
+ */
+.context-meter-wrap {
+  position: relative;
+  max-width: 860px;
+  margin: 6px auto 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.context-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.context-meter:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.context-meter-track {
+  width: 46px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.context-meter-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+/* Amber, then red. Two steps rather than a gradient, because the only
+ * decisions available are "carry on" and "do something about it". */
+.context-meter-warm {
+  color: var(--warn);
+}
+.context-meter-warm .context-meter-fill {
+  background: var(--warn);
+}
+.context-meter-full {
+  color: var(--danger);
+}
+.context-meter-full .context-meter-fill {
+  background: var(--danger);
+}
+
+.context-meter-label {
+  white-space: nowrap;
+}
+
+.context-breakdown {
+  position: absolute;
+  right: 0;
+  bottom: 26px;
+  z-index: 30;
+  width: 260px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.context-breakdown-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.context-breakdown-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+
+.context-breakdown-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+/* Pushes the figure to the right edge without a table. */
+.context-breakdown-list em {
+  margin-left: auto;
+  font-style: normal;
+  color: var(--text-dim);
+}
+
+.context-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.context-dot-system {
+  background: var(--text-dim);
+}
+.context-dot-tools {
+  background: #a07bd6;
+}
+.context-dot-messages {
+  background: var(--accent);
+}
+
+.context-breakdown-note {
+  margin: 8px 0 0;
+  line-height: 1.45;
+}
+
 .skill-hints {
   max-width: 860px;
   margin: 0 auto 8px;

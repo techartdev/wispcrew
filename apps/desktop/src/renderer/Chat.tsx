@@ -11,8 +11,14 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
-import type { AgentRunState, SkillRecord, TranscriptEntry } from '@wispcrew/shared';
+import type {
+  AgentRunState,
+  ContextReportView,
+  SkillRecord,
+  TranscriptEntry,
+} from '@wispcrew/shared';
 import { IconSend, IconStop, IconAttach, IconCheck, IconDeny } from './Icons.js';
+import { ContextMeter } from './ContextMeter';
 import { Markdown } from './Markdown';
 import { parseMention } from './mention';
 
@@ -34,6 +40,15 @@ interface ChatProps {
   transcript: TranscriptEntry[];
   runState: AgentRunState;
   skills: SkillRecord[];
+
+  /**
+   * How full this conversation's context is, or null before the first
+   * measurement arrives.
+   *
+   * Rendered beside the composer because that is where somebody is standing
+   * when the answer matters: whether to keep going here, or start fresh.
+   */
+  contextReport: ContextReportView | null;
 
   /**
    * Who can be addressed in this room, for @-completion.
@@ -274,6 +289,7 @@ export function Chat({
   transcript,
   runState,
   skills,
+  contextReport,
   members,
   onOpenRoutines,
   onOpenHistory,
@@ -1052,6 +1068,7 @@ export function Chat({
             </button>
           )}
         </div>
+        <ContextMeter report={contextReport} />
         <div className="composer-hint muted">
           Enter to send · Shift+Enter for a new line · drop files to attach
           {skills.length > 0 ? ' · / for skills' : ''}

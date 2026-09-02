@@ -66,11 +66,21 @@ const toolCard = (
   createdAt: t(),
 });
 
-const notice = (id: string): TranscriptEntry => ({
+/** Something that happened TO the conversation — the model is told. */
+const notice = (id: string, text = 'Alpha is now addressed as @alpha-two.'): TranscriptEntry => ({
   kind: 'notice',
   id,
   level: 'info',
-  text: 'Run interrupted.',
+  text,
+  createdAt: t(),
+});
+
+/** A failure report for the person — the model is not. */
+const errorNotice = (id: string): TranscriptEntry => ({
+  kind: 'notice',
+  id,
+  level: 'error',
+  text: 'fetch failed',
   createdAt: t(),
 });
 
@@ -95,19 +105,57 @@ function toolCallsAreAnswered(history: ChatMessage[]): boolean {
 }
 
 function main(): void {
-  console.log('\n[rebuild] display-only entries never reach the model');
+  console.log('\n[rebuild] the model hears what happened to the conversation');
   {
+    /*
+     * Every notice used to be display-only, which quietly defeated the
+     * point of writing them. Renamed mid-conversation, an agent kept using
+     * its old handle and explained why exactly: "I can see the conversation
+     * messages delivered to me, but not necessarily every system-level room
+     * event." It was right — the room said "X is now addressed as @y", the
+     * user could read it, and the agent received nothing.
+     *
+     * The same silence covered a member joining or leaving, the workspace
+     * moving to another folder, and the seam notice naming who is who after
+     * a room carries history from an older chat.
+     */
     const history = rebuildHistory([
       userMsg('u1', 'hello'),
       notice('n1'),
       approval('a1'),
       asstMsg('a2', 'hi there'),
     ]);
-    eq('two model messages', history.length, 2);
+
+    eq('the notice is carried', history.length, 3);
     eq('first is the user', history[0]?.role, 'user');
-    eq('second is the assistant', history[1]?.role, 'assistant');
-    check('no notice text leaked', !JSON.stringify(history).includes('interrupted'));
+    check('the room event reaches the model',
+      JSON.stringify(history).includes('@alpha-two'));
+
+    /*
+     * Marked, and user-role. Not `system`, because several providers accept
+     * only one and only at the start; not `assistant`, because that would
+     * put the room's words in the agent's own mouth and it would then
+     * defend them as its own.
+     */
+    eq('carried as a marked user message', history[1]?.role, 'user');
+    check('and marked as the room speaking',
+      String(history[1]?.content ?? '').startsWith('[room] '), history[1]?.content);
+
+    eq('the assistant still follows', history[2]?.role, 'assistant');
+    // An approval card is a control, not a fact about the conversation.
     check('no approval text leaked', !JSON.stringify(history).includes('Run: ls'));
+  }
+
+  console.log('\n[rebuild] but a failure report is not context');
+  {
+    /*
+     * The model already met the failure as a tool result or an exception.
+     * Replaying "fetch failed" invites it to apologise for something that
+     * did not happen in its turn.
+     */
+    const history = rebuildHistory([userMsg('u1', 'hello'), errorNotice('e1')]);
+    eq('errors are left out', history.length, 1);
+    check('no provider error leaked', !JSON.stringify(history).includes('fetch failed'));
   }
 
   console.log('\n[rebuild] tool cards become paired call + result');
@@ -202,7 +250,10 @@ function main(): void {
   console.log('\n[rebuild] edge cases do not throw');
   {
     eq('empty transcript', rebuildHistory([]).length, 0);
-    eq('only notices', rebuildHistory([notice('n1'), notice('n2')]).length, 0);
+    eq('only approvals', rebuildHistory([approval('a1'), approval('a2')]).length, 0);
+    eq('only errors', rebuildHistory([errorNotice('e1'), errorNotice('e2')]).length, 0);
+    // An empty notice says nothing and would cost a message slot.
+    eq('a blank notice', rebuildHistory([notice('n1', '   ')]).length, 0);
     // A conversation that is nothing but an unfinished tool call still has to
     // come back as a valid pair rather than a dangling assistant message.
     check('lone running tool card', toolCallsAreAnswered(rebuildHistory([toolCard('tc1', 'shell', 'running')])));

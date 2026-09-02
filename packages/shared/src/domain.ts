@@ -81,6 +81,17 @@ export interface AgentRecord {
    */
   model: string;
   /**
+   * How large a context this agent's model has, in tokens.
+   *
+   * Optional, and only needed when this build cannot work it out from the
+   * model name — a self-hosted endpoint, or a model newer than the table in
+   * `packages/core/src/tokens.ts`. Without it the meter shows what is used
+   * and no percentage, because inventing a denominator produces either
+   * false alarm or false confidence and both get acted on.
+   */
+  contextWindow?: number;
+
+  /**
    * Endpoint override for this agent.
    *
    * Only meaningful for a self-hosted or proxied endpoint. When unset, the

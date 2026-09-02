@@ -49,6 +49,7 @@ import {
   addParticipant,
   createRoom,
   deleteConversation,
+  getContextReport,
   setRoomGreeting,
   getConversation,
   listCheckpoints,
@@ -297,6 +298,17 @@ export function nodeMethods(): MethodTable {
      * This exists because a group now survives its founder. Without it,
      * deleting every member left a room nobody could remove.
      */
+    /*
+     * How full a conversation's context is.
+     *
+     * Answered by the node because the node owns the transcript, the
+     * provider config and the MCP tool list — everything the measurement
+     * has to include. A client computing it from what it happens to have
+     * would be measuring a different request.
+     */
+    getContextReport: (conversationId: never) =>
+      getContextReport(conversationId as unknown as string),
+
     deleteRoom: (conversationId: never) => {
       const id = conversationId as unknown as string;
       const room = getConversation(id);

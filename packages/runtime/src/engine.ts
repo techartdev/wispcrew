@@ -22,6 +22,7 @@ import type {
 } from '@wispcrew/shared';
 import {
   Agent,
+  buildContextReport,
   personaById,
   environmentFacts as coreEnvironmentFacts,
   type SystemPromptOptions,
@@ -44,9 +45,11 @@ import {
   listConversations,
   recordRoomEvent,
   setRoomGreeting,
+  updateConversation,
   visibleParticipants,
 } from './conversations.js';
 import { announceRooms, pushTranscript } from './transcript.js';
+import type { ConversationContext } from './context-report.js';
 import { downgradeNotice, resolvePolicy } from './approval-policy.js';
 import { readSettings } from './settings-file.js';
 import { readSecrets } from './secrets-store.js';
@@ -567,6 +570,90 @@ export interface RunOptions {
   unattended?: boolean;
 }
 
+/**
+ * How full a conversation's context is.
+ *
+ * Assembled here, beside `runPrompt`, because it has to measure what a turn
+ * would ACTUALLY send: the same system prompt for the same agent, the same
+ * tool definitions including whatever the MCP servers expose, and the same
+ * rebuilt history — which is not the transcript, because tool cards,
+ * notices and approval prompts never reach the model.
+ *
+ * Measuring an approximation of the request would be worse than measuring
+ * nothing, because a meter is believed.
+ *
+ * The provider's own `inputTokens` from the last turn is preferred over the
+ * estimate when there is one; `measured` says which it was, so the UI can
+ * be honest about the difference between "76%" and "about 76%".
+ */
+export async function getContextReport(
+  conversationId: string,
+): Promise<ConversationContext> {
+  const conversation = getConversation(conversationId);
+
+  /*
+   * A group has one history and a different system prompt per member.
+   * Measured for the first live member, and it says which — the prompt is
+   * hundreds of tokens against a history of tens of thousands, so the
+   * choice barely moves the number, and naming it keeps that honest.
+   */
+  const memberId = (conversation?.participants ?? []).find((p) => p.kind === 'agent')?.id;
+  const agent = memberId ? store.getAgent(memberId) : store.getAgent(conversationId);
+
+  const settings = readSettings(dataDir(), defaultSettings()) as GlobalSettings;
+
+  if (!agent) {
+    // No agent, no request to measure. An empty report rather than a guess.
+    return {
+      conversationId,
+      used: 0,
+      measured: false,
+      systemTokens: 0,
+      toolTokens: 0,
+      messageTokens: 0,
+    };
+  }
+
+  const cfg = await effectiveConfig(agent, settings);
+  const preset = configFromPreset(cfg.presetId, {
+    apiKey: cfg.apiKey,
+    model: cfg.model,
+    baseUrl: cfg.baseUrl,
+  });
+
+  /*
+   * The same registry the turn builds, minus nothing.
+   *
+   * Including the MCP tools, which are often the largest single block —
+   * a server exposing forty tools costs more than the whole system prompt,
+   * and a breakdown that omitted them would send somebody looking in the
+   * wrong place.
+   */
+  const tools = new ToolRegistry();
+  for (const tool of await buildMcpTools(settings as never)) tools.register(tool);
+  for (const name of agent.disabledTools ?? []) tools.unregister(name);
+
+  const systemPrompt =
+    systemPromptFor(agent, cfg.persona, preset.model, conversationId) ?? '';
+
+  const report = buildContextReport({
+    systemPrompt,
+    tools: tools.definitions(),
+    messages: rebuildHistory(store.loadTranscript(conversationId)),
+    model: preset.model,
+    measuredInput: conversation?.lastInputTokens,
+    limitOverride: agent.contextWindow,
+  });
+
+  return {
+    ...report,
+    conversationId,
+    agentId: agent.id,
+    agentName: agent.name,
+    model: preset.model,
+  };
+}
+
 export async function runPrompt(
   agentId: string,
   rawPrompt: string,
@@ -960,6 +1047,29 @@ export async function runPrompt(
     mcp: (settings.mcpServers ?? []).map(
       (s) => `${s.name}:${s.command}:${(s.args ?? []).join(' ')}:${s.disabled ? 0 : 1}`,
     ),
+    /*
+     * The room, because the system prompt describes it.
+     *
+     * The prompt names every member and its handle, and carries the room's
+     * standing instructions — and the session that holds that prompt is
+     * cached and reused across turns. None of it was in this key, so a
+     * rename, a new member or an edited greeting left the agent reading the
+     * prompt it was built with.
+     *
+     * Reported exactly as it behaves: renamed mid-conversation, an agent
+     * said "the room roster supplied to me at the start of this
+     * conversation still showed the former names" and kept using the old
+     * handle. It was reading a cached prompt, and it was right about it.
+     */
+    room: (() => {
+      const room = getConversation(outputId);
+      if (!room) return '';
+      const members = (room.participants ?? [])
+        .filter((p) => p.kind === 'agent')
+        .map((p) => `${p.id}:${p.handle}:${store.getAgent(p.id)?.name ?? ''}`)
+        .join(',');
+      return `${room.title}|${room.greeting ?? ''}|${room.mode}|${members}`;
+    })(),
   });
 
   const session = getSession(agentId, {
@@ -1047,6 +1157,26 @@ export async function runPrompt(
         createdAt: Date.now(),
       });
       calledWith.delete(e.result.id);
+    } else if (e.type === 'turn_end') {
+      /*
+       * The provider's own count of what it just read.
+       *
+       * `TranscriptEntry` has carried a `usage` field since the beginning
+       * and nothing ever wrote it — the same declared-but-unpopulated fault
+       * as `authorId`, and with the same consequence: the one number that
+       * says how full the context is was arriving on every turn and being
+       * thrown away.
+       *
+       * It is recorded on the conversation rather than the entry because
+       * that is the question it answers. "How much context is this
+       * conversation using" is a property of the conversation, and reading
+       * it off whichever assistant message happened to be last would break
+       * the moment a turn ended with a tool call instead of prose.
+       */
+      const input = e.usage?.inputTokens;
+      if (typeof input === 'number' && input > 0) {
+        updateConversation(outputId, { lastInputTokens: input });
+      }
     } else if (e.type === 'error') {
       // A fatal error is rethrown by `Agent.run` and reported below with a
       // message the user can act on. Emitting the raw text here too would

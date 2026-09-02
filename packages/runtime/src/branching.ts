@@ -28,7 +28,8 @@ import type { ChatMessage, TranscriptEntry } from '@wispcrew/shared';
  * Rebuild the model-visible history from a transcript prefix.
  *
  * Rules, each of which exists for a reason:
- *  - `notice` and `approval` entries are display-only and are skipped.
+ *  - An `info` notice IS sent: it records something that happened to the
+ *    conversation. An `error` notice and an `approval` are display-only.
  *  - A `tool-call` card becomes an assistant message carrying the call plus
  *    a matching `role:"tool"` result. Cards still `running`, or ones that
  *    were `denied`, get a synthetic result so the pair is never broken.
@@ -73,8 +74,46 @@ export function rebuildHistory(entries: TranscriptEntry[]): ChatMessage[] {
         });
         break;
       }
+      case 'notice': {
+        /*
+         * What happened TO the conversation, told to the model.
+         *
+         * Every notice used to be display-only, which quietly defeated the
+         * whole point of writing them. An agent renamed mid-conversation
+         * kept using its old handle and explained why with complete
+         * accuracy: "I can see the conversation messages delivered to me,
+         * but not necessarily every system-level room event." It was right.
+         * The room said "X is now addressed as @y", the user could read it,
+         * and the agent never received a word of it.
+         *
+         * The same silence applied to every other fact worth knowing: a
+         * member joining or leaving, the workspace moving to a different
+         * folder, and the seam notice that names who is who after a room
+         * carries history from an older chat.
+         *
+         * ERRORS stay out. A provider failure or a turn that could not
+         * finish is a report for the person, and the model already met that
+         * failure as a tool result or an exception. Replaying "fetch
+         * failed" as context invites it to apologise for something that did
+         * not happen in its turn.
+         */
+        if (entry.level === 'error') continue;
+        if (!entry.text?.trim()) continue;
+
+        /*
+         * Carried as a user-role message with a marker.
+         *
+         * Not `system`: several providers accept only one system message,
+         * at the start, and this can arrive at any point. Not `assistant`:
+         * that would put the room's words in the agent's own mouth, and it
+         * would then defend them as its own. A marked user message is
+         * unambiguous about who is speaking without lying about the role.
+         */
+        out.push({ role: 'user', content: `[room] ${entry.text.trim()}` });
+        break;
+      }
       default:
-        // notice / approval: shown to the user, never sent to the model.
+        // approval: shown to the user, never sent to the model.
         break;
     }
   }

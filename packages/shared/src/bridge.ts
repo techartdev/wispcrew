@@ -84,6 +84,32 @@ export type BridgeEvent =
 /* Supporting shapes                                                   */
 /* ------------------------------------------------------------------ */
 
+/**
+ * How full a conversation's context is, as the UI sees it.
+ *
+ * Declared here rather than imported from the runtime because the renderer
+ * is sandboxed and may only depend on `shared`.
+ */
+export interface ContextReportView {
+  conversationId: string;
+  /** Tokens the next request would carry. */
+  used: number;
+  /** True when `used` is the provider's own figure, not an estimate. */
+  measured: boolean;
+  /** The model's context window, when this build knows it. */
+  limit?: number;
+  /** Fraction used, 0–1. Absent when the limit is unknown. */
+  fraction?: number;
+  /* Always estimated: a provider reports one total, never a breakdown. */
+  systemTokens: number;
+  toolTokens: number;
+  messageTokens: number;
+  /** Whose prompt was measured — a group has one per member. */
+  agentId?: string;
+  agentName?: string;
+  model?: string;
+}
+
 /** Settings as reported to the UI — deliberately key-free. */
 export interface SettingsView extends GlobalSettings {
   /** True when a provider key is stored (in the secrets store or env). */
@@ -431,6 +457,18 @@ export interface WispBridge {
    * every member left a room nobody could remove and nothing could answer.
    */
   deleteRoom(conversationId: string): Promise<ConversationRecord[]>;
+
+  /**
+   * How full this conversation's context is.
+   *
+   * Measured against what a turn would ACTUALLY send — the same system
+   * prompt, the same tool definitions, and the history as rebuilt for the
+   * model rather than as displayed. Prefers the provider's own reported
+   * input tokens over the estimate once a turn has run; `measured` says
+   * which, because an estimate presented as a measurement will eventually
+   * be trusted for a decision it cannot carry.
+   */
+  getContextReport(conversationId: string): Promise<ContextReportView>;
 
   /**
    * Send a message to a ROOM rather than an agent.

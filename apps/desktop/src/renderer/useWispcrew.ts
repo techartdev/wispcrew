@@ -25,6 +25,7 @@ import type {
   PresetView,
   RoutineRecord,
   SettingsView,
+  ContextReportView,
   SkillRecord,
   ToolGrant,
   TranscriptEntry,
@@ -89,6 +90,16 @@ export function useWispcrew() {
    * live after both agents had finished.
    */
   const [awaitingEngine, setAwaitingEngine] = useState<string | null>(null);
+
+  /**
+   * How full the selected conversation's context is.
+   *
+   * Fetched rather than derived: the count has to include the system
+   * prompt and the tool definitions, which live in the engine and never
+   * reach the renderer. Null until the first answer arrives, so the meter
+   * can stay absent rather than showing a confident zero.
+   */
+  const [contextReport, setContextReport] = useState<ContextReportView | null>(null);
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [presets, setPresets] = useState<PresetView[]>([]);
   const [personas, setPersonas] = useState<PersonaView[]>([]);
@@ -372,6 +383,49 @@ export function useWispcrew() {
     });
     return off;
   }, [api, applyConversations, clearAwaiting]);
+
+  /* -- context meter -------------------------------------------- */
+
+  /**
+   * Re-measure when the selection changes, and after every turn.
+   *
+   * "After every turn" is what makes it useful: the number only moves when
+   * something is said, and it is the moment somebody wants to know. Keyed
+   * on the transcript length rather than a timer, so an idle window costs
+   * nothing.
+   *
+   * Cleared first, so a stale figure from the previous conversation is
+   * never shown against the new one — the same reason the transcript is
+   * cleared before it is fetched.
+   */
+  useEffect(() => {
+    if (!selectedId) {
+      setContextReport(null);
+      return;
+    }
+
+    let cancelled = false;
+    void api
+      .getContextReport(selectedId)
+      .then((report) => {
+        if (!cancelled && report?.conversationId === selectedId) setContextReport(report);
+      })
+      .catch(() => {
+        // A measurement that fails is not worth a toast: the meter simply
+        // keeps its last value, and the next turn tries again.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    /*
+     * Keyed on the transcript length, not the run state, which is declared
+     * below this effect. The two move on the same beat — a finished turn
+     * has written at least one entry — and using it here would mean
+     * reordering the hooks, which is exactly the edit that blanked the
+     * window once before.
+     */
+  }, [api, selectedId, transcript.length]);
 
   /* -- transcript loading on selection --------------------------- */
 
@@ -1015,6 +1069,7 @@ export function useWispcrew() {
       mcpServers,
       nodes,
       conversations,
+      contextReport,
       routines,
       skills,
       grants,

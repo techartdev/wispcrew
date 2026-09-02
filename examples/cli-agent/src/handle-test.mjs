@@ -22,6 +22,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   addParticipant,
   createAgent,
@@ -39,6 +40,8 @@ import {
   upsertTranscriptEntry,
 } from '@wispcrew/runtime';
 import { handleFor } from '@wispcrew/shared';
+
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 let failures = 0;
 const check = (label, cond, detail) => {
@@ -220,6 +223,34 @@ console.log('\n[carried history] the seam names who is now who');
    */
   check('and says these apply from here on',
     /apply from here on, whatever was used above/.test(seam?.text ?? ''), seam?.text);
+}
+
+console.log('\n[the prompt is not cached past a rename]');
+{
+  /*
+   * The other half of the reported problem, and the one the agent
+   * diagnosed itself: "the room roster supplied to me at the start of this
+   * conversation still showed the former names".
+   *
+   * It was right. The system prompt names every member and its handle and
+   * carries the room's standing instructions, and the session holding that
+   * prompt is cached and reused across turns — keyed on a fingerprint that
+   * mentioned the provider, the model, the persona, the workspace, the
+   * policy and the MCP servers, and not one thing about the room. So a
+   * rename, a new member or an edited greeting left the agent reading the
+   * prompt it had been built with.
+   */
+  const engine = fs.readFileSync(path.join(repo, 'packages/runtime/src/engine.ts'), 'utf8');
+  const fingerprint = engine.slice(
+    engine.indexOf('const fingerprint'),
+    engine.indexOf('const session = getSession'),
+  );
+
+  check('the fingerprint covers the room', /room:/.test(fingerprint));
+  check('including every member and handle',
+    /p\.handle/.test(fingerprint) && /getAgent\(p\.id\)\?\.name/.test(fingerprint));
+  // The greeting is in the prompt too, so editing it must rebuild as well.
+  check('and the standing instructions', /room\.greeting/.test(fingerprint));
 }
 
 console.log('\n[still unique] two agents added separately do not clash');

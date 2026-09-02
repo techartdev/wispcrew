@@ -147,6 +147,22 @@ export interface ConversationRecord {
   greeting?: string;
 
   /**
+   * What the provider said the last request cost, in input tokens.
+   *
+   * The one measured number available about context use, and it was being
+   * discarded: `usage` arrives on every `turn_end` and nothing recorded it.
+   *
+   * Kept on the CONVERSATION because that is the question it answers — "how
+   * full is this conversation" — rather than on a message. Reading it off
+   * the last assistant entry would break whenever a turn ended with a tool
+   * call rather than prose, which is most long turns.
+   *
+   * Absent until a turn has run. Before that the meter shows an estimate
+   * and says so.
+   */
+  lastInputTokens?: number;
+
+  /**
    * The agent each person last addressed, keyed by human id.
    *
    * Tracked per person rather than per room: with two humans present, "the
