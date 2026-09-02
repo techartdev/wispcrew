@@ -233,8 +233,35 @@ export function makeAskAgentTool(
         (a) => a.name.trim().toLowerCase() === wanted,
       );
       if (!target) {
+        /*
+         * A ROOM-MATE is not missing — it is right here.
+         *
+         * The old message said "No agent named X is available" and listed
+         * the others, which reads as a fault. An agent told that about a
+         * colleague it can plainly see concludes the tool is broken and
+         * goes looking for another route: one rebuilt the whole
+         * application over a shell to reach an agent sitting in its own
+         * room, because nothing told it that mentioning was the way.
+         *
+         * So the two cases are answered differently. This one is not an
+         * error to work around; it is the wrong instrument.
+         */
+        const mate = (ctx.roomMembers ?? [])
+          .map((id) => store.listAgents().find((a) => a.id === id))
+          .find((a) => a && a.name.trim().toLowerCase() === wanted);
+
+        if (mate) {
+          return fail(
+            `${mate.name} is in this room with you, so there is no need to delegate. ` +
+              'Write your reply and mention them by handle — everyone here sees it, ' +
+              'and they will answer in the conversation.',
+            'in_room',
+          );
+        }
+
         return fail(
-          `No agent named "${args.agent}" is available. Choose one of: ${candidates.map((a) => a.name).join(', ')}.`,
+          `There is no agent called "${args.agent}" you can delegate to. ` +
+            `Available: ${candidates.map((a) => a.name).join(', ')}.`,
           'unknown_agent',
         );
       }

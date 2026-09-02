@@ -108,6 +108,39 @@ console.log('\n[a room with no outsiders offers no tool]');
   check('the tool is withheld', tool === null, tool ? 'still offered' : '');
 }
 
+console.log('\n[asking for a room-mate] answered as the wrong instrument, not a fault');
+{
+  /*
+   * The refusal an agent actually reads.
+   *
+   * It used to say "No agent named Colours is available" and list the
+   * others — which reads as a fault about a colleague the agent can plainly
+   * see. One concluded the tool was broken and rebuilt the whole
+   * application over a shell to reach an agent sitting in its own room,
+   * because nothing told it that mentioning was the way.
+   */
+  const tool = makeAskAgentTool(sums.id, rootContext('auto', sums.id, members), async () => 'x');
+  const ctx = { workspaceRoot: dir, defaultTimeoutMs: 1000, requestApproval: async () => true };
+
+  const mate = await tool.run({ agent: 'Colours', task: 'what is 2 + 2?' }, ctx);
+
+  check('it refuses', mate.ok === false);
+  check('it does not claim the agent is missing',
+    !/no agent named/i.test(mate.content), mate.content.slice(0, 90));
+  check('it says they are already here', /in this room with you/i.test(mate.content));
+  check('and names mentioning as the way', /mention/i.test(mate.content));
+  check('and identifies the case', mate.errorCode === 'in_room', mate.errorCode);
+
+  /*
+   * A genuinely unknown name still gets the plain answer — and must NOT be
+   * told to mention somebody who does not exist, which would send an agent
+   * addressing thin air.
+   */
+  const missing = await tool.run({ agent: 'Nobody', task: 'x' }, ctx);
+  check('an unknown agent is still unknown', missing.errorCode === 'unknown_agent');
+  check('and is not told to mention it', !/mention/i.test(missing.content));
+}
+
 fs.rmSync(dir, { recursive: true, force: true });
 
 console.log('');
