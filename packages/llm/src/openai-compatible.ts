@@ -224,6 +224,22 @@ export class OpenAICompatibleProvider implements ChatProvider {
           : { max_tokens: request.maxTokens }
         : {}),
       ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+      /*
+       * The FLAT spelling, which is what chat-completions takes — the
+       * Responses API nests it as `reasoning: { effort }` instead.
+       *
+       * Sent only where an endpoint is known to accept it. Everything
+       * OpenAI-compatible arrives through this adapter, including Ollama,
+       * LM Studio and any local server, and a strict one rejects the whole
+       * request over an unknown field rather than ignoring it.
+       *
+       * Note that WispCrew routes OpenAI's own reasoning models to the
+       * Responses API, so in practice this path carries the effort only for
+       * OpenRouter — which normalises it for whatever model is behind it.
+       */
+      ...(request.reasoningEffort && this.config.baseUrl?.includes('openrouter.ai')
+        ? { reasoning: { effort: request.reasoningEffort } }
+        : {}),
       ...(this.config.extra ?? {}),
     };
   }

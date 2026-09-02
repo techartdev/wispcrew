@@ -120,6 +120,17 @@ export interface ChatRequest {
   toolDefs?: ToolDefinition[];
   maxTokens?: number;
   temperature?: number;
+  /**
+   * How hard the model should think, where that means anything.
+   *
+   * A name like `low`/`medium`/`high`, not a number: each provider spells
+   * the knob differently — OpenAI takes an enum, Anthropic a token budget —
+   * and the adapter translates. What is NOT translated is whether the knob
+   * exists at all; a provider that has none ignores this, and the UI never
+   * offers it there. See `reasoningFor` in `@wispcrew/llm`.
+   */
+  reasoningEffort?: string;
+
   /** Passed through to providers that support it. */
   stream?: boolean;
   /** Abort signal for cancellation. */
@@ -240,3 +251,4 @@ export * from './bridge.js';
 export * from './method-scope.js';
 export * from './conversation.js';
 export * from './model-pairing.js';
+export * from './reasoning.js';

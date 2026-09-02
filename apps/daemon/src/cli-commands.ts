@@ -17,7 +17,7 @@ import {
   removeNode,
   type NodeClient,
 } from '@wispcrew/runtime';
-import { describeModelMismatch } from '@wispcrew/shared';
+import { reasoningFor, describeModelMismatch } from '@wispcrew/shared';
 import type { Rendered } from './cli-output.js';
 import { table } from './cli-output.js';
 
@@ -264,10 +264,42 @@ export async function agentsUpdate(ctx: CommandContext): Promise<Rendered> {
     }
   }
 
+  /*
+   * How hard to think, where this provider and model have such a knob.
+   *
+   * Checked against the RESULTING pairing rather than the one on record, so
+   * `--model o3-mini --reasoning-effort xhigh` is refused here in one step
+   * instead of being saved and then rejected by the provider on the next
+   * message. The accepted values differ by model, not merely by provider.
+   */
+  const effort = text(ctx.args, 'reasoning-effort');
+  if (effort !== undefined) {
+    const nextPreset = String(patch.presetId ?? agent.presetId ?? '');
+    const nextModel = String(patch.model ?? agent.model ?? '');
+    const support = reasoningFor(nextPreset, nextModel);
+
+    if (effort.trim().toLowerCase() === 'default') {
+      // A setting that cannot be unset is a trap; this is the way back.
+      patch.clear = [...((patch.clear as string[]) ?? []), 'reasoningEffort'];
+    } else if (support.style === 'none') {
+      throw new Error(
+        `${nextModel || 'that model'} on ${nextPreset || 'that provider'} has no reasoning ` +
+          'setting, so there is nothing to change. Reasoning there is either always on, ' +
+          'always off, or driven by the system prompt.',
+      );
+    } else if (!support.levels.includes(effort)) {
+      throw new Error(
+        `${nextModel} accepts ${support.levels.join(', ')} or "default", not "${effort}".`,
+      );
+    } else {
+      patch.reasoningEffort = effort;
+    }
+  }
+
   if (Object.keys(patch).length === 0) {
     throw new Error(
       'Nothing to change. Pass at least one of --provider, --model, --policy, ' +
-        '--description, --workspace, --context-window.',
+        '--description, --workspace, --context-window, --reasoning-effort.',
     );
   }
 
@@ -2043,7 +2075,12 @@ const COMMAND_SCHEMA = [
       {
         name: '--context-window',
         required: false,
-        description: 'tokens this model accepts, or uto to work it out',
+        description: 'tokens this model accepts, or "auto" to work it out',
+      },
+      {
+        name: '--reasoning-effort',
+        required: false,
+        description: 'where this model has one; "default" to unset',
       },
     ],
     returns: 'the updated agent',

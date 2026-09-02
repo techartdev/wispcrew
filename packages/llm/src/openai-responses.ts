@@ -32,6 +32,7 @@
  *    `{type:"function_call_output", call_id, output}`.
  *  - Streaming deltas arrive as `response.output_text.delta` SSE events.
  */
+import { acceptsEffort } from '@wispcrew/shared';
 import type {
   ChatProvider,
   ChatRequest,
@@ -179,6 +180,19 @@ export class OpenAIResponsesProvider implements ChatProvider {
         : {}),
       ...(request.maxTokens ? { max_output_tokens: request.maxTokens } : {}),
       ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+      /*
+       * How hard to think, in this API's own shape: a nested object, not the
+       * flat `reasoning_effort` chat-completions takes.
+       *
+       * Checked against the model rather than passed through, because the
+       * documented values are model-dependent — the o-series takes three of
+       * them and rejects the rest — and a request error is a worse outcome
+       * than a slower answer.
+       */
+      ...(request.reasoningEffort &&
+      acceptsEffort('openai', this.config.model, request.reasoningEffort)
+        ? { reasoning: { effort: request.reasoningEffort } }
+        : {}),
       ...(this.config.extra ?? {}),
     };
   }

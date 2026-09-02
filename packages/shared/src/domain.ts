@@ -92,6 +92,21 @@ export interface AgentRecord {
   contextWindow?: number;
 
   /**
+   * How hard this agent's model should think, where that means anything.
+   *
+   * A name — `low`/`medium`/`high` and friends — rather than a number,
+   * because each provider spells the knob differently and the adapter
+   * translates: OpenAI takes an enum, Anthropic a token budget, and NVIDIA
+   * has no portable control at all.
+   *
+   * Unset means the provider's own default, which is the right answer for
+   * most agents. The Configure panel only offers this where the pairing
+   * actually accepts it — a control that silently does nothing is worse
+   * than no control. See `reasoningFor` in `@wispcrew/llm`.
+   */
+  reasoningEffort?: string;
+
+  /**
    * Endpoint override for this agent.
    *
    * Only meaningful for a self-hosted or proxied endpoint. When unset, the

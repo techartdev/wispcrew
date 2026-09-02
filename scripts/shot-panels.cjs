@@ -68,6 +68,21 @@ const crossed = {
   createdAt: 1, updatedAt: 1,
 };
 
+/*
+ * And a coherent one on a model that DOES have a reasoning knob, because
+ * the interesting thing about that control is where it appears and where it
+ * does not. The mismatched agent above is on NVIDIA, which has none, so
+ * without this the only rendered Configure panel would be one that proves
+ * nothing about it.
+ *
+ * (No backticks in this comment: it lives inside a template literal, and a
+ * stray one ends the string with a syntax error two files away.)
+ */
+const thinker = {
+  id: 'a2', name: 'Careful', presetId: 'openai', model: 'gpt-5.6-terra',
+  reasoningEffort: 'high', createdAt: 1, updatedAt: 1,
+};
+
 globalThis.__PANELS__ = {
   'new-agent': renderToStaticMarkup(
     React.createElement(NewAgentPanel, {
@@ -77,6 +92,14 @@ globalThis.__PANELS__ = {
   'agent-mismatch': renderToStaticMarkup(
     React.createElement(AgentPanel, {
       agent: crossed, presets, personas: [{ id: 'general', label: 'General', description: '' }],
+      nodes: [], globalPolicy: 'ask',
+      onSave: noop, onDelete: noop, onDuplicate: noop,
+      onPickDirectory: async () => null, onClose: noop,
+    }),
+  ),
+  'agent-reasoning': renderToStaticMarkup(
+    React.createElement(AgentPanel, {
+      agent: thinker, presets, personas: [{ id: 'general', label: 'General', description: '' }],
       nodes: [], globalPolicy: 'ask',
       onSave: noop, onDelete: noop, onDuplicate: noop,
       onPickDirectory: async () => null, onClose: noop,

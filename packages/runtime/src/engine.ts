@@ -1105,6 +1105,14 @@ export async function runPrompt(
     description: agent?.description ?? '',
     workspaceRoot: cfg.workspaceRoot,
     policy: effectivePolicy,
+    /*
+     * A changed reasoning level must rebuild the session.
+     *
+     * It is sent with every request, and the session holds it — so a cached
+     * one would go on answering at the level it was built with, which looks
+     * exactly like the setting not working.
+     */
+    effort: agent.reasoningEffort ?? '',
     // The delegation roster and depth change the tool set, so a session
     // built at one depth must not be reused at another.
     delegates: askAgent ? askAgent.definition.description.length : 0,
@@ -1197,6 +1205,8 @@ export async function runPrompt(
     provider,
     tools,
     workspaceRoot: cfg.workspaceRoot,
+    // How hard to think, where this provider and model have such a knob.
+    reasoningEffort: agent.reasoningEffort,
     // `outputId` names the room when there is one, so an agent in company is
     // told so — otherwise it cannot tell that `@sums` addresses it, or that
     // its reply will be read by everyone.

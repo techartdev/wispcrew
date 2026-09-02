@@ -43,6 +43,8 @@ export interface AgentOptions {
   maxSteps?: number;
   maxTokens?: number;
   temperature?: number;
+  /** Provider-specific reasoning level; see `reasoningFor` in @wispcrew/llm. */
+  reasoningEffort?: string;
   defaultTimeoutMs?: number;
   env?: Record<string, string | undefined>;
   onEvent?: (event: AgentEvent) => void;
@@ -67,6 +69,15 @@ export class Agent {
   private readonly systemPrompt: string;
   private readonly maxSteps: number;
   private readonly maxTokens: number | undefined;
+
+  /**
+   * How hard to think, where the provider has such a knob.
+   *
+   * Carried on the session rather than passed per call because it is a
+   * property of the agent, and because a turn that changed it half way
+   * through would produce a conversation the model cannot explain.
+   */
+  private readonly reasoningEffort: string | undefined;
   private readonly temperature: number | undefined;
   private readonly defaultTimeoutMs: number;
   private readonly env: Record<string, string | undefined> | undefined;
@@ -83,6 +94,7 @@ export class Agent {
     this.systemPrompt = options.systemPrompt ?? defaultSystemPrompt({ modelHint: options.provider.label });
     this.maxSteps = options.maxSteps ?? 30;
     this.maxTokens = options.maxTokens;
+    this.reasoningEffort = options.reasoningEffort;
     this.temperature = options.temperature;
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
     this.env = options.env;
@@ -168,6 +180,7 @@ export class Agent {
           toolDefs: this.tools.definitions(),
           maxTokens: this.maxTokens,
           temperature: this.temperature,
+          reasoningEffort: this.reasoningEffort,
           stream: true,
           signal: controller.signal,
         };
@@ -358,6 +371,7 @@ export class Agent {
         toolDefs: [],
         maxTokens: this.maxTokens,
         temperature: this.temperature,
+        reasoningEffort: this.reasoningEffort,
         stream: true,
         signal: controller.signal,
       })) {

@@ -24,6 +24,8 @@ export interface SessionSeed {
   tools: ToolRegistry;
   systemPrompt?: string;
   workspaceRoot: string;
+  /** Provider-specific reasoning level, where the provider has one. */
+  reasoningEffort?: string;
   /** Identity of the config that produced this session; change ⇒ rebuild. */
   fingerprint: string;
   onApprovalRequired: (request: ApprovalRequest) => Promise<boolean>;
@@ -61,6 +63,7 @@ export function getSession(agentId: string, seed: SessionSeed): Agent {
     tools: seed.tools,
     systemPrompt: seed.systemPrompt,
     workspaceRoot: seed.workspaceRoot,
+    reasoningEffort: seed.reasoningEffort,
     onApprovalRequired: seed.onApprovalRequired,
   });
 

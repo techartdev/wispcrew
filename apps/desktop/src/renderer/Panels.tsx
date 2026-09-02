@@ -11,8 +11,9 @@
 // through react-dom/server outside the Vite build). It is a no-op under the
 // automatic runtime Vite uses.
 import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ModelPicker } from './ModelPicker';
 import { useProviderModels } from './useProviderModels';
-import { describeModelMismatch, isGroup } from '@wispcrew/shared';
+import { describeModelMismatch, isGroup, reasoningFor } from '@wispcrew/shared';
 import type {
   AgentRecord,
   ApprovalPolicy,
@@ -263,22 +264,18 @@ function NewAgentPanel({
             Model <em className="muted">— what this agent runs on</em>
           </span>
           {/*
-            A combo box, not a closed list. The catalogue is fetched live, so
-            it is normally right — but a model released this week, or one a
-            self-hosted endpoint serves under its own name, must still be
-            usable without waiting for a release of this app.
+            A list with an explicit Custom…, not a combo box that merely
+            looks like one. The catalogue is fetched live so it is normally
+            right, and a model released this week — or one a self-hosted
+            endpoint serves under its own name — is still reachable by
+            choosing to type it.
           */}
-          <input
-            list="new-agent-models"
+          <ModelPicker
             value={model}
+            models={liveModels}
             placeholder={chosen.defaultModel}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={setModel}
           />
-          <datalist id="new-agent-models">
-              {liveModels.map((m) => (
-                <option key={m.id} value={m.id} label={m.tested ? 'verified with tools' : undefined} />
-              ))}
-          </datalist>
           <span className="muted small">
             Belongs to this agent. Changing the provider in Settings will not move it.
           </span>
@@ -1072,18 +1069,12 @@ export function SettingsPanel({
             <span>
               Model <em className="muted">— used by Test connection only</em>
             </span>
-            <input
-              list="model-options"
+            <ModelPicker
               value={model}
+              models={liveModels}
               placeholder={preset?.defaultModel}
-              onChange={(e) => setModel(e.target.value)}
-              spellCheck={false}
+              onChange={setModel}
             />
-            <datalist id="model-options">
-              {liveModels.map((m) => (
-                <option key={m.id} value={m.id} label={m.tested ? 'verified with tools' : undefined} />
-              ))}
-            </datalist>
           </label>
           {/* A subscription endpoint is fixed by the sign-in; offering to
               edit it would only let the user break their own setup. */}
@@ -1309,6 +1300,7 @@ export function AgentPanel({
   const [persona, setPersona] = useState(agent.persona ?? '');
   const [presetId, setPresetId] = useState(agent.presetId ?? '');
   const [model, setModel] = useState(agent.model ?? '');
+  const [reasoningEffort, setReasoningEffort] = useState(agent.reasoningEffort ?? '');
   const [baseUrl, setBaseUrl] = useState(agent.baseUrl ?? '');
   const [nodeId, setNodeId] = useState(agent.nodeId ?? '');
   const [workspaceRoot, setWorkspaceRoot] = useState(agent.workspaceRoot ?? '');
@@ -1371,6 +1363,28 @@ export function AgentPanel({
   const liveModels = useProviderModels(presetId, preset?.models ?? []);
 
   /*
+   * What this pairing accepts for reasoning, if anything.
+   *
+   * Recomputed as the provider or model changes, so switching from gpt-5 to
+   * gpt-4o removes the control rather than leaving a setting that will be
+   * rejected on the next turn.
+   */
+  const reasoning = useMemo(() => reasoningFor(presetId, model), [presetId, model]);
+
+  /*
+   * A level the new pairing does not accept is dropped rather than kept.
+   *
+   * Moving an agent from gpt-5 to the o-series would otherwise leave
+   * `xhigh` set — a value that model rejects — and the failure would arrive
+   * on the next message with nothing on screen to explain it.
+   */
+  useEffect(() => {
+    if (reasoningEffort && !reasoning.levels.includes(reasoningEffort)) {
+      setReasoningEffort('');
+    }
+  }, [reasoning, reasoningEffort]);
+
+  /*
    * A provider and a model, or no save.
    *
    * The two are one decision, so the button is what enforces it: an agent
@@ -1411,6 +1425,13 @@ export function AgentPanel({
       persona: persona || undefined,
       presetId,
       model: model.trim(),
+      /*
+       * Empty means the provider's OWN default, which is not a level called
+       * "default": the field is simply absent from the request and the
+       * vendor decides. `undefined` deletes it, which is what unset looks
+       * like on disk.
+       */
+      reasoningEffort: reasoningEffort || undefined,
       baseUrl: baseUrl.trim() || undefined,
       // Empty means this computer. `undefined` deletes the field, which is
       // what "runs here" has always looked like on disk.
@@ -1532,24 +1553,54 @@ export function AgentPanel({
           <label className="field">
             <span>Model</span>
             {/*
-              A combo box, not a closed list. The catalogue is fetched from
-              the provider so it is normally right — but a model released
-              this week, or one a self-hosted endpoint serves under its own
-              name, must stay usable without a release of this app.
+              A real list with an explicit Custom…, not a combo box. The old
+              `<input list=…>` looked like a dropdown and behaved like a
+              search field: prefilled with the current model, it filtered
+              its own suggestions down to that one entry and appeared empty.
             */}
-            <input
-              list="agent-model-options"
+            <ModelPicker
               value={model}
+              models={liveModels}
               placeholder={preset?.defaultModel ?? 'Choose a provider first'}
-              onChange={(e) => setModel(e.target.value)}
+              onChange={setModel}
             />
-            <datalist id="agent-model-options">
-              {liveModels.map((m) => (
-                <option key={m.id} value={m.id} label={m.tested ? 'verified with tools' : undefined} />
-              ))}
-            </datalist>
           </label>
         </div>
+
+        {/*
+          How hard to think — shown ONLY where this provider and model have
+          such a knob.
+          
+          Several vendors expose one and each spells it differently, so the
+          tempting thing is a dropdown everywhere. The result of that is a
+          control that silently does nothing on most models somebody brings,
+          which is worse than no control at all: it costs you trust in every
+          other setting on the panel. NVIDIA drives reasoning from the system
+          prompt, DeepSeek's reasoner has no switch, and OpenAI's own values
+          differ between the o-series and gpt-5 — so the list is per model,
+          not per provider.
+        */}
+        {reasoning.style !== 'none' && (
+          <label className="field">
+            <span>
+              Reasoning <em className="muted">— how hard to think</em>
+            </span>
+            <select
+              value={reasoningEffort}
+              onChange={(e) => setReasoningEffort(e.target.value)}
+            >
+              {/* Unset is the provider's own default, and is what most
+                  agents should stay on. */}
+              <option value="">Provider default</option>
+              {reasoning.levels.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
+            {reasoning.note && <span className="muted small">{reasoning.note}</span>}
+          </label>
+        )}
 
         {preset && !preset.configured && (
           <p className="warn-inline">

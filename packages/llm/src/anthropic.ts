@@ -8,6 +8,7 @@ import type {
   ProviderConfig,
 } from '@wispcrew/shared';
 import { usageFromAnthropicHeaders, type UsageSnapshot } from './usage-limits.js';
+import { reasoningFor, THINKING_BUDGETS } from '@wispcrew/shared';
 
 interface AnthropicContentBlock {
   type: string;
@@ -153,12 +154,31 @@ export class AnthropicProvider implements ChatProvider {
       messages.push({ role: m.role, content: m.content });
     }
 
+    /*
+     * Extended thinking, which Anthropic expresses as a BUDGET rather than
+     * an effort enum: `thinking: { type: 'enabled', budget_tokens: N }`.
+     *
+     * The `low`/`medium`/`high` a user picked is mapped to a number here,
+     * and the Configure panel says as much — "high" secretly meaning a token
+     * count is not something to leave somebody to discover from a bill.
+     */
+    const budget =
+      request.reasoningEffort && reasoningFor('anthropic', this.config.model).style === 'budget'
+        ? THINKING_BUDGETS[request.reasoningEffort]
+        : undefined;
+
     const body: Record<string, unknown> = {
       model: this.config.model,
-      max_tokens: request.maxTokens ?? 4096,
+      /*
+       * The budget must leave room for the answer: Anthropic rejects a
+       * request whose `budget_tokens` is not comfortably below `max_tokens`,
+       * and a caller's 4096 default would not fit a 32k budget at all.
+       */
+      max_tokens: Math.max(request.maxTokens ?? 4096, budget ? budget + 4096 : 0),
       messages,
       ...(systemParts.length ? { system: systemParts.join('\n\n') } : {}),
       ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+      ...(budget ? { thinking: { type: 'enabled', budget_tokens: budget } } : {}),
     };
     if (request.toolDefs?.length) {
       body.tools = request.toolDefs.map((t) => ({
