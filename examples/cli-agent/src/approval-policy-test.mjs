@@ -118,6 +118,54 @@ console.log('\n[a channel with no entry] falls through, not to undefined');
   check('desktop uses its own', resolvePolicy(a, {}, 'desktop').policy === 'auto');
 }
 
+console.log('\n[the notice] for the person, never for the model');
+{
+  /*
+   * The bug that meant an approval card was never seen AT ALL.
+   *
+   * The downgrade notice went into the model's history like any other. Told
+   * that its request needed approval, the agent asked for permission in
+   * PROSE — "Please approve a fresh read-only GitHub check" — instead of
+   * calling its tool. Nothing raised an approval request, so no card
+   * appeared anywhere, and the user answered "approved" as an ordinary chat
+   * message. Reported as: "nowhere i've seen approval card".
+   *
+   * The agent should simply act. The mechanism decides whether it may.
+   */
+  const { rebuildHistory, downgradeNotice } = await import('@wispcrew/runtime');
+  const now = Date.now();
+
+  const history = rebuildHistory([
+    { kind: 'message', id: 'm1', role: 'user', content: 'any new PRs?', createdAt: now },
+    {
+      kind: 'notice',
+      id: 'n1',
+      level: 'info',
+      userOnly: true,
+      text: downgradeNotice('Prod', 'telegram'),
+      createdAt: now,
+    },
+    { kind: 'notice', id: 'n2', level: 'info', text: 'Nudge joined the room.', createdAt: now },
+  ]);
+
+  const seen = history.map((m) => m.content ?? '').join('\n');
+
+  check('the agent is not told to seek permission', !/needs approval/.test(seen), seen);
+
+  // But a real room event still reaches it: this is ONE notice, not all of
+  // them. An agent that cannot hear a rename is a different bug entirely.
+  check('while room events still reach it', /joined the room/.test(seen));
+
+  /*
+   * And the notice names where to change it. "Set a per-channel policy"
+   * named a thing without naming its home, so somebody approving the same
+   * read-only check repeatedly concluded there was no way to stop being
+   * asked. Advice that cannot be acted on is worse than none.
+   */
+  check('and it says where the setting lives',
+    /When asked from Telegram/.test(downgradeNotice('Prod', 'telegram')));
+}
+
 console.log('');
 if (failures) {
   console.error(`APPROVAL-POLICY TEST FAILED — ${failures} assertion(s)\n`);

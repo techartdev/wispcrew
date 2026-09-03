@@ -267,6 +267,24 @@ export type TranscriptEntry =
        * written first, and History restores it.
        */
       summary?: boolean;
+
+      /**
+       * For the person, never for the model.
+       *
+       * Most notices belong in the model's history: a rename, a join, a
+       * compaction seam. Some are addressed to the USER about the mechanism
+       * itself, and showing them to the agent changes its behaviour for the
+       * worse.
+       *
+       * Measured. The downgrade notice — "this request came from telegram,
+       * so it needs approval" — was sent to the model, which then asked for
+       * permission IN PROSE instead of calling its tool. So the approval
+       * request was never raised, no card ever appeared, and the user
+       * answered "approved" as an ordinary chat message. They reported
+       * never having seen an approval card at all: the agent had been
+       * talking its way around the mechanism every single time.
+       */
+      userOnly?: boolean;
       createdAt: number;
     };
 

@@ -934,6 +934,15 @@ export async function runPrompt(
       id: store.newId('note'),
       level: 'info',
       text: downgradeNotice(agent?.name ?? 'This agent', channel!),
+      /*
+       * The USER is the audience here, not the agent.
+       *
+       * Told that its request needs approval, the model asked for
+       * permission in prose instead of calling its tool — so nothing ever
+       * raised an approval request and no card appeared. The agent should
+       * simply act; the mechanism decides whether it may.
+       */
+      userOnly: true,
       createdAt: Date.now(),
     });
   }

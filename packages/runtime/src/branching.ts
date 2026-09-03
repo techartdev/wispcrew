@@ -138,6 +138,9 @@ export function rebuildHistory(entries: TranscriptEntry[]): ChatMessage[] {
         break;
       }
       case 'notice': {
+        // Addressed to the person, about the mechanism. Showing it to the
+        // model made the model route around the mechanism.
+        if (entry.userOnly) break;
         /*
          * What happened TO the conversation, told to the model.
          *

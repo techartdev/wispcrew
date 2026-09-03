@@ -108,8 +108,26 @@ export function resolvePolicy(
  * their `auto` agent is asking can see the answer rather than guess.
  */
 export function downgradeNotice(agentName: string, channel: ChannelId): string {
+  /*
+   * Say WHERE, not just that a setting exists.
+   *
+   * "Set a per-channel policy to change that" named a thing without naming
+   * its home, so somebody approving the same read-only check for the fourth
+   * time reasonably concluded there was no way to stop being asked: "how am
+   * I supposed to approve these permanently? Each time I need to approve on
+   * each new request?"
+   *
+   * The setting was there the whole time, one panel away, labelled exactly
+   * this. Advice that cannot be acted on is worse than none, because it
+   * suggests the reader missed something.
+   */
+  const where =
+    channel === 'telegram'
+      ? `Configure ${agentName} \u2192 "When asked from Telegram" to stop being asked.`
+      : `Set a per-channel policy in Configure ${agentName} to change that.`;
+
   return (
     `${agentName} runs automatically here, but this request came from ${channel}, ` +
-    'so it needs approval. Set a per-channel policy to change that.'
+    `so it needs approval. ${where}`
   );
 }
