@@ -88,6 +88,54 @@ console.log('\n[staleness is not an error] a model newer than this repo');
   check('an unknown NVIDIA model passes', !blocked('nvidia', 'nvidia/not-invented-yet'));
   check('an unknown OpenAI model passes', !blocked('openai', 'gpt-7-whatever'));
   check('and an unknown Anthropic one', !blocked('anthropic', 'claude-opus-9'));
+
+  /*
+   * A FETCHED catalogue is not evidence either, and this is the case that
+   * shipped wrong.
+   *
+   * A second arm used to refuse a model absent from the provider's live
+   * model list. That is the same reasoning as "absent from my preset",
+   * merely with a fresher source, and it was wrong twice over:
+   *
+   *  - Reported on `gpt-6-astra` during its rollout: "astra is a model
+   *    currently releasing, I don't want to be stopped from trying to call
+   *    it."
+   *  - And older models are still served long after they stop being
+   *    advertised: "there are older models still available out of this list
+   *    which I can manually type and call and still work."
+   *
+   * A catalogue says what a provider ADVERTISES, not what it answers to.
+   */
+  check('a model releasing right now passes',
+    !blocked('chatgpt-subscription', 'gpt-6-astra'));
+  check('and one still served but no longer listed',
+    !blocked('chatgpt-subscription', 'gpt-4-0314'));
+}
+
+console.log('\n[the provider gets the last word] when a name really is wrong');
+{
+  /*
+   * The trade for the above: WispCrew no longer guesses, so a genuinely bad
+   * name is discovered by asking. That is only acceptable if the answer is
+   * the provider's own words rather than a shrug — which is what was asked
+   * for: "do request and forward to me the original provider error".
+   */
+  const { describeHttpFailure } = await import('@wispcrew/llm');
+
+  const body = JSON.stringify({
+    error: { message: 'The model `gpt-6-astra` does not exist or you do not have access to it.' },
+  });
+  const said = describeHttpFailure(404, body, 'ChatGPT subscription', 'gpt-6-astra');
+
+  check('the provider is quoted verbatim', said.includes('does not exist or you do not have access'),
+    said);
+
+  /*
+   * And it does not assert the model is missing, because 404 is not only
+   * "no such model" — NVIDIA's free tier answers that way under load, so
+   * the same name succeeds and fails minutes apart.
+   */
+  check('without claiming to know why', /may be busy rather than missing/.test(said), said);
 }
 
 console.log('\n[local endpoints serve anything] and are never judged');

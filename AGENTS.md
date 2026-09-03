@@ -197,6 +197,13 @@ six), so "not in my list" proves nothing and refusing on it would block every
 model newer than this repo. Only a model another vendor explicitly claims is
 refused — which is why typing one by hand is still allowed.
 
+That applies to a FETCHED catalogue too. A second check used to refuse a
+model absent from the provider's live list, which is the same reasoning with
+a fresher source, and it blocked two ordinary cases: a model released this
+week, and an older one still served after it stopped being advertised. A
+catalogue says what a provider ADVERTISES, not what it answers to. An
+unrecognised model is sent, and the provider's own error is quoted back.
+
 The platform locations Electron used to pick (`%APPDATA%`, `~/Library/
 Application Support`, `~/.config`) are still read once on a first run, so an
 existing profile migrates rather than being abandoned.

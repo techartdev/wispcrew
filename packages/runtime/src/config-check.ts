@@ -18,23 +18,11 @@
  * nothing.
  */
 import { PROVIDER_PRESETS } from '@wispcrew/llm';
-import { describeModelMismatch, servesAnyName } from '@wispcrew/shared';
-import { listCachedModels } from './model-catalogue.js';
+import { describeModelMismatch } from '@wispcrew/shared';
 
 export interface ConfigProblem {
   /** Shown to the user, and written into the conversation. */
   message: string;
-}
-
-/**
- * Whether this provider may serve a model under any name.
- *
- * Delegated to `shared` so the renderer, the daemon and the engine judge
- * from one implementation. The rule is subtle — ownership, not absence —
- * and a second copy would get it wrong somewhere nobody was looking.
- */
-function anythingGoes(presetId: string): boolean {
-  return servesAnyName(PROVIDER_PRESETS.find((p) => p.id === presetId));
 }
 
 /**
@@ -68,30 +56,32 @@ export function checkModelPairing(
   if (mismatch) return { message: `${mismatch} Nothing was sent.` };
 
   /*
-   * Only a catalogue this process has actually fetched counts.
+   * And that is the only thing refused here.
    *
-   * Never fetched means never judged: a first turn must not be blocked by
-   * a network call, and a provider that could not be reached tells us
-   * nothing about whether its model list contains this name.
+   * There used to be a second arm: if this process had fetched the
+   * provider's catalogue and the model was not on it, the turn was blocked.
+   * That is ABSENCE again — the exact reasoning `model-pairing.ts` exists to
+   * reject — merely with a fresher list, and it was wrong for two ordinary
+   * cases:
+   *
+   *  - **A model released this week.** Reported on `gpt-6-astra` while it
+   *    was rolling out: "astra is a model currently releasing, I don't want
+   *    to be stopped from trying to call it."
+   *  - **An older model still served but no longer advertised.** Vendors
+   *    keep answering to deprecated names long after dropping them from the
+   *    list, and those names work.
+   *
+   * A catalogue says what a provider ADVERTISES, not what it will answer
+   * to. Refusing on it made this app's release cadence the limit on which
+   * models a user could try, which is the thing the ownership rule was
+   * written to avoid.
+   *
+   * So an unrecognised model is now SENT, and the provider's own error
+   * comes back if it was wrong — `describeHttpError` already extracts the
+   * API's message and quotes it. The case this file was written for is
+   * still caught, because it is a positive claim rather than a silence: an
+   * agent on NVIDIA set to `gpt-5.6-terra` is refused above, before any
+   * network call, by the ownership check.
    */
-  const known = listCachedModels(presetId);
-  if (!known || known.length === 0) return null;
-
-  if (known.some((m) => m.id === trimmedModel)) return null;
-  // A local or proxied endpoint may serve anything under any name, so its
-  // catalogue is not authoritative about what it will answer to.
-  if (anythingGoes(presetId)) return null;
-
-  /*
-   * A custom or self-hosted endpoint may serve anything. The catalogue is
-   * only authoritative for a provider that publishes one, so this refuses
-   * only when the provider both published a list and left this model off
-   * it.
-   */
-  return {
-    message:
-      `This agent is set to the model "${trimmedModel}", which ${presetId} does not offer. ` +
-      'That request cannot succeed, so it was not sent. ' +
-      'Open Configure and pick a model from this provider, or change the provider to match.',
-  };
+  return null;
 }
