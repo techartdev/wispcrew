@@ -187,17 +187,39 @@ one every few seconds rather than one per event. And a turn with no tool calls
 should skip the placeholder entirely — a fast answer arriving directly is
 better than a placeholder that flickers.
 
-## Order of work
+## What was built, and what use changed
 
-Unchanged from `CONVERSATIONS.md`, with this slotting into step 4:
+Steps 1–4 shipped. This section records how the design above survived contact
+with real use, because parts of it did not.
 
-1. Conversation record and migration.
-2. Channel participants — Telegram two-way, with the placeholder streaming
-   above.
-3. Per-agent-per-channel approval.
-4. **Multiple agents, tagging, and floor control as described here.**
-5. Cross-node replication.
+1. ✅ Conversation record and migration.
+2. ✅ Channel participants — Telegram in **both** directions, with the
+   placeholder streaming described above, and desktop-side activity mirrored
+   out to a connected chat (`channel-mirror.ts`). See [TELEGRAM.md](TELEGRAM.md).
+3. ✅ Per-agent-per-channel approval.
+4. ✅ Multiple agents, tagging, and floor control — `floor.ts`,
+   `room-turn.ts`.
+5. ⬜ Cross-node replication.
 
-Steps 1–3 are worth doing regardless of how much of this survives contact
-with real use. I would rather build 4 once you have used 2 and 3, because how
-annoying floor requests actually are is not something I can predict from here.
+**Agent-to-agent addressing works, and it was the important half.** An
+agent's `@handle` mention wakes that member exactly as a person's does. The
+guards are the ones sketched above: silence unless addressed, never the
+author itself, and a budget of consecutive agent turns that stops the room
+and says so rather than running up a bill.
+
+It also sat broken longest. `routeAgentMessage` was written, exported,
+documented and **called from nowhere** — so an agent asked to consult a
+colleague wrote "@other, what do you think?" and was talking to nobody. The
+rules were never the hard part; connecting them was.
+
+**`check_agents`** was added because a room-mate could read what the others
+had *said* but not tell whether one was working right now. There is
+deliberately no blocking `wait_for_agent`: two agents each waiting for the
+other is a deadlock no budget can unwind, and it holds a turn on both sides
+meanwhile.
+
+**Floor offers mattered less than expected.** The prediction was that their
+annoyance could not be judged from the design. In practice the room is quiet
+by default, `directed` mode carries the cases where control matters, and the
+offer is one muted line rather than a prompt — so the question mostly
+dissolved.

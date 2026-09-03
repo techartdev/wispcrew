@@ -162,19 +162,49 @@ pretty terminal.
 Deliberately small. A large surface is a large thing to keep correct, and
 most of it would be guessed rather than needed.
 
+Fifty-eight commands. The fifty-six that take arguments are described by `COMMAND_SCHEMA` in
+`apps/daemon/src/cli-commands.ts` — `wispcrew capabilities --json` prints it,
+and `scripts/check-cli-methods.cjs` fails the build if any of them calls a
+method the daemon does not have.
+
 ```
 wispcrew
-├── serve                     the daemon
-├── status                    what is running, here and on paired nodes
-├── agents  list|show|create
-├── ask <agent> <prompt>      one turn, optionally --wait
-├── rooms   list|create|show|send|tail|add|remove
-├── tasks   create|status|wait|cancel|list
-├── approvals list|show|approve|deny
-├── nodes   list|pair|show|remove
-├── channels list|telegram
-└── version
+├── serve                       the daemon, with no window
+├── status                      what is running, here and on paired nodes
+├── configure                   provider, key, workspace, policy
+├── settings                    read the current configuration
+│
+├── agents  show|create|set|duplicate|delete|stop
+├── ask <agent> <prompt>        one turn, optionally --wait
+├── context <agent>             how full the context is; --compact to reclaim
+│
+├── rooms   show|tail|new|say|greeting|add|remove
+│           mode|clear|rewind|branch|delete
+├── history restore             recover a previous transcript version
+│
+├── tasks   status|wait|cancel  work started with --detach
+├── approvals allow|deny        answer a headless node's request
+├── routines create|run|pause|resume|delete
+│
+├── providers | models | personas | skills
+├── mcp     add|remove
+├── grants  revoke              standing tool permissions
+├── test    provider|telegram   prove a credential works
+├── signins | signout           subscription sign-ins
+│
+├── pair                        attach this machine to another
+└── machines forget
 ```
+
+Two flags on `agents set` exist because this build cannot always infer them:
+
+- `--context-window <tokens|auto>` — only needed for a model the build does
+  not recognise, such as a self-hosted endpoint. Without it there is no
+  percentage and **no automatic compaction**, because guessing a window is
+  how a tool discards history with most of the context still free.
+- `--reasoning-effort <level|default>` — refused for a model that has no
+  such control, and refused for a level that model does not accept. The
+  accepted values differ by model, not merely by provider.
 
 ### Approvals are not optional
 
@@ -188,33 +218,42 @@ $ wispcrew approvals
 ID     AGENT   NODE   TOOL   REQUEST
 a81f   coder   vps    shell  git push origin main
 
-$ wispcrew approval approve a81f
+$ wispcrew approvals allow a81f
 ```
 
 ### Tasks, because orchestration is asynchronous
 
-`ask --wait` blocks. An external agent usually wants to start three things
-and collect them later:
+A task is a turn with a handle, and `turns.ts` is the durable record behind
+it. **What exists today is the reading half:**
 
 ```bash
-WIN=$(wispcrew task create windows-builder "test $SHA" --json | jq -r .taskId)
-LIN=$(wispcrew task create linux-builder   "test $SHA" --json | jq -r .taskId)
-MAC=$(wispcrew task create mac-builder     "test $SHA" --json | jq -r .taskId)
-
-# ... do local work ...
-
-wispcrew task wait "$WIN" "$LIN" "$MAC" --timeout 900 --json
+wispcrew tasks                   # every turn, past and present
+wispcrew tasks status <id>       # one of them; a prefix is enough
+wispcrew tasks wait <id>         # block until it settles, non-zero if it failed
+wispcrew tasks cancel <id>
 ```
 
-A task is a turn with a handle. The durable `TurnRecord` added in
-`turns.ts` is already most of what that needs.
+**What does not exist is a way to START one without waiting.** `ask` and
+`rooms say` block until the turn finishes, so the fan-out an external agent
+actually wants —
+
+```bash
+# NOT possible today: there is no detached start.
+WIN=$(wispcrew ask windows-builder "test $SHA" --detach --json | jq -r .taskId)
+```
+
+— has no command. The turn record, the states and `tasks wait` are all
+there; the missing piece is one flag that returns the id instead of the
+answer. It is listed here rather than in the tree above so that nobody reads
+the tree and assumes it works: this document previously showed a `task
+create` example for a command that has never existed.
 
 ### Discovery, so an agent can learn the tool
 
 ```
-wispcrew capabilities --json     what this installation supports
+wispcrew capabilities --json     what this installation supports,
+                                 including every command's schema
 wispcrew agents --json           who exists, where, and with which tools
-wispcrew commands --json         machine-readable command definitions
 ```
 
 A generic model parsing `--help` prose is a worse experience than reading a

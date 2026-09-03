@@ -177,8 +177,16 @@ runtime state, transcript entries and transport behaviour: reconnection,
 duplicate suppression, Stop, approval waits, Telegram progress, the
 consecutive-turn budget, and "who is speaking right now".
 
-**Not yet built.** It is the right next structural change, and it should
-land before cross-node rooms rather than after.
+**Built.** `turns.ts` holds the durable record — states
+(`claimed`/`running`/`awaiting_approval`/`completed`/`failed`), a heartbeat,
+and claim-before-run so a reconnecting client cannot work the same message
+twice. `tasks`, `tasks status`, `tasks wait` and `tasks cancel` read it from
+the CLI, and `activeTurns()` is what `check_agents` reports to an agent
+asking whether a colleague is busy.
+
+One piece is still missing: a way to START a turn without waiting for it.
+`ask` blocks, so the fan-out sketched in [CLI.md](CLI.md) has the record and
+the waiting half but no detached start.
 
 ### Ordering needs causality, not just timestamps
 

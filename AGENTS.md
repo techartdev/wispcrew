@@ -122,7 +122,7 @@ npm run verify                                  # everything above, plus the gua
 ```
 
 **The CLI is the third client**, alongside the desktop and the Telegram host.
-Fifty commands, all through the daemon protocol:
+Fifty-eight commands, all through the daemon protocol:
 
 ```bash
 wispcrew serve                    # the engine, with no window

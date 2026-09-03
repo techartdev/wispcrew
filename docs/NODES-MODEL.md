@@ -202,10 +202,13 @@ every restart invalidates every pairing and each client must pair again with
 a fresh code — which nobody would guess from the error, and which makes a
 node that restarts on boot effectively unpairable.
 
-Not fixed here. The shape of the fix is clear — persist the issued tokens
-beside the certificate, encrypted with the node's own key file, since they
-are credentials of exactly the kind `secrets-store` already handles — but it
-is a separate change from the CLI work and deserves its own verification.
+**Fixed since**, in the shape described: the issued tokens are persisted
+beside the certificate, encrypted with the node's own key file, because they
+are credentials of exactly the kind `secrets-store` already handles.
+
+Verified by restarting a node with no pairing window open — the desktop
+reconnected with the credential it already held. `test:node-token` pins it,
+and [SCENARIOS.md](SCENARIOS.md) records the run.
 
 ## Fixed: creating an agent on a node
 

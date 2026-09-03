@@ -1,158 +1,172 @@
 # Status & Roadmap
 
-Last verified: **2026-08-26**, from a clean build on Windows 11 and a real
-Hetzner VPS.
+Last verified: **2026-09-03**, from a clean build on Windows 11, a real
+Hetzner VPS, and a live Telegram bot.
 
+**Where we are.** The engine, the three clients (desktop, daemon+CLI,
+Telegram) and the conversation model are built and exercised daily against
+real providers. The last several sessions have been almost entirely about
+the seams between them — the places where something was written but never
+announced, declared but never read, or implemented on one host and not the
+other. That is where nearly every reported bug has lived, and the guards
+listed below exist to make each class fail the build instead of reaching a
+user.
 
-## Shipped: a real CLI
+**87 offline suites**, no API key and no network. `npm run verify` runs them
+plus typecheck, build, encoding, and the provenance and credential guards.
 
-A `wispcrew` binary, a third client of the daemon alongside the desktop and
-the Telegram host. **50 commands**, verified on a real headless server. See
-[CLI.md](CLI.md).
+## What a new reader should know first
 
-The reason is not that headless machines lack a window, though they do. It is
-that **every coding agent already knows how to run a shell command** — so a
-CLI lets Claude Code, Codex, Cursor or a CI job drive WispCrew with no SDK,
-plugin or integration work. And a WispCrew agent's shell tool can invoke
-those same binaries, which makes the relationship composable rather than
-competitive.
+Three facts explain most of the design:
 
-It is a third transport, not a second engine: no command touches the store
-directly, because two writers on one JSON store lose updates.
-
-`scripts/cli-gap.cjs` measures how complete it is by comparing every bridge
-method against what a command reaches. Nine capabilities are GUI-only by
-nature — a browser sign-in, a file dialog, window chrome — and nine more are
-unbuilt, each named in `CLI.md` with its reason.
-
-
-See [SCENARIOS.md](SCENARIOS.md) for paths exercised end to end, including
-what could not be verified and why.
+1. **The daemon owns the profile.** The desktop is a client of it, and so is
+   the CLI, and so is the Telegram host. A method implemented on only one
+   host fails at the moment of use — which is why
+   `scripts/check-bridge-methods.cjs` and `scripts/check-cli-methods.cjs`
+   both exist.
+2. **Everything an agent changes must be announced from where it changes
+   it.** The client-facing doors announce their own mutations; an agent
+   editing room instructions or scheduling a routine goes through neither.
+   Four separate "I had to reload" bugs were this.
+3. **What the transcript records is not automatically what the model sees.**
+   `rebuildHistory` is the seam, and three fields were being dropped there
+   (`authorId`, `via`, and the age of a tool result). Each one produced a
+   plausible-looking wrong answer.
 
 ## Verified working
 
-Everything below was confirmed by running it — screenshots, transcript
-inspection, or a passing assertion — not by reading the code.
+Confirmed by running it — screenshots, transcript inspection, or a passing
+assertion — not by reading the code.
 
 | Area | Evidence |
 |---|---|
 | App boots and renders | Screenshot of the running window (roster, chat, panels) |
 | Streaming chat | Live OpenAI turn; assistant entry updates in place |
-| Tool calls | `list_dir` executed live; card shows `Done`; model used the real output |
-| Approval gating | Denial respected (shell blocked); `auto` and `readonly` policies honoured |
-| Workspace confinement | Path traversal outside the workspace root rejected |
+| Tool calls | Executed live; card shows `Done`; model used the real output |
+| Approval gating | Denial respected; `auto` and `readonly` policies honoured |
+| Workspace confinement | 30 assertions: traversal, absolute paths, prefix siblings, case variants, NUL bytes, writes and listings |
 | Multi-turn memory | Turn 2 recalled turn 1's tool use; `test:memory` asserts history growth |
+| Memory across restarts | Live: a fact stated in one process was recalled by a **separate** process |
 | Interrupt (Stop) | Aborts the turn and leaves a provider-valid history |
 | Encrypted keys | Key present only in `wispcrew-secrets.enc` (DPAPI `v10`), unreadable in ciphertext, absent from settings |
-| Plaintext migration | A legacy plaintext key is moved into the encrypted store on next boot |
 | Skills | `/canary` expanded in main; model received the body, transcript kept the literal |
 | Cron scheduler | 50+ assertions; cross-checked against a naive scan over 144 cases in 6 timezones |
 | Markdown safety | Script tags, `javascript:`/`data:`/`file:` links neutralised |
 | Attachments | Live: text file read by the model; image described correctly (vision) |
-| Current OpenAI models | Live tool calls + reasoning on `gpt-5.6-luna`/`-sol`, `gpt-5.5`, `gpt-5.4-mini` |
 | Agent delegation | Live: one agent asked another and relayed its answer; a deliberately cyclic pair terminated after exactly one hop |
-| Workspace confinement | 30 assertions: traversal, absolute paths, prefix siblings, case variants, NUL bytes, writes and listings |
 | Conversation rewind / branch | Branch leaves the original untouched; every transcript prefix rebuilds to a provider-valid history |
-| Memory across restarts | Live: a fact stated in one process was recalled by a **separate** process |
 | Standing tool grants | Persist across restarts, listed and revocable in Settings, dropped with their agent, fail closed on a corrupt file |
-| Actionable provider errors | A wrong key, model, or base URL produces advice, not an HTTP dump; verified live against each failure |
-| First run on a clean profile | Verified with an empty userData dir: onboarding banner, guided composer, and a missing key reported as "needs an API key", never as "rejected" |
+| Actionable provider errors | A wrong key, model, or base URL produces advice, not an HTTP dump |
+| First run on a clean profile | Empty userData dir: onboarding banner, guided composer, a missing key reported as "needs an API key", never as "rejected" |
 | Accessibility | Live-region announcements, `aria-expanded` tool cards, modal focus trap with focus restore, visible focus rings |
-| ChatGPT subscription sign-in | Browser OAuth verified end to end: sign-in, token exchange, streaming, tool call, refresh with rotation |
-| The CLI, on a real server | `wispcrew configure`, `agents create`, `ask`, `rooms`, `tasks`, `capabilities` run on a Hetzner VPS over SSH only to type the command |
-| Headless approval | `wispcrew ask` on the VPS raised a shell request, `approvals allow` answered it from a second terminal, and the agent returned `Linux 6.8.0-101-generic x86_64` |
-| A node survives restarting | Paired, restarted the node with no pairing window open, and the desktop reconnected with the credential it already held |
-| Pairing without a desktop | `wispcrew pair` attached this laptop to the VPS from the command line; re-pairing the same machine replaces its record rather than duplicating it |
-| An agent created on another machine | Created from the desktop with a `nodeId`, appeared on the VPS under the same id, and stayed routable |
-| A machine-readable command surface | A script read `capabilities --json`, chose a command from it, ran it, and the result matched the declared return shape |
-| Claude subscription sign-in | Token endpoint confirmed by a real grant exchange (new access token + rotated refresh). Authentication proven (valid 429 vs invalid 401). The **browser half** and Claude inference remain unverified — the test account is rate-limited |
-| Borrowed CLI credentials | Stored without their refresh token by design: refreshing one rotates it and would sign the user out of their own CLI. Verified the CLI's file is left byte-identical |
-| Subscription credentials | Stored DPAPI-encrypted (`v10`), absent from the ciphertext and from settings; verified through the real app's IPC handlers |
-| Plan usage display | Live: "0% of your premium limit used · resets in 7 days". No usage endpoint exists, so this appears only after a turn |
-| Offline suites | All thirteen pass with no API key and no network |
-| **Fresh-clone workflow** | `git clone` → `npm ci` → typecheck → build → tests → `pack` → packaged app boots and renders. Verified from a real clone, not the working tree |
-| Typecheck / build | Clean across all workspaces |
+| ChatGPT subscription sign-in | Browser OAuth end to end: sign-in, token exchange, streaming, tool call, refresh with rotation |
+| The CLI, on a real server | `configure`, `agents create`, `ask`, `rooms`, `tasks`, `capabilities` on a Hetzner VPS over SSH |
+| Headless approval | `wispcrew ask` raised a shell request; `approvals allow` answered from a second terminal |
+| Paired remote nodes | Pairing without a desktop, surviving a node restart, an agent created on one machine staying routable from another |
+| **Rooms** | Two agents in one conversation, addressed by handle; a mention by one agent wakes the other, bounded by a turn budget |
+| **Context measurement** | Per-agent meters against the provider's own `inputTokens`; no percentage where the window is unknown |
+| **Compaction** | Measured on a real conversation: 114 → 31 entries, 41,616 → 19,592 tokens, kept turns byte-identical, all 114 restorable |
+| **Watch-triggered routines** | Live on a real filesystem: proposed, approved, watcher started, file written, routine fired |
+| **Telegram, both directions** | `/connect` binds a chat to a room, `/who` lists the handles, a message from the phone runs a real turn, and desktop activity is mirrored back |
+| **Daemon reconnect** | Killed the daemon under a running window; the desktop detected the drop, spawned a replacement and relinked |
+| Offline suites | All 87 pass with no API key and no network |
+| Fresh-clone workflow | `git clone` → `npm ci` → typecheck → build → tests → `pack` → packaged app boots |
 
-## Architecture note
+## Recently fixed, and worth knowing about
 
-The app is **entirely original work**. An earlier iteration vendored a
-proprietary desktop application (797 files) and spoke its reverse-engineered
-IPC protocol. That tree, the protocol shim, the branding scripts, and the
-reverse-engineering notes have all been removed. The UI, IPC contract,
-storage layer, scheduler, and Markdown renderer are our own implementations,
-which is what makes the MIT licence accurate.
+Each of these shipped and was found in use. They are listed because the
+*class* matters more than the instance.
 
-CI fails the build if a `vendor/` directory reappears.
+| Symptom | Cause |
+|---|---|
+| "The agent thinks it is in the wrong repository" | `shell` used `args.cwd` verbatim; `grep` resolved an absolute path against the root and discarded it. Now one `resolveInRoot` helper |
+| "I had to reload for the routine to appear" | `routines-changed` was emitted only by the two client-facing doors, and an agent scheduling for itself goes through neither |
+| "The other agent simply didn't get the task" | `routeAgentMessage` was written, exported, tested — and called from nowhere |
+| "Find my chat does nothing" | No token had ever been stored: the node's `saveSettings` wrote `telegramToken` to the **plaintext settings file** and never to the encrypted store. `writeSettings` now refuses credentials outright |
+| "Unknown method discoverChatId" | Implemented only in the desktop bridge, which forwards to the daemon. Eleven more were in the same state |
+| "Nothing appears in the desktop app" | The daemon restarts itself on a newer build; the desktop only logged the drop and never reconnected |
+| "Nowhere have I seen an approval card" | The downgrade notice was sent to the model, which asked for permission in prose instead of calling its tool — so no approval was ever raised |
+| An agent answering from seven-hour-old tool output | `rebuildHistory` emitted no time information at all, and the prompt never stated the date |
+
+## Guards
+
+Each was added after something reached a user.
+
+| Guard | What it prevents |
+|---|---|
+| `check-bridge-methods.cjs` | A bridge method the daemon lacks — `Unknown method` at the moment of use |
+| `check-cli-methods.cjs` | The same, for CLI commands |
+| `writeSettings` credential refusal | A key or token reaching the plaintext settings file |
+| `test:platform-audit` | Windows-only path handling, and the two provenance greps drifting apart |
+| `test:announce` | An engine-side mutation that no client is told about |
+| The `*-ui` suites | A panel rendering a CSS class that does not exist |
+| `test:observation` | Overwriting a file that was never read |
+| `test:single-writer` | Two engines on one JSON store |
 
 ## Provider notes
 
 OpenAI's reasoning models (`gpt-5.x`, o-series) are routed to the **Responses
-API** (`/v1/responses`) rather than chat-completions. This is not a
-preference: `/v1/chat/completions` rejects function tools for those models
-unless you also send `reasoning_effort: "none"`, and that flag genuinely turns
-the reasoning off. Measured on the rising-tide ladder puzzle,
-`reasoning_effort:"none"` answers **7** (wrong) while the Responses API with
-default reasoning answers **10** (right). Every other OpenAI-compatible
-endpoint — DeepSeek, Ollama, LM Studio, Groq, OpenRouter — keeps using
-chat-completions, which is the only thing they implement. A routing test in
-`test:attachments` pins this, including that a local server borrowing an
-OpenAI model name is *not* rerouted.
+API** rather than chat-completions. `/v1/chat/completions` rejects function
+tools for those models unless you also send `reasoning_effort: "none"`, and
+that flag genuinely turns the reasoning off — measured on the rising-tide
+ladder puzzle, it answers **7** (wrong) against the Responses API's **10**
+(right). Every other OpenAI-compatible endpoint keeps chat-completions,
+which is the only thing they implement.
+
+**Reasoning effort** is per agent and offered only where the pairing accepts
+it. The values are model-dependent, not merely provider-dependent: the
+o-series takes three levels and rejects `xhigh`. Anthropic has no effort enum
+at all — extended thinking is a token budget, and the panel says so. NVIDIA,
+DeepSeek and local runtimes are offered nothing, because a control that
+silently does nothing costs trust in every other control.
 
 ## Known gaps
 
-1. **macOS and Linux are not verified on real hardware.** CI now builds,
-   typechecks, runs every offline suite, and **boots the app headlessly** on
-   ubuntu/macOS/windows runners, failing if the window does not paint — so the
-   obvious platform breaks are caught automatically. What CI cannot judge is
-   how the app *feels*: window chrome, menu placement, font rendering, native
-   dialogs, and whether the OS keychain behaves as expected. Hands-on reports
-   from macOS and Linux users remain the most useful outside contribution.
-   A source audit found no hardcoded platform paths, and one real Windows-only
-   bug was fixed: MCP server arguments containing spaces were split by
-   `cmd.exe`.
-2. **Installers are unsigned.** Windows SmartScreen and macOS Gatekeeper will
-   warn. Signing needs certificates the project does not have.
+1. **macOS and Linux are not verified on real hardware.** CI builds,
+   typechecks, runs every offline suite and boots the app headlessly on all
+   three platforms, so obvious breaks are caught. What it cannot judge is how
+   the app *feels*: window chrome, menu placement, font rendering, native
+   dialogs, keychain behaviour. Hands-on reports remain the most useful
+   outside contribution.
+2. **Installers are unsigned.** SmartScreen and Gatekeeper will warn.
 3. **No auto-update channel.**
-5. **Web search quality depends on the configured backend.** See
+4. **The Claude browser sign-in's browser half is unverified**, as is Claude
+   inference — the test account has been rate-limited throughout. The token
+   endpoint itself is confirmed by a real grant exchange.
+5. **A group chat cannot bootstrap its own Telegram binding.** The bot
+   accepts messages from the configured chat, or from one already bound, so
+   `/connect` typed in a fresh group is refused for want of a binding. Using
+   a group means making it the configured chat first.
+6. **Standing approval is per agent, not per room.** With two agents in a
+   room the per-channel policy is set twice, and the Telegram card offers
+   only Allow and Deny — a standing grant must be made at the desktop.
+   Whether that is the right trade is an open question, not a settled one.
+7. **Web search quality depends on the configured backend.** See
    `packages/tools/src/web.ts`.
-
-## Agent delegation
-
-An agent can hand a self-contained task to another agent via the `ask_agent`
-tool, and the delegate's work lands in *its own* transcript — the user can
-open that agent and read exactly what was asked and done, rather than the
-delegation being an invisible side effect.
-
-The limits exist because this is the easiest feature to turn into a
-money-burning loop:
-
-| Guard | Value | Why |
-|---|---|---|
-| Depth | 3 | Bounds a chain that keeps handing work down |
-| Cycle detection | — | An agent already in the chain is not offered as a target |
-| Fan-out | 5 per turn | A model that decides to "ask everyone" cannot |
-| Self-delegation | blocked | Always a bug |
-| Timeout | 5 min | One stuck delegate cannot hang the chain |
-| Policy inheritance | narrowing only | A `readonly` agent cannot escalate by asking a permissive agent to act for it |
-
-That last row is a real privilege-escalation guard, not a nicety. When a
-delegate has no remaining capacity it is told so explicitly — without that,
-an agent instructed to "always delegate" would echo the request back instead
-of answering (observed live before the fix).
 
 ## Roadmap
 
 Roughly in order of value to a new user:
 
 1. **macOS/Linux verification** and any fixes that fall out.
-2. **Per-agent sandboxing** — stronger isolation than a workspace root; would
-   be a genuine improvement over products whose agents share one environment.
-3. **Signed installers + an update channel.**
-4. **i18n.**
-5. **Per-tool argument scoping** for grants — e.g. allow `shell` only for
-   commands matching a pattern. Deliberately not built yet: argument matching
-   is exactly where sandbox escapes live, so it needs a careful design rather
-   than a regex.
+2. **Approval ergonomics** — see gap 6. Now that cards are actually raised,
+   this can be judged from use rather than guessed at.
+3. **Per-agent sandboxing** — stronger isolation than a workspace root.
+4. **Signed installers + an update channel.**
+5. **i18n.**
+6. **Per-tool argument scoping** for grants. Deliberately not built:
+   argument matching is exactly where sandbox escapes live, so it needs a
+   design rather than a regex.
+
+## Architecture note
+
+The app is **entirely original work**. An earlier iteration vendored a
+proprietary desktop application (797 files) and spoke its reverse-engineered
+IPC protocol. That tree, the protocol shim, the branding scripts and the
+reverse-engineering notes have all been removed. The UI, IPC contract,
+storage layer, scheduler and Markdown renderer are our own implementations,
+which is what makes the MIT licence accurate. CI fails the build if a
+`vendor/` directory reappears.
 
 ## Contributing
 

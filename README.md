@@ -130,8 +130,10 @@ Create a bot with [@BotFather](https://t.me/botfather), paste the token into
 **Settings → Channels**, then message your bot:
 
 ```
-/connect Release      bind this chat or topic to a conversation
-/here                 which conversation is this?
+/connect              list the conversations you can attach
+/connect Release      bind this chat or topic to one of them
+/who                  who is in this room, and their handles to tag
+/here                 the same thing; where am I?
 /disconnect           unbind it
 ```
 
@@ -173,7 +175,7 @@ connected — single-machine agents and routines keep running regardless.
 | **Reachable anywhere** | Desktop and Telegram are doors onto the same room, not separate chats |
 | **Remote machines** | Paired nodes over TLS with pinned fingerprints; keys never leave their node |
 | **Background daemon** | Agents and routines survive closing the window |
-| **A real CLI** | 50 commands — everything the desktop does, plus `--json` for scripts and other agents |
+| **A real CLI** | 58 commands — everything the desktop does, plus `--json` for scripts and other agents |
 | **Durable agents** | Named teammates with their own instructions, model, workspace and permissions |
 | **Real tools** | Shell, file read/write/edit, grep, directory listing, web fetch and search |
 | **Attachments** | Drop in images and files — images go to vision models, text is inlined |
@@ -277,7 +279,7 @@ wispcrew agents --json          # exactly one JSON array on stdout
 wispcrew tasks wait <id>        # blocks; exits non-zero if the task failed
 ```
 
-`wispcrew capabilities --json` describes all 50 commands — what each takes,
+`wispcrew capabilities --json` describes all 56 schema commands — what each takes,
 what it returns, and when *not* to use it. A program can learn the tool from
 that alone, without parsing help prose that changes whenever the wording is
 improved.
@@ -379,7 +381,11 @@ These record decisions and their reasoning, including what is *not* solved:
 - [docs/CONVERSATIONS.md](docs/CONVERSATIONS.md) — the room model, and open problems
 - [docs/GROUP-CHAT.md](docs/GROUP-CHAT.md) — who speaks when several agents share a room
 - [docs/DISTRIBUTED.md](docs/DISTRIBUTED.md) — nodes, pairing, and where keys live
-- [docs/CLI.md](docs/CLI.md) — the planned `wispcrew` binary
+- [docs/CLI.md](docs/CLI.md) — the `wispcrew` binary
+- [docs/TELEGRAM.md](docs/TELEGRAM.md) — setup, `/connect`, what crosses in
+  each direction, and approvals from a phone
+- [docs/STATUS.md](docs/STATUS.md) — where the project actually is, what is
+  verified, and what is not
 
 ## Known gaps
 
@@ -398,8 +404,9 @@ Stated plainly rather than discovered later:
 Contributions are genuinely welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 What would help most right now:
 
-- macOS and Linux testing on real hardware
-- The `wispcrew` CLI ([docs/CLI.md](docs/CLI.md))
+- macOS and Linux testing on real hardware — the one thing CI cannot judge
+- A detached start for the CLI, so work can be launched and collected later
+  ([docs/CLI.md](docs/CLI.md) says exactly what is missing)
 - More provider presets
 - Additional built-in tools
 - Translations

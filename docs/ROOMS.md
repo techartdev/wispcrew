@@ -192,9 +192,31 @@ feature rather than a checkbox. The group form disables members from another
 machine and says why, rather than letting somebody build a room that half
 works.
 
-## Not part of this
+## Since shipped
 
-`ask_agent` refuses a room-mate with a message that reads as a fault, which
-is why an agent tried to reach one by rebuilding the application over a
-shell instead of simply mentioning it. That is a wording fix and needs none
-of the above.
+**An agent addressing another agent wakes it.** `@handle` in an agent's reply
+routes to that member exactly as it does from a person — which is what makes
+a room a place rather than several private chats sharing a scrollback. The
+rules live in `floor.ts`:
+
+- **Silence by default.** An agent acts because it was *addressed*, never
+  because somebody spoke. Two helpful agents replying to each other is an
+  unbounded loop that costs real money.
+- **Never itself.** Quoting its own handle is not a wake-up.
+- **A turn budget.** Consecutive agent turns since a person last spoke are
+  counted, and the room stops and says so when they run out. The failure
+  mode is a pause, not a bill.
+
+**`check_agents`** reports who else is in the room and whether a turn of
+theirs is running. It is offered only in a group — in a one-to-one the answer
+is always "nobody else is here", and a tool that is offered gets used.
+
+There is deliberately **no `wait_for_agent`**. Two agents each waiting for
+the other is a deadlock no budget can unwind, and it holds a turn on both
+sides meanwhile. Waiting is expressed by asking: the colleague's reply wakes
+you, bounded by the same turn budget.
+
+`ask_agent` still refuses a room-mate, but now says why in a way that points
+at the alternative — "a room-mate is addressed with @handle, not delegated
+to". The old wording read as a fault, which is why an agent once tried to
+reach a colleague by rebuilding the application over a shell.

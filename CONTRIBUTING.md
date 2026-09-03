@@ -45,11 +45,17 @@ npm run verify
 ```
 
 About two minutes. It does everything CI does that a local machine can:
-typecheck, build, all 72 offline suites, encoding, the provenance and
+typecheck, build, all 87 offline suites, encoding, the provenance and
 credential guards, and four checks that the documentation still describes the
 software — including that every CLI command reaches a method the node
 actually serves, which otherwise fails only when someone runs it on a real
 machine.
+
+**CI is manual.** Both workflows are `workflow_dispatch` only — nothing
+runs on push, and a maintainer starts a run deliberately. The matrix is six
+jobs across three operating systems, and the monthly allowance on a free
+account is finite; it has been exhausted once. Run `npm run verify` instead,
+which does everything CI does except the macOS and Linux halves.
 
 The suites are fully offline — no API key, no network — so they behave the
 same on your machine and in CI.
