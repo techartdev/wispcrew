@@ -795,12 +795,30 @@ function ChannelsSection({
         />
       </label>
 
-      <label className="field">
-        <span>Chat</span>
+      {/*
+        Step two, and unreachable until step one is done.
+        
+        The panel used to offer every control at once and explain the order
+        in prose. Somebody with the token in the field in front of them
+        pressed Find my chat, which reads the SAVED token, and was told no
+        token was saved — true, unhelpful, and looking exactly like a bug.
+        Disabling what cannot work yet says the same thing without anyone
+        having to read a numbered list.
+      */}
+      <label className={`field${telegramReady ? '' : ' field-pending'}`}>
+        <span>
+          Chat
+          {!telegramReady && <em className="muted"> — save a bot token first</em>}
+        </span>
         <input
           value={chatId}
           onChange={(e) => setChatId(e.target.value)}
-          placeholder="Press Find my chat after messaging your bot"
+          disabled={!telegramReady}
+          placeholder={
+            telegramReady
+              ? 'Press Find my chat after messaging your bot'
+              : 'Available once a token is saved'
+          }
           spellCheck={false}
         />
       </label>
@@ -826,7 +844,12 @@ function ChannelsSection({
         <button
           type="button"
           className="btn"
-          disabled={busy !== null}
+          /*
+           * Reads the SAVED token, so it cannot work before Save. Disabling
+           * it is the difference between "not yet" and "broken".
+           */
+          disabled={busy !== null || !telegramReady}
+          title={telegramReady ? undefined : 'Save a bot token first'}
           onClick={() => {
             setBusy('discover');
             setResult(null);
@@ -858,7 +881,20 @@ function ChannelsSection({
         <button
           type="button"
           className="btn"
-          disabled={busy !== null || !telegramReady}
+          /*
+           * Needs BOTH halves: a token to send with, and a chat to send to.
+           * It was gated on the token alone, so with no chat id it reached
+           * Telegram and failed there — a round trip to learn something the
+           * panel already knew.
+           */
+          disabled={busy !== null || !telegramReady || !chatId.trim()}
+          title={
+            !telegramReady
+              ? 'Save a bot token first'
+              : !chatId.trim()
+                ? 'Find your chat first'
+                : undefined
+          }
           onClick={() => {
             setBusy('test');
             setResult(null);
@@ -898,8 +934,11 @@ export function SettingsPanel({
   onTestTelegram,
   onDiscoverChatId,
   onClose,
-}: SettingsPanelProps) {
-  const [tab, setTab] = useState<SettingsTab>('provider');
+  // Which tab to open on. Only supplied by the offline renderer, which
+  // needs to photograph a tab that is three clicks in.
+  initialTab,
+}: SettingsPanelProps & { initialTab?: SettingsTab }) {
+  const [tab, setTab] = useState<SettingsTab>(initialTab ?? 'provider');
   const [presetId, setPresetId] = useState(settings.presetId ?? 'deepseek');
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState(settings.model ?? '');

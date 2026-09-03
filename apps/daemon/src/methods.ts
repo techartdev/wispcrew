@@ -69,6 +69,8 @@ import {
   statuses as mcpStatuses,
   readSettings,
   withTelegramTruth,
+  upsertSecrets,
+  discoverChatId,
   revokeAll,
   revoke as revokeGrant,
   runPrompt,
@@ -607,11 +609,33 @@ export function nodeMethods(): MethodTable {
        * credentials the user gave it, so a compromised node costs that
        * node's keys rather than every key they own.
        */
-      const { apiKey, ...rest } = (patch ?? {}) as { apiKey?: string } & Record<string, unknown>;
+      const { apiKey, telegramToken, ...rest } = (patch ?? {}) as {
+        apiKey?: string;
+        telegramToken?: string;
+      } & Record<string, unknown>;
+
       const targetPreset =
         (rest.presetId as string | undefined) ??
         (readSettings(host().dataDir, defaultSettings()) as { presetId?: string }).presetId;
       if (apiKey && targetPreset) setProviderKey(host().dataDir, targetPreset, apiKey);
+
+      /*
+       * A bot token is a credential, and goes to the encrypted store.
+       *
+       * It was destructured nowhere, so it fell into `rest` and was written
+       * to the PLAINTEXT settings file — while never reaching the secrets
+       * store, so the app also said "no bot token is saved" immediately
+       * after saving one. One omission, both symptoms: the credential
+       * exposed, and the feature broken.
+       *
+       * The desktop bridge always did this correctly. This is the node, and
+       * the node is what answers when a daemon owns the profile — which is
+       * every normal install.
+       */
+      if (telegramToken) {
+        upsertSecrets(host().dataDir, [{ key: TELEGRAM_TOKEN_KEY, value: telegramToken }]);
+      }
+
       writeSettings(host().dataDir, { ...rest, apiKey: undefined } as never);
       return settingsView();
     },
@@ -653,6 +677,35 @@ export function nodeMethods(): MethodTable {
       writeSettings(host().dataDir, { mcpServers: servers } as never);
       return announceMcp(syncMcpServers({ ...settings, mcpServers: servers } as never));
     },
+    /*
+     * The other two MCP mutations, which existed only on the desktop.
+     *
+     * `listMcpServers`, `addMcpServer` and `removeMcpServer` were all here;
+     * editing one or disabling a single tool were not. Both are forwarded
+     * like every other settings call, so both failed with `Unknown method`
+     * the moment a daemon owned the profile — which is the normal case.
+     */
+    updateMcpServer: async (name: never, patch: never) => {
+      const settings = readSettings(host().dataDir, defaultSettings()) as {
+        mcpServers?: { name?: string }[];
+      };
+      const servers = (settings.mcpServers ?? []).map((s) =>
+        s.name === name ? { ...s, ...(patch as object) } : s,
+      );
+      writeSettings(host().dataDir, { mcpServers: servers } as never);
+      return announceMcp(syncMcpServers({ ...settings, mcpServers: servers } as never));
+    },
+
+    setMcpToolEnabled: async (prefixedTool: never, enabled: never) => {
+      const settings = readSettings(host().dataDir, defaultSettings()) as {
+        mcpDisabledTools?: string[];
+      };
+      const disabled = new Set(settings.mcpDisabledTools ?? []);
+      if (enabled) disabled.delete(prefixedTool as string);
+      else disabled.add(prefixedTool as string);
+      writeSettings(host().dataDir, { mcpDisabledTools: [...disabled] } as never);
+    },
+
     removeMcpServer: async (name: never) => {
       const settings = readSettings(host().dataDir, defaultSettings()) as {
         mcpServers?: { name?: string }[];
@@ -739,6 +792,27 @@ export function nodeMethods(): MethodTable {
      * the node's table was missing it, so the CLI's `test telegram` failed
      * with "Unknown method" on a real server.
      */
+    /*
+     * Find the chat id from a bot the user has already messaged.
+     *
+     * On the node because the TOKEN is here. The daemon owns the profile,
+     * and the desktop forwards anything about settings or credentials to
+     * it — so implementing this only in the desktop bridge meant pressing
+     * "Find my chat" reported `Unknown method "discoverChatId"` on every
+     * normal install, where a daemon always owns the profile.
+     */
+    discoverChatId: async () => {
+      const token = getSecret(host().dataDir, TELEGRAM_TOKEN_KEY);
+      if (!token) {
+        return {
+          error:
+            'No bot token is saved yet. Paste the token from @BotFather above and ' +
+            'press Save, then try this again.',
+        };
+      }
+      return discoverChatId(token);
+    },
+
     testTelegram: async () => {
       const dataDir = host().dataDir;
       const token = getSecret(dataDir, TELEGRAM_TOKEN_KEY);

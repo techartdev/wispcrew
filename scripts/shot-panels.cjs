@@ -28,7 +28,7 @@ fs.writeFileSync(
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { RoomPane } from '${path.join(repo, "apps/desktop/src/renderer/RoomPane.tsx").replace(/\\/g, "/")}';
-import { NewChoicePanel, NewGroupPanel, RoomPanel, NewAgentPanel, AgentPanel } from '${path
+import { NewChoicePanel, NewGroupPanel, RoomPanel, NewAgentPanel, AgentPanel, SettingsPanel } from '${path
     .join(repo, 'apps/desktop/src/renderer/Panels.tsx')
     .replace(/\\/g, '/')}';
 
@@ -126,6 +126,38 @@ globalThis.__PANELS__ = {
         onRename: noop, onSetGreeting: noop, onConfigure: noop, onClose: noop,
       }),
     ),
+  ),
+  /*
+   * The Telegram setup, in both states.
+   *
+   * The whole complaint was about ORDER: every control was offered at once
+   * and the sequence explained in prose, so pressing the wrong one first
+   * produced an error that looked like a bug. Both states are rendered
+   * because the interesting thing is the difference between them.
+   */
+  'telegram-empty': renderToStaticMarkup(
+    React.createElement(SettingsPanel, {
+      settings: { presetId: 'openai', channels: { enabled: ['app'], telegram: { configured: false, chatId: '' } } },
+      presets, personas: [{ id: 'general', label: 'General', description: '' }],
+      grants: [], oauthStatuses: [], detectedSignIns: [],
+      onRevokeGrant: noop, onRevokeAllGrants: noop,
+      onOAuthSignIn: noop, onOAuthImport: noop, onOAuthSignOut: noop,
+      onSave: noop, onTest: noop, onPickDirectory: async () => null,
+      onTestTelegram: async () => ({ ok: true }), onDiscoverChatId: async () => ({}),
+      onClose: noop, initialTab: 'channels',
+    }),
+  ),
+  'telegram-ready': renderToStaticMarkup(
+    React.createElement(SettingsPanel, {
+      settings: { presetId: 'openai', channels: { enabled: ['app'], telegram: { configured: true, chatId: '' } } },
+      presets, personas: [{ id: 'general', label: 'General', description: '' }],
+      grants: [], oauthStatuses: [], detectedSignIns: [],
+      onRevokeGrant: noop, onRevokeAllGrants: noop,
+      onOAuthSignIn: noop, onOAuthImport: noop, onOAuthSignOut: noop,
+      onSave: noop, onTest: noop, onPickDirectory: async () => null,
+      onTestTelegram: async () => ({ ok: true }), onDiscoverChatId: async () => ({}),
+      onClose: noop, initialTab: 'channels',
+    }),
   ),
   'new-choice': renderToStaticMarkup(
     React.createElement(NewChoicePanel, {

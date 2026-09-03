@@ -1011,6 +1011,17 @@ body {
 }
 
 /*
+ * A step that is not available yet.
+ *
+ * Dimmed rather than hidden: hiding it would leave somebody wondering
+ * where the chat field went, while dimming says `later`, and the label
+ * beside it says what has to happen first.
+ */
+.field-pending {
+  opacity: 0.55;
+}
+
+/*
  * The model picker: a real list, with a way out to typing.
  *
  * It replaced an input list=... combo box that looked like a dropdown
@@ -1409,10 +1420,6 @@ body {
   outline-offset: 2px;
 }
 
-.btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 
 /* Icons take the colour of the text beside them and never grow with it. */
 .btn svg,

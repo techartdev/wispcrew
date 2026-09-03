@@ -232,6 +232,35 @@ check('LICENSE exists', fs.existsSync(path.join(repo, 'LICENSE')));
 }
 
 /*
+ * And the same for the DESKTOP, which is the deliverable.
+ *
+ * The desktop forwards every bridge call to the daemon when one owns the
+ * profile — the normal case — so a method implemented only in the bridge
+ * fails at the moment of use with `Unknown method`. It typechecks, it
+ * builds, every suite passes, and the button is broken for every user.
+ * That shipped: "Find my chat" was desktop-only, and eleven more were in
+ * the same state behind it.
+ */
+{
+  let bridgeOk = true;
+  let bridgeDetail = '';
+  try {
+    execFileSync(process.execPath, [path.join(repo, 'scripts', 'check-bridge-methods.cjs')], {
+      cwd: repo,
+      stdio: 'pipe',
+    });
+  } catch (err) {
+    bridgeOk = false;
+    bridgeDetail = String(err.stdout ?? '')
+      .split('\n')
+      .filter((line) => line.trim() && !line.includes(':'))
+      .map((line) => line.trim())
+      .join(', ');
+  }
+  check('bridge methods exist on the node', bridgeOk, bridgeDetail);
+}
+
+/*
  * The documents describe the software that exists.
  *
  * A public repository is read by people who cannot check the claims, so a

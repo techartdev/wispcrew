@@ -119,6 +119,58 @@ console.log('\n[machine output] --json is exactly one object');
   check('and are JSON in machine modes', /mode === 'text'[\s\S]*?stderr[\s\S]*?JSON.stringify/.test(output));
 }
 
+console.log('\n[plaintext settings] a credential cannot be written there');
+{
+  /*
+   * This shipped, and was found on a real profile: 46 characters of live
+   * Telegram bot token sitting in `wispcrew-settings.json`, a plaintext
+   * file somebody might reasonably paste into a bug report.
+   *
+   * The desktop bridge always routed the token through `upsertSecrets`.
+   * The NODE's `saveSettings` destructured only `apiKey` and wrote
+   * everything else verbatim — and the node is what answers when a daemon
+   * owns the profile, which is every normal install. One omission produced
+   * both symptoms at once: the credential exposed, and "no bot token is
+   * saved" shown immediately after saving one.
+   *
+   * Hard rule 5 said this must not happen. A rule every call site has to
+   * remember is a hope, so it now lives at the choke point.
+   */
+  const os = await import('node:os');
+  const { writeSettings, readSettings } = await import('@wispcrew/runtime');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-settings-'));
+
+  for (const field of ['apiKey', 'telegramToken']) {
+    let threw = '';
+    try {
+      writeSettings(dir, { [field]: 'live-credential-value' });
+    } catch (err) {
+      threw = err.message;
+    }
+    // Refused LOUDLY. Silently dropping a credential shipped once on the
+    // configureNode path: the call reported success and stored nothing.
+    check(`${field} is refused`, threw !== '', 'it was accepted');
+    check(`and the refusal names ${field}`, threw.includes(field), threw);
+    check(`${field} never reaches the file`,
+      !JSON.stringify(readSettings(dir)).includes('live-credential-value'));
+  }
+
+  /*
+   * And the view's own answers are not settings. `getSettings` decorates
+   * its reply with these; a UI handing the object back persisted them, and
+   * they then shadowed the real answer on the next read. All three were in
+   * that same profile.
+   */
+  writeSettings(dir, { presetId: 'openai', hasApiKey: true, isEncrypted: false });
+  const after = readSettings(dir);
+  check('derived answers are not persisted',
+    !('hasApiKey' in after) && !('isEncrypted' in after), JSON.stringify(after));
+  check('but real settings are', after.presetId === 'openai');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 console.log('');
 if (failures) {
   console.error(`HARDENING TEST FAILED — ${failures} assertion(s)\n`);

@@ -487,6 +487,37 @@ export function registerBridge(context: BridgeContext): void {
    * through — so a remote client and a local window run identical code
    * rather than two implementations that drift apart.
    */
+  /**
+   * Methods that must run on THIS machine, and are never forwarded.
+   *
+   * Everything else is sent to the daemon when one owns the profile, which
+   * is right for anything about agents, settings or credentials — the
+   * daemon holds them. It is wrong for two kinds of call, and forwarding
+   * them produced `Unknown method` at the moment of use:
+   *
+   *  - Native dialogs and the OS. A headless daemon has no window to open a
+   *    file picker in, and `openPath` must act on the machine with the
+   *    screen.
+   *  - This desktop's own view of OTHER machines. "Which nodes have you
+   *    paired" asked of the daemon is a different question with a different
+   *    answer, and pairing is a thing this client does.
+   *
+   * Marked here rather than inferred, so adding a method makes you decide.
+   * `bridge-parity-test` fails on anything neither listed here nor present
+   * on the node.
+   */
+  const LOCAL_ONLY = new Set([
+    'pickFiles',
+    'pickDirectory',
+    'openPath',
+    'getAppInfo',
+    'listNodes',
+    'pairNode',
+    'forgetNode',
+    'configureNode',
+    'presetsForNode',
+  ]);
+
   const handle = <T>(name: string, fn: (...args: never[]) => T | Promise<T>): void => {
     /*
      * Catch a duplicate registration here, where the name is obvious.
@@ -611,7 +642,7 @@ export function registerBridge(context: BridgeContext): void {
           return value;
         }
 
-        const remote = context.remote?.();
+        const remote = LOCAL_ONLY.has(name) ? undefined : context.remote?.();
         if (remote) {
           const value = (await remote.call(name, args)) as T;
 
