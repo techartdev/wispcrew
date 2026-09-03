@@ -70,6 +70,7 @@ import {
   readSettings,
   withTelegramTruth,
   upsertSecrets,
+  startTelegram,
   discoverChatId,
   revokeAll,
   revoke as revokeGrant,
@@ -637,6 +638,32 @@ export function nodeMethods(): MethodTable {
       }
 
       writeSettings(host().dataDir, { ...rest, apiKey: undefined } as never);
+
+      /*
+       * Start listening, or stop, according to what was just saved.
+       *
+       * `startTelegram()` ran once at daemon boot and nothing ever called it
+       * again, so connecting Telegram appeared to work — token stored, chat
+       * id found, channel ticked — and no listener existed. `/connect` in
+       * the chat reached nothing at all until the daemon was restarted,
+       * which nobody would think to do.
+       *
+       * The same shape as the routine that needed a reload: a change was
+       * made and the part that has to act on it was never told.
+       *
+       * It is safe to call whenever these settings are touched: it stops any
+       * existing listener first, and returns early when there is nothing to
+       * listen with.
+       *
+       * Deliberately NOT mirrored in the desktop bridge. Telegram allows one
+       * reader per bot and answers a second with 409, so a desktop that also
+       * started one would fight the daemon for every message. The daemon owns
+       * the channels; the desktop forwards to it.
+       */
+      if (telegramToken !== undefined || 'channels' in rest) {
+        startTelegram();
+      }
+
       return settingsView();
     },
 

@@ -245,6 +245,45 @@ console.log('\n[find my chat] a reason, not a shrug');
   const panels = read('apps/desktop/src/renderer/Panels.tsx');
   check('the panel shows the reason it was given', /text: found\.error \?\?/.test(panels),
     'the panel still invents its own explanation');
+
+  /*
+   * And saving the settings must START the listener.
+   *
+   * `startTelegram()` ran once at daemon boot and nothing called it again,
+   * so connecting Telegram looked complete — token stored, chat id found,
+   * channel ticked — with no listener anywhere. A `/connect` typed in the
+   * chat reached nothing until the daemon happened to restart, which
+   * nobody would think to do.
+   *
+   * The same shape as the routine that needed a reload: something changed
+   * and the part that must act on it was never told.
+   */
+  const nodeMethodsSrc = read('apps/daemon/src/methods.ts');
+  check('saving telegram settings starts the listener',
+    /startTelegram\(\);/.test(nodeMethodsSrc),
+    'the settings are stored and nothing listens');
+
+  /*
+   * And ONLY the node does it. Telegram allows one reader per bot and
+   * answers a second with 409, so a desktop that also started one would
+   * fight the daemon for every message.
+   */
+  const bridge2 = read('apps/desktop/src/main/bridge-host.ts');
+  check('and the desktop does not start a second one',
+    !/startTelegram\(/.test(bridge2),
+    'two pollers on one bot means 409 and stolen updates');
+
+  /*
+   * The commands themselves, which are how a chat is attached to a room.
+   * Verified live against the real handler: /here reports nothing, /connect
+   * binds, /here then names the room.
+   */
+  const tgHost = read('packages/runtime/src/telegram-host.ts');
+  check('connect, disconnect and here all exist',
+    /\/\^\\\/\(connect\|disconnect\|here\)/.test(tgHost) ||
+      /connect\|disconnect\|here/.test(tgHost));
+  check('and connect with no name lists the choices',
+    /Which conversation\?/.test(tgHost));
 }
 
 console.log('');
