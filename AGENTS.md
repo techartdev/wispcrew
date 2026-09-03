@@ -285,6 +285,11 @@ assumed.
   waiting for the other is a deadlock no budget can unwind. Waiting is
   expressed by asking in the room — a reply that names somebody routes to
   them, bounded by the room's turn budget.
+- **A connected chat sees the room.** `/connect` in Telegram binds a chat to
+  a conversation; `/who` lists the members and their handles. What is said
+  on the desktop side is mirrored out to it — people and final answers, not
+  tool cards or notices, and never echoed back where it came from. The room
+  panel says where else a conversation is reachable from.
 - **Recovering a conversation**: any write that removes entries keeps the
   previous version, reachable from a History panel.
 
@@ -301,7 +306,7 @@ OpenAI-compatible endpoint keeps chat-completions. `test:attachments` pins the
 routing, including that a local server borrowing an OpenAI model name is not
 rerouted.
 
-**Test coverage**: 86 offline suites — no API key, no network.
+**Test coverage**: 87 offline suites — no API key, no network.
 Several caught real bugs when written, and a few caught bugs that had already
 shipped; keep them green. Notable ones: `single-writer` (two engines on one
 store), `shell-timeout` (a killed process emits `exit` with no `close` on

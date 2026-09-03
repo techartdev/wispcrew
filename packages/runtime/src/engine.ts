@@ -900,7 +900,12 @@ export async function runPrompt(
       isStreaming: streaming,
       createdAt: Date.now(),
     };
-    pushTranscript(outputId, entry);
+    /*
+     * The origin travels with it, so a turn that started in Telegram is
+     * not mirrored back there — 	elegram-progress is already editing its
+     * placeholder into this same answer.
+     */
+    pushTranscript(outputId, entry, channel);
   };
 
   /** Close the current text segment so what follows appears after it. */

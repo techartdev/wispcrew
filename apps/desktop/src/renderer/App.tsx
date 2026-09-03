@@ -566,6 +566,7 @@ export function App() {
             onRename={(title) => void actions.renameConversation(room.id, title)}
             onSetGreeting={(text) => void actions.setRoomGreeting(room.id, text)}
             onOpenRoutines={() => setPanel('routines')}
+            onEndpoints={actions.conversationEndpoints}
             onClose={() => setPaneOpen(false)}
           />
         )}

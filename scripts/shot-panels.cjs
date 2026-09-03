@@ -124,6 +124,7 @@ globalThis.__PANELS__ = {
         contextReports: roomReports,
         onCompact: noop, onMention: noop, onOpenRoutines: noop,
         onRename: noop, onSetGreeting: noop, onConfigure: noop, onClose: noop,
+        onEndpoints: async () => [{ channel: 'telegram', label: 'OpenClaw AddOn Dev' }],
       }),
     ),
   ),
@@ -278,6 +279,7 @@ createRoot(document.getElementById('root')).render(
       contextReports: reports,
       onCompact: noop, onMention: noop, onOpenRoutines: noop,
       onRename: noop, onSetGreeting: noop, onConfigure: noop, onClose: noop,
+      onEndpoints: async () => [{ channel: 'telegram', label: 'OpenClaw AddOn Dev' }],
     }),
   ),
 );

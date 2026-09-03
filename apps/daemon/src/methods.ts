@@ -70,6 +70,7 @@ import {
   readSettings,
   withTelegramTruth,
   upsertSecrets,
+  endpointsFor,
   startTelegram,
   discoverChatId,
   revokeAll,
@@ -676,6 +677,16 @@ export function nodeMethods(): MethodTable {
      * routine was deleted from the store, the call returned successfully,
      * and the panel went on showing it until the window was reloaded.
      */
+    /*
+     * Which outside chats are attached to a conversation.
+     *
+     * The room panel had no way to know: endpointsFor existed in the
+     * runtime and was called from nowhere in either app, so a room reachable
+     * from Telegram looked exactly like one that was not. Reported as "I
+     * completely do not see telegram in members list".
+     */
+    conversationEndpoints: (conversationId: never) => endpointsFor(conversationId),
+
     listRoutines: () => listRoutines(),
     createRoutine: (patch: never) => announceRoutines(createRoutine(patch)),
     updateRoutine: (id: never, patch: never) => announceRoutines(updateRoutine(id, patch)),

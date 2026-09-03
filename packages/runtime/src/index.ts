@@ -34,6 +34,7 @@ export * from './room-dispatch.js';
 export * from './room-turn.js';
 export * from './turns.js';
 export * from './channel-bindings.js';
+export * from './channel-mirror.js';
 export * from './channel-telegram.js';
 export * from './telegram-authors.js';
 export * from './telegram-inbox.js';

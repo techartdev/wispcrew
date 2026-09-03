@@ -517,6 +517,11 @@ export interface WispBridge {
   /** Read the chat id from a bot the user has already messaged. */
   discoverChatId(): Promise<{ chatId?: string; error?: string }>;
 
+  /** Outside chats attached to a conversation, for the room panel. */
+  conversationEndpoints(conversationId: string): Promise<
+    { channel: 'telegram'; label?: string }[]
+  >;
+
   /* -- history recovery ----------------------------------------- */
 
   /**

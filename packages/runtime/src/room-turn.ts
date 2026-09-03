@@ -200,7 +200,7 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
           })),
         }
       : {}),
-  });
+  }, input.channel);
   }
 
   /*

@@ -97,6 +97,7 @@ export function RoomPane({
   onSetGreeting,
   onConfigure,
   onClose,
+  onEndpoints,
 }: {
   room: ConversationRecord;
   agents: AgentRecord[];
@@ -122,6 +123,8 @@ export function RoomPane({
   /** Open a particular member's own settings. */
   onConfigure(agentId: string): void;
   onClose(): void;
+  /** Outside chats attached to this conversation. */
+  onEndpoints(conversationId: string): Promise<{ channel: string; label?: string }[]>;
 }) {
   /*
    * The name being edited, kept locally so typing is not fighting a round
@@ -184,6 +187,22 @@ export function RoomPane({
   }, [routines, members]);
 
   const nameOf = (id: string) => agents.find((a) => a.id === id)?.name ?? id;
+
+  /*
+   * Re-read when the room changes, because a binding is made from Telegram
+   * — with /connect, in the chat — and nothing in this window would
+   * otherwise ever hear about it.
+   */
+  const [endpoints, setEndpoints] = useState<{ channel: string; label?: string }[]>([]);
+  useEffect(() => {
+    let live = true;
+    void onEndpoints(room.id).then((list) => {
+      if (live) setEndpoints(list);
+    });
+    return () => {
+      live = false;
+    };
+  }, [room.id, onEndpoints]);
 
   return (
     <aside className="room-pane" aria-label="About this conversation">
@@ -314,6 +333,28 @@ export function RoomPane({
           );
         })}
       </ul>
+
+      {/*
+        Where else this conversation is reachable from.
+        
+        A room bound to a Telegram chat looked exactly like one that was
+        not: `endpointsFor` existed in the runtime and was called from
+        nowhere in either app. Reported as "I completely do not see telegram
+        in members list" — and it matters more now, because messages typed
+        there arrive here as if from nowhere, and everything said here is
+        mirrored out to it.
+      */}
+      {endpoints.length > 0 && (
+        <div className="room-pane-elsewhere">
+          <span className="room-pane-elsewhere-label">Also reachable from</span>
+          {endpoints.map((e, i) => (
+            <span key={i} className="room-pane-endpoint">
+              {e.channel === 'telegram' ? 'Telegram' : e.channel}
+              {e.label ? ` — ${e.label}` : ''}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/*
         The room's standing instructions.

@@ -44,7 +44,27 @@ export function rebuildHistory(entries: TranscriptEntry[]): ChatMessage[] {
       case 'message': {
         if (!entry.content.trim()) continue;
         if (entry.role === 'assistant' && entry.isStreaming) continue;
-        out.push({ role: entry.role, content: entry.content });
+
+        /*
+         * Where the person is, when they are not at the app.
+         *
+         * `via` has been recorded on every message since channels existed
+         * and was dropped here, so the model never saw it — the same
+         * declared-but-unused shape as `authorId` before it. An agent
+         * learned that a request came from Telegram only when a policy
+         * notice happened to mention it, which is luck rather than design.
+         *
+         * It matters for the answer, not just for the record: somebody on a
+         * phone wants a short reply, not four hundred words of markdown
+         * with file paths they cannot click. Marked rather than described,
+         * in the same shape as `[room]`, so it costs a few tokens and never
+         * gets mistaken for the user's own words.
+         */
+        const via = entry.role === 'user' && entry.via && entry.via !== 'app'
+          ? `[via ${entry.via}] `
+          : '';
+
+        out.push({ role: entry.role, content: `${via}${entry.content}` });
         break;
       }
       case 'tool-call': {

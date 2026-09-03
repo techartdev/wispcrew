@@ -1206,6 +1206,12 @@ export function registerBridge(context: BridgeContext): void {
 
   /* -- routines ------------------------------------------------ */
 
+  // Which outside chats are attached to a conversation, so the room panel
+  // can say so. See the node's copy for why this was invisible.
+  handle('conversationEndpoints', (conversationId: string) =>
+    store.endpointsFor(conversationId),
+  );
+
   handle('listRoutines', (agentId?: string) => store.listRoutines(agentId));
 
   handle('createRoutine', (patch: Partial<RoutineRecord> & { agentId: string }) => {

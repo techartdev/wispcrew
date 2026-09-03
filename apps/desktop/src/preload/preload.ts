@@ -134,6 +134,8 @@ const bridge: WispBridge = {
   // Notification channel setup.
   testTelegram: () => ipcRenderer.invoke('wc:testTelegram'),
   discoverChatId: () => ipcRenderer.invoke('wc:discoverChatId'),
+  conversationEndpoints: (conversationId: string) =>
+    ipcRenderer.invoke('wc:conversationEndpoints', conversationId),
 
   listHistory: (agentId: string) => ipcRenderer.invoke('wc:listHistory', agentId),
   restoreHistory: (agentId: string, file: string) =>

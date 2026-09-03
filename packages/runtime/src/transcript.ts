@@ -20,14 +20,38 @@
  * The rule this exists to make easy: a change made where a call is answered
  * has to be announced from there.
  */
-import type { ConversationRecord, TranscriptEntry } from '@wispcrew/shared';
+import type { ChannelId, ConversationRecord, TranscriptEntry } from '@wispcrew/shared';
 import { emitEngineEvent } from './engine-events.js';
 import * as store from './store.js';
+import { mirrorEntry } from './channel-mirror.js';
 
 /** Persist a transcript entry and tell whoever is listening. */
-export function pushTranscript(agentId: string, entry: TranscriptEntry): void {
+export function pushTranscript(
+  agentId: string,
+  entry: TranscriptEntry,
+  /**
+   * Where this entry came from, when it came from somewhere.
+   *
+   * Only used to decide what NOT to mirror: an answer to a turn that
+   * started in Telegram is already being delivered there by
+   * `telegram-progress`, and sending it again would double it.
+   */
+  origin?: ChannelId,
+): void {
   store.upsertTranscriptEntry(agentId, entry);
   emitEngineEvent({ type: 'transcript', agentId, entry });
+
+  /*
+   * And show it to anyone watching this conversation from elsewhere.
+   *
+   * Deliberately not awaited. A slow or unreachable Telegram must not hold
+   * up the turn that produced the entry — the transcript is the record, and
+   * this is a convenience on top of it.
+   */
+  void mirrorEntry(agentId, entry, {
+    origin,
+    nameOf: (id) => store.getAgent(id)?.name,
+  });
 }
 
 /**

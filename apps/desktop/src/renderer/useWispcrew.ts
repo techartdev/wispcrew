@@ -848,6 +848,15 @@ export function useWispcrew() {
         }
       },
 
+      /** Outside chats attached to a conversation, for the room panel. */
+      async conversationEndpoints(conversationId: string) {
+        try {
+          return await api.conversationEndpoints(conversationId);
+        } catch {
+          return [];
+        }
+      },
+
       async discoverChatId() {
         try {
           return await api.discoverChatId();
