@@ -159,6 +159,23 @@ function environmentSection(opts: SystemPromptOptions): string[] {
     lines.push(`- Your model is ${opts.modelHint}${provider}.`);
   }
 
+  /*
+   * What time it is, which nothing told the model.
+   *
+   * A conversation reached the model as a flat sequence with no dates on
+   * anything, so an agent could not tell whether a tool result was four
+   * seconds or seven hours old. Observed: an agent listed open pull
+   * requests at 15:28, was asked "so is there new PRs or issues?" at 22:18,
+   * and answered from the earlier output in four seconds without checking
+   * again. That was reasonable given what it could see, which is the
+   * problem.
+   *
+   * The host knows this for certain, so it is stated rather than inferred —
+   * and it pairs with the ages marked on older tool results in
+   * `rebuildHistory`. Neither is much use alone: an age needs a now.
+   */
+  lines.push(`- The time is ${new Date().toISOString()} (UTC).`);
+
   if (opts.workspace) {
     /*
      * Two sentences, because the two halves are not equally true.

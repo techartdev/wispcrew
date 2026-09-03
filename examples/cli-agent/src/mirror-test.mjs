@@ -135,6 +135,53 @@ console.log('\n[the model] an agent can tell where you are');
   check('and only for what a person said', /entry\.role === 'user' && entry\.via/.test(branching));
 }
 
+console.log('\n[staleness] a tool result carries its age');
+{
+  /*
+   * Observed, and asked about directly: an agent listed the open pull
+   * requests at 15:28, was asked "so is there new PRs or issues?" at 22:18,
+   * and answered from the earlier output in FOUR SECONDS without checking
+   * again — presenting seven-hour-old data as current.
+   *
+   * It could not have known. A tool result is a fact about the world at a
+   * moment, the transcript records when, and `rebuildHistory` dropped it —
+   * so a result from seven hours ago looked exactly like one from four
+   * seconds ago. The same class as `via` and `authorId`: the record holds a
+   * fact the model never receives.
+   */
+  const { rebuildHistory } = await import('@wispcrew/runtime');
+  const now = Date.now();
+  const call = (ago) => ({
+    kind: 'tool-call',
+    id: `t${ago}`,
+    toolName: 'shell',
+    args: {},
+    status: 'completed',
+    content: 'no open pull requests',
+    createdAt: now - ago,
+  });
+
+  const last = (entries) => rebuildHistory(entries).at(-1).content;
+
+  // A turn making six calls in ten seconds does not need each one labelled.
+  check('a fresh result is not labelled', last([call(2_000)]) === 'no open pull requests');
+
+  check('half an hour is', /^\[from 30 minutes ago\]/.test(last([call(30 * 60_000)])));
+  check('and the case that caused this', /^\[from 7 hours ago\]/.test(last([call(7 * 3_600_000)])));
+  check('and days, not 72 hours', /^\[from 3 days ago\]/.test(last([call(3 * 86_400_000)])));
+
+  // Singular reads as English, because a model quoting it back should not
+  // produce "1 hours ago".
+  check('one hour is singular', /1 hour ago/.test(last([call(3_600_000)])));
+
+  /*
+   * An age needs a now. The prompt states the time from the host's own
+   * knowledge, because a model cannot know it and guessing would be worse.
+   */
+  const prompt = read('packages/core/src/prompt.ts');
+  check('and the prompt says what time it is', /The time is \$\{new Date\(\)\.toISOString\(\)\}/.test(prompt));
+}
+
 console.log('\n[the panel] the room says where it is reachable from');
 {
   const pane = read('apps/desktop/src/renderer/RoomPane.tsx');

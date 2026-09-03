@@ -36,6 +36,28 @@ import type { ChatMessage, TranscriptEntry } from '@wispcrew/shared';
  *  - A streaming assistant message that never completed is dropped: half a
  *    sentence is worse context than none.
  */
+/**
+ * How old a tool result must be before its age is worth saying.
+ *
+ * A turn that makes six calls in ten seconds does not need each one
+ * labelled; a result from before lunch does. Ten minutes is comfortably
+ * longer than any single turn and far shorter than "things may have
+ * changed".
+ */
+const STALE_TOOL_RESULT_MS = 10 * 60 * 1000;
+
+/** Plain English, because a timestamp invites arithmetic and gets it wrong. */
+function describeAge(ms: number): string {
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
 export function rebuildHistory(entries: TranscriptEntry[]): ChatMessage[] {
   const out: ChatMessage[] = [];
 
@@ -86,11 +108,32 @@ export function rebuildHistory(entries: TranscriptEntry[]): ChatMessage[] {
               : entry.status === 'failed'
                 ? 'Tool call failed.'
                 : 'Tool call produced no output.';
+        /*
+         * How old this answer is, when it is old enough to matter.
+         *
+         * A tool result is a fact about the world at a MOMENT — what the
+         * open pull requests were, what the file said, whether the build
+         * passed. The transcript records when, and this dropped it, so the
+         * model saw a seven-hour-old `gh pr list` exactly as it saw one
+         * from four seconds ago.
+         *
+         * Observed: an agent listed the open PRs at 15:28, was asked "so is
+         * there new PRs or issues?" at 22:18, and answered from the earlier
+         * output in four seconds without checking again. Nothing it could
+         * see said the data was stale — the same class as `via` and
+         * `authorId`, where the record holds a fact the model never gets.
+         *
+         * Only past the threshold, so an ordinary multi-step turn is not
+         * peppered with "[0 minutes ago]" on every call it just made.
+         */
+        const age = Date.now() - entry.createdAt;
+        const stale = age >= STALE_TOOL_RESULT_MS ? `[from ${describeAge(age)}] ` : '';
+
         out.push({
           role: 'tool',
           toolCallId: entry.id,
           toolName: entry.toolName,
-          content: entry.content?.trim() ? entry.content : fallback,
+          content: entry.content?.trim() ? `${stale}${entry.content}` : fallback,
         });
         break;
       }
