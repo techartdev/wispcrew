@@ -284,6 +284,56 @@ console.log('\n[find my chat] a reason, not a shrug');
       /connect\|disconnect\|here/.test(tgHost));
   check('and connect with no name lists the choices',
     /Which conversation\?/.test(tgHost));
+
+  /*
+   * And it says who is in the room, with handles.
+   *
+   * The room's name alone is not much use from a phone: addressing an agent
+   * needs its handle, and handles are shown in the desktop's room panel —
+   * the one place somebody on Telegram cannot look. Asked exactly that way:
+   * "how can I see who's in, so I know who to tag?"
+   */
+  check('/who is accepted as well as /here', /connect\|disconnect\|here\|who/.test(tgHost));
+  check('the roster names each handle', /`@\$\{m\.handle\} — /.test(tgHost));
+  check('and says how to address everyone', /@all for everyone/.test(tgHost));
+  // A one-to-one has one agent and no addressing to do; listing a handle
+  // nobody needs would be noise.
+  check('a direct chat gets no roster', /if \(!isGroup\(conversation\)\)/.test(tgHost));
+}
+
+console.log('\n[reconnect] a dropped daemon link is repaired, and what was missed is reloaded');
+{
+  const repo = fileURLToPath(new URL('../../../', import.meta.url));
+  const read = (f) => fs.readFileSync(path.join(repo, f), 'utf8');
+  /*
+   * The daemon outlives the app on purpose and RESTARTS ITSELF when the app
+   * ships newer engine code, so a dropped link is routine. It was only
+   * logged. Nothing reconnected and nothing cleared the dead client, so the
+   * documented fallback to the in-process engine never happened either.
+   *
+   * The visible symptom was a window that had quietly stopped updating: a
+   * message arriving over Telegram ran a real turn, wrote it to the
+   * transcript, and the open room showed nothing at all.
+   */
+  const main = read('apps/desktop/src/main/main.ts');
+  check('a drop clears the dead client', /daemonLink = null;/.test(main),
+    'calls keep going to a socket that is gone');
+  check('and schedules a relink', /const relink = \(attempt = 0\)/.test(main));
+  check('with a bounded backoff', /Math\.min\(500 \* 2 \*\* attempt, 5_000\)/.test(main));
+
+  /*
+   * Reconnecting alone leaves a hole. Events are pushed, not queued, so
+   * whatever happened while the window was deaf is simply missing from it —
+   * and a reconnect that leaves a hole looks exactly like the bug it fixed.
+   */
+  check('and asks the window to reload', /type: 'reconnected'/.test(main));
+
+  const link = read('apps/desktop/src/main/daemon-link.ts');
+  check('the link reports its own close', /onClose\?\.\(reason\)/.test(link));
+
+  const hook = read('apps/desktop/src/renderer/useWispcrew.ts');
+  check('the renderer reloads on it', /case 'reconnected'/.test(hook));
+  check('including the open conversation', /api\.getTranscript\(id\)\.then\(setTranscript\)/.test(hook));
 }
 
 console.log('');

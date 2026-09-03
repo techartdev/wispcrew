@@ -126,6 +126,17 @@ export interface DaemonLink {
 export async function linkToDaemon(
   dataDir: string,
   onEvent: (event: unknown) => void,
+  /**
+   * Called when the link drops, for any reason.
+   *
+   * The daemon deliberately outlives the app and RESTARTS ITSELF when the
+   * app ships newer engine code — so a dropped link is a routine event, not
+   * a catastrophe. It was only logged, and nothing reconnected: from that
+   * moment the window was deaf to everything the daemon did. A message
+   * arriving over Telegram ran a real turn, wrote it to the transcript, and
+   * the open window showed nothing at all.
+   */
+  onClose?: (reason: string) => void,
 ): Promise<DaemonLink | null> {
   /*
    * An explicit way back to the single-process app.
@@ -227,7 +238,10 @@ export async function linkToDaemon(
       token: endpoint.token,
       clientName: `wispcrew-desktop/${app.getVersion()}`,
       onEvent,
-      onClose: (reason) => fileLog('[daemon-link] disconnected:', reason),
+      onClose: (reason) => {
+        fileLog('[daemon-link] disconnected:', reason);
+        onClose?.(reason);
+      },
     });
     fileLog('[daemon-link] connected to', client.nodeName, started ? '(started)' : '(existing)');
     return { client, endpoint, started };

@@ -371,6 +371,26 @@ export function useWispcrew() {
         case 'skills-changed':
           setSkills(event.skills);
           return;
+        case 'reconnected': {
+          /*
+           * The link to the daemon dropped and came back, so reload what is
+           * on screen.
+           *
+           * Events are pushed, not queued: anything the daemon did while we
+           * were disconnected never arrived and never will. Until this
+           * existed the window simply stopped updating — a message arriving
+           * over Telegram ran a real turn, wrote it to the transcript, and
+           * the open room showed nothing, which is indistinguishable from
+           * the app being broken.
+           *
+           * A reload rather than a diff, because we do not know what was
+           * missed. It is cheap, and it is certainly correct.
+           */
+          const id = selectedRef.current;
+          if (id) void api.getTranscript(id).then(setTranscript);
+          void api.listConversations().then(setConversations);
+          return;
+        }
         case 'routines-changed':
           setRoutines(event.routines);
           return;

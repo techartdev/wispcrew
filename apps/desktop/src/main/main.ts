@@ -358,8 +358,64 @@ app.whenReady().then(async () => {
    * engine itself; an app that will not launch is worse than one whose
    * agents stop at quit.
    */
+  /*
+   * Relink when the daemon goes away, and say so when it comes back.
+   *
+   * A dropped link is ROUTINE: the daemon outlives the app on purpose, and
+   * restarts itself whenever the app ships newer engine code. It was only
+   * logged. Nothing cleared `daemonLink`, so the documented fallback to the
+   * in-process engine never happened either — the app went on calling a
+   * dead socket and hearing nothing from the live daemon.
+   *
+   * The visible symptom was a window that had simply stopped updating. A
+   * message arriving over Telegram ran a real turn and wrote it to the
+   * transcript, and the open room showed nothing.
+   */
+  let relinking: NodeJS.Timeout | undefined;
+
+  const relink = (attempt = 0): void => {
+    if (relinking) return;
+    // Backing off to a few seconds: a daemon restarting after an upgrade is
+    // back almost immediately, one that died for a bad reason should not be
+    // hammered.
+    const delay = Math.min(500 * 2 ** attempt, 5_000);
+
+    relinking = setTimeout(() => {
+      relinking = undefined;
+      void (async () => {
+        const next = await linkToDaemon(userDataDir, (e) => emitEvent(e as never), () =>
+          relink(),
+        );
+        if (!next) {
+          relink(attempt + 1);
+          return;
+        }
+
+        daemonLink = next;
+        fileLog('[daemon-link] relinked');
+
+        /*
+         * Whatever happened while we were deaf is not coming as an event.
+         *
+         * Events are pushed, not queued, so anything the daemon did between
+         * the drop and the relink is simply missing from the window. Asking
+         * the renderer to reload is the only honest repair — a reconnect
+         * that leaves a hole looks exactly like the bug it just fixed.
+         */
+        emitAgents();
+        emitRoutines();
+        emitEvent({ type: 'reconnected' } as never);
+      })();
+    }, delay);
+  };
+
   daemonLink = await withTimeout(
-    linkToDaemon(userDataDir, (event) => emitEvent(event as never)),
+    linkToDaemon(userDataDir, (event) => emitEvent(event as never), () => {
+      // Clear it first: the comment on `remote` below promises a fallback to
+      // the local engine, and a dead client is not a fallback.
+      daemonLink = null;
+      relink();
+    }),
     DAEMON_LINK_TIMEOUT_MS,
     null,
   );

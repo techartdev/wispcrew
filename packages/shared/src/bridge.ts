@@ -72,6 +72,14 @@ export type BridgeEvent =
   | { type: 'mcp-changed'; servers: McpServerStatus[] }
   /** A routine started or finished. */
   | { type: 'routines-changed'; routines: RoutineRecord[] }
+  /**
+   * The link to the daemon dropped and has been re-established.
+   *
+   * Events are pushed rather than queued, so anything that happened while
+   * the window was disconnected is missing from it. The renderer reloads
+   * what it is showing rather than guessing what it missed.
+   */
+  | { type: 'reconnected' }
   | { type: 'skills-changed'; skills: SkillRecord[] }
   /** Standing tool permissions changed (granted, revoked, agent deleted). */
   | { type: 'grants-changed'; grants: ToolGrant[] }

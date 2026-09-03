@@ -14,6 +14,41 @@ import type { ChannelId, ConversationRecord, GlobalSettings } from '@wispcrew/sh
 import { getConversation, listConversations, LOCAL_HUMAN_ID } from './conversations.js';
 import { currentApprovalAsker, setApprovalAsker } from './engine.js';
 import { runRoomTurn } from './room-turn.js';
+import { agentsIn, isGroup } from '@wispcrew/shared';
+import { getAgent } from './store.js';
+
+const NOT_CONNECTED = 'Not connected. Use /connect <name> to attach a conversation.';
+
+/**
+ * Where you are, and who is in it.
+ *
+ * The room's NAME alone is not much use from a phone. Addressing an agent
+ * needs its handle, and handles are shown in the desktop's room panel —
+ * the one place somebody on Telegram cannot look. Asked exactly that way:
+ * "how can I see who's in, so I know who to tag?"
+ *
+ * Answered by the same command that says where you are, because "which room
+ * is this" and "who is in it" are one question when you are about to type.
+ */
+function describeRoom(conversation: ConversationRecord): string {
+  const members = agentsIn(conversation);
+
+  const roster = members
+    .map((m) => `@${m.handle} — ${getAgent(m.id)?.name ?? m.handle}`)
+    .join('\n');
+
+  if (!isGroup(conversation)) {
+    // A one-to-one has exactly one agent and no addressing to do: naming a
+    // handle nobody needs would be noise.
+    return `This is "${conversation.title}".`;
+  }
+
+  return (
+    `This is "${conversation.title}".\n\n` +
+    `In this room:\n${roster}\n\n` +
+    'Tag one to address them, or @all for everyone.'
+  );
+}
 import {
   askViaTelegram,
   clearTelegramApprovals,
@@ -113,7 +148,7 @@ export async function handleInbound(
    * the user to identify by hand — and it works in a topic, which is the
    * case a settings form makes awkward.
    */
-  const command = /^\/(connect|disconnect|here)\b\s*(.*)$/i.exec(message.text.trim());
+  const command = /^\/(connect|disconnect|here|who)\b\s*(.*)$/i.exec(message.text.trim());
   if (command) {
     const verb = command[1]!.toLowerCase();
     const argument = command[2]!.trim();
@@ -125,15 +160,27 @@ export async function handleInbound(
       return { handled: true };
     }
 
-    if (verb === 'here') {
+    if (verb === 'here' || verb === 'who') {
       const current = conversationFor(endpoint);
       const conversation = current ? getConversation(current) : undefined;
+
+      /*
+       * Who is in the room, and what to call them.
+       *
+       * The name of the room alone is not much use from a phone: addressing
+       * an agent needs its handle, and the handles are only visible in the
+       * desktop's room panel — which is the one place somebody on Telegram
+       * cannot look. Asked directly: "how can I see who's in, so I know who
+       * to tag?"
+       *
+       * Reported by the same command that answers "where am I", because
+       * "which room is this" and "who is in it" are one question when you
+       * are about to type a message.
+       */
       await sendPlain(
         deps.token,
         message.chatId,
-        conversation
-          ? `This is "${conversation.title}".`
-          : 'Not connected. Use /connect <name> to attach a conversation.',
+        conversation ? describeRoom(conversation) : NOT_CONNECTED,
         message.threadId,
       );
       return { handled: true };
