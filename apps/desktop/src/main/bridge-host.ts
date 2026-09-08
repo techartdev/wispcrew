@@ -102,6 +102,7 @@ import {
   status,
   type OAuthVendor,
 } from '@wispcrew/runtime';
+import { writeDaemonSecrets } from './secrets-handoff.js';
 import { fileLog } from '@wispcrew/runtime';
 
 /**
@@ -516,7 +517,48 @@ export function registerBridge(context: BridgeContext): void {
     'forgetNode',
     'configureNode',
     'presetsForNode',
+
+    /*
+     * Signing in needs a browser, and importing a CLI sign-in needs that
+     * CLI's own files. Both are properties of the machine somebody is
+     * sitting at, and the daemon implements them ONLY to refuse.
+     *
+     * Forwarded, the refusal landed in the wrong place: "Sign in on the
+     * machine you are sitting at", shown to somebody who was sitting at it.
+     * The daemon runs on this machine too — its browserlessness is a fact
+     * about the daemon, not about the user.
+     *
+     * `check-bridge-methods.cjs` did not catch this, because these two DO
+     * exist on the node. Existing and being appropriate to forward are
+     * different questions, and the guard now asks the second one as well.
+     */
+    'oauthSignIn',
+    'oauthImportFromCli',
   ]);
+
+  /*
+   * Re-encrypt this profile's secrets so the DAEMON can read them.
+   *
+   * The desktop protects them with the OS keychain, which a background
+   * process cannot open, so a second copy is written under the machine-local
+   * key. That handoff ran only at startup — so a sign-in completed while the
+   * app was running reached the desktop's store and not the daemon's, and
+   * the daemon is what runs the turns. The credential would have appeared to
+   * work and then failed until the next restart.
+   *
+   * Only needed for the sign-in paths, which are LOCAL_ONLY. Everything
+   * else that stores a credential is forwarded to the daemon, which encrypts
+   * it with its own key in the first place.
+   */
+  const handOffToDaemon = (): void => {
+    try {
+      writeDaemonSecrets(ctx.userDataDir);
+    } catch (err) {
+      // Never fail a completed sign-in over the copy: the credential IS
+      // stored, and the next start will hand it over.
+      fileLog('[secrets] handoff after sign-in failed:', (err as Error).message);
+    }
+  };
 
   const handle = <T>(name: string, fn: (...args: never[]) => T | Promise<T>): void => {
     /*
@@ -908,6 +950,7 @@ export function registerBridge(context: BridgeContext): void {
       await shell.openExternal(pending.authorizeUrl);
       const credential = await pending.completed;
       saveCredential(ctx.userDataDir, 'chatgpt', credential);
+      handOffToDaemon();
     } else {
       // Anthropic registers one non-loopback redirect for this client, so
       // the callback page shows a code the user pastes back. That is a
@@ -924,6 +967,7 @@ export function registerBridge(context: BridgeContext): void {
         pkce.verifier,
       );
       saveCredential(ctx.userDataDir, 'anthropic', credential);
+      handOffToDaemon();
     }
     emitEvent({ type: 'oauth-changed', statuses: allStatuses(ctx.userDataDir) });
     return status(ctx.userDataDir, vendor);
@@ -966,6 +1010,7 @@ export function registerBridge(context: BridgeContext): void {
       ...(auth.accountId ? { accountId: auth.accountId } : {}),
       ...(auth.plan ? { plan: auth.plan } : {}),
     });
+    handOffToDaemon();
     emitEvent({ type: 'oauth-changed', statuses: allStatuses(ctx.userDataDir) });
     return status(ctx.userDataDir, vendor);
   });

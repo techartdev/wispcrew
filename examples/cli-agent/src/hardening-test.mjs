@@ -119,6 +119,48 @@ console.log('\n[machine output] --json is exactly one object');
   check('and are JSON in machine modes', /mode === 'text'[\s\S]*?stderr[\s\S]*?JSON.stringify/.test(output));
 }
 
+console.log('\n[signing in] happens on the machine with the browser');
+{
+  /*
+   * Reported with a screenshot: "Error invoking remote method
+   * 'wc:oauthSignIn': Signing in needs a browser. Sign in on the machine you
+   * are sitting at" — shown to somebody who WAS sitting at it.
+   *
+   * The daemon implements `oauthSignIn` and `oauthImportFromCli` only to
+   * refuse: a background process has no browser and no CLI files of its own.
+   * The desktop forwarded to it anyway, so Claude sign-in was unreachable
+   * from the app entirely. The daemon runs on this machine too — its
+   * browserlessness is a fact about the daemon, not about the user.
+   */
+  const bridge = fs.readFileSync(path.join(repo, 'apps/desktop/src/main/bridge-host.ts'), 'utf8');
+  const localOnly = bridge.match(/const LOCAL_ONLY = new Set\(\[([\s\S]*?)\]\)/)?.[1] ?? '';
+
+  check('signing in is not forwarded', /'oauthSignIn'/.test(localOnly));
+  check('nor is importing a CLI sign-in', /'oauthImportFromCli'/.test(localOnly));
+
+  /*
+   * And the credential must reach the DAEMON, which is what runs turns. The
+   * desktop encrypts with the OS keychain, which a background process cannot
+   * open, so a second copy goes under the machine-local key. That handoff ran
+   * only at startup — a sign-in completed while the app was running would
+   * have worked until the next restart and then stopped.
+   */
+  check('every sign-in path hands off to the daemon',
+    (bridge.match(/handOffToDaemon\(\)/g) ?? []).length >= 3,
+    'one of the three paths does not hand off');
+  check('and a failed handoff does not lose the sign-in',
+    /handoff after sign-in failed/.test(bridge));
+
+  /*
+   * The guard originally asked only whether a forwarded method EXISTS on the
+   * node. These two do — they exist in order to say no — so it passed them.
+   * Existing and being appropriate to forward are different questions.
+   */
+  const guard = fs.readFileSync(path.join(repo, 'scripts/check-bridge-methods.cjs'), 'utf8');
+  check('the guard now catches a method that only refuses', /refusers/.test(guard));
+  check('and names the fix', /LOCAL_ONLY in bridge-host\.ts/.test(guard));
+}
+
 console.log('\n[plaintext settings] a credential cannot be written there');
 {
   /*

@@ -82,6 +82,42 @@ if (staleLocal.length) {
   process.exit(1);
 }
 
+/*
+ * And the other half: a method can EXIST on the node and still be the wrong
+ * thing to forward to it.
+ *
+ * `oauthSignIn` and `oauthImportFromCli` are implemented on the node purely
+ * to refuse — "signing in needs a browser", "run it on the node itself".
+ * They passed the check above because they exist. Forwarded from a desktop
+ * whose daemon is on the SAME machine, they showed that refusal to somebody
+ * who was already sitting at it, and Claude sign-in was unreachable from
+ * the app entirely.
+ *
+ * A node method whose whole body is a throw is not an implementation, it is
+ * a sign reading "not here". Anything shaped like that must be declared
+ * LOCAL_ONLY, or the desktop forwards straight into the refusal.
+ */
+const methodsSrc = fs.readFileSync(path.join(repo, 'apps/daemon/src/methods.ts'), 'utf8');
+
+const refusers = [
+  ...methodsSrc.matchAll(
+    /^ {4}([A-Za-z0-9_]+):\s*\([^)]*\)\s*=>\s*\{\s*\r?\n\s*throw new Error\([\s\S]*?\r?\n {4}\},/gm,
+  ),
+]
+  .map((m) => m[1])
+  .filter((name) => handled.includes(name) && !localOnly.has(name));
+
+if (refusers.length) {
+  console.error('These node methods do nothing but refuse, yet the desktop forwards to them:\n');
+  for (const name of refusers) console.error(`  ${name}`);
+  console.error(
+    '\nA method that only throws is a sign saying "not on this machine". Add each to\n' +
+      'LOCAL_ONLY in bridge-host.ts so the desktop runs its own implementation — otherwise\n' +
+      'the user is shown a refusal about a machine they are already sitting at.',
+  );
+  process.exit(1);
+}
+
 console.log(
   `every forwarded bridge method exists on the node ` +
     `(${handled.length} handlers, ${localOnly.size} kept local)`,
