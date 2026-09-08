@@ -562,6 +562,30 @@ function SubscriptionSignIn({
         An API key is the supported option.
       </p>
 
+      {/*
+        Signing in here can sign you out THERE.
+        
+        Observed, not theorised: a user signed in to Claude and their Claude
+        Code session stopped working in the same minute. These flows share an
+        OAuth client, and a new grant appears to retire the previous one.
+        
+        This is why adopting a CLI sign-in deliberately drops its refresh
+        token — but that only protects the borrowed case. A fresh sign-in
+        creates a new grant, and nothing on this side can prevent the server
+        from retiring the old one.
+        
+        Said before the button rather than discovered afterwards, because the
+        symptom lands in a different application and reads as that
+        application breaking.
+      */}
+      {vendor === 'anthropic' && !status?.signedIn && (
+        <p className="warn-inline signin-warning">
+          Signing in may end an existing <strong>Claude Code</strong> session on this
+          machine — they share a sign-in, and the newer one appears to win. Run{' '}
+          <code>claude</code> once afterwards to sign it back in.
+        </p>
+      )}
+
       {status?.signedIn ? (
         <>
           <div className="signin-state">

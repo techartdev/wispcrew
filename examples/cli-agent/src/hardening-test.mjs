@@ -161,6 +161,51 @@ console.log('\n[claude subscription] the request must identify as Claude Code');
     /startsWith\('sk-ant-oat'\)/.test(src));
 }
 
+console.log('\n[claude tool calls] arguments have to survive the stream');
+{
+  /*
+   * Reported by an agent that diagnosed its own tooling precisely: "every
+   * tool call that requires arguments is coming back with an
+   * argument-parsing error — read_file says paths[1] must be of type
+   * string. Received undefined… the only call that works is list_dir with
+   * no arguments." A weaker model on the same harness worked, which
+   * correctly pointed at the Anthropic adapter rather than the tool layer.
+   *
+   * Two faults, both unreachable until Claude inference started working an
+   * hour earlier — no Anthropic tool call had ever been streamed.
+   */
+  const src = fs.readFileSync(path.join(repo, 'packages/llm/src/anthropic.ts'), 'utf8');
+
+  /*
+   * 1. `input_json_delta` carries `partial_json`, not `text`. Reading
+   *    `text` meant the accumulator stayed empty and every call arrived as
+   *    `{}` — "there is no agent called undefined".
+   */
+  check('the tool fragment is read from partial_json',
+    /d\.partial_json \?\? d\.text/.test(src),
+    'reading only `text` leaves every tool call with empty arguments');
+  check('and the field is declared', /partial_json\?: string/.test(src));
+
+  /*
+   * 2. The content-block INDEX was used as an array index while a block was
+   *    also pushed. Identical for a single tool at index 0, and divergent
+   *    the moment anything precedes it — which a `thinking` block now
+   *    always does, emitting the same call twice, once with no arguments.
+   */
+  check('one block per tool, in stream order',
+    /for \(const acc of toolBlocks\.values\(\)\)/.test(src),
+    'indexing by the content-block index emits a duplicate empty call');
+
+  /*
+   * Comments stripped before this one. The first version failed on the
+   * comment that EXPLAINS the fix, which names the pattern it removed —
+   * the third time a check here has caught its own prose. A test that reads
+   * source has to look at code, not at writing about code.
+   */
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  check('and no index-assignment remains', !/content\[idx\]/.test(code));
+}
+
 console.log('\n[a 429 is not proof of a spent plan]');
 {
   /*

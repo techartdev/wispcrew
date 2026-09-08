@@ -25,7 +25,20 @@ interface AnthropicContentBlock {
 interface AnthropicEvent {
   type: string;
   message?: { usage?: { input_tokens?: number; output_tokens?: number } };
-  delta?: { type?: string; text?: string; stop_reason?: string };
+  /**
+   * `text_delta` carries `text`; `input_json_delta` carries `partial_json`.
+   *
+   * They are different field names for the same idea, and the tool-argument
+   * accumulator read `text` for both — so it never accumulated anything and
+   * every tool call arrived with `{}`. Reported by an agent that diagnosed
+   * it precisely: "read_file says paths[1] must be of type string. Received
+   * undefined… the only call that works is list_dir with no arguments."
+   *
+   * It survived because Claude inference itself never worked until the
+   * system-block fix an hour before this, so no Anthropic tool call had
+   * ever been streamed. The bug was written, shipped, and unreachable.
+   */
+  delta?: { type?: string; text?: string; partial_json?: string; stop_reason?: string };
   content_block?: AnthropicContentBlock;
   index?: number;
   error?: { message?: string };
@@ -412,9 +425,19 @@ export class AnthropicProvider implements ChatProvider {
           case 'content_block_delta': {
             const d = ev.delta;
             if (d?.type === 'text_delta' && d.text) yield { kind: 'text', text: d.text };
-            if (d?.type === 'input_json_delta' && ev.index !== undefined && d.text) {
+            /*
+             * The fragment is in `partial_json`, not `text`.
+             *
+             * Reading `text` here meant the accumulator stayed empty and
+             * every tool call reached the tool layer as `{}` — "there is no
+             * agent called undefined", "paths[1] must be of type string".
+             * `text` is accepted as well because it costs nothing and a
+             * transport that ever used it should not silently drop work.
+             */
+            if (d?.type === 'input_json_delta' && ev.index !== undefined) {
+              const fragment = d.partial_json ?? d.text;
               const acc = toolBlocks.get(ev.index);
-              if (acc) acc.input += d.text;
+              if (acc && fragment) acc.input += fragment;
             }
             break;
           }
@@ -429,15 +452,33 @@ export class AnthropicProvider implements ChatProvider {
     }
     for (const c of emitPendingTool()) yield c;
 
+    /*
+     * One block per tool, in the order Anthropic streamed them.
+     *
+     * This used to `push` a block AND assign at `content[idx]`, where `idx`
+     * is Anthropic's content-block index. With a single tool at index 0
+     * those were the same slot and it worked by accident. They stop being
+     * the same slot the moment anything precedes the tool — and a
+     * subscription turn now begins with a `thinking` block, so the tool sat
+     * at index 1 and was emitted TWICE: once from the push with
+     * `input: undefined`, once from the assignment with the parsed input.
+     *
+     * The map is already keyed by index and iterates in insertion order, so
+     * the position is carried by the iteration and does not need to be
+     * re-derived.
+     */
     const content: AnthropicContentBlock[] = [];
-    for (const [idx, acc] of toolBlocks) {
-      content.push({ type: 'tool_use', id: acc.id, name: acc.name, input: undefined });
-      content[idx] = content[idx] ?? { type: 'tool_use', id: acc.id, name: acc.name, input: {} };
+    for (const acc of toolBlocks.values()) {
+      let input: unknown = {};
       try {
-        content[idx]!.input = JSON.parse(acc.input || '{}');
+        input = JSON.parse(acc.input || '{}');
       } catch {
-        content[idx]!.input = {};
+        // A truncated stream leaves half a JSON object. An empty argument
+        // set is wrong, but it is not a crash, and the tool reports what it
+        // was missing.
+        input = {};
       }
+      content.push({ type: 'tool_use', id: acc.id, name: acc.name, input });
     }
     yield this.doneFromContent(content);
   }
