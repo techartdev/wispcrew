@@ -130,9 +130,11 @@ silently does nothing costs trust in every other control.
    outside contribution.
 2. **Installers are unsigned.** SmartScreen and Gatekeeper will warn.
 3. **No auto-update channel.**
-4. **The Claude browser sign-in's browser half is unverified**, as is Claude
-   inference — the test account has been rate-limited throughout. The token
-   endpoint itself is confirmed by a real grant exchange.
+4. **Claude inference is unconfirmed.** The sign-in path is now verified end
+   to end — browser, paste-back, token exchange, "Signed in to Claude ·
+   renews automatically" — but every completion returns 429
+   `rate_limit_error` with `x-should-retry: true`. That was misread as a
+   spent plan for weeks; a spent plan does not tell you to retry.
 5. **A group chat cannot bootstrap its own Telegram binding.** The bot
    accepts messages from the configured chat, or from one already bound, so
    `/connect` typed in a fresh group is refused for want of a binding. Using

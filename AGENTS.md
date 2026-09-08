@@ -382,19 +382,27 @@ through the real IPC handlers, and DPAPI encryption at rest.
 For Claude, the **token endpoint is confirmed working**: a real grant exchange
 against `platform.claude.com/v1/oauth/token` returned a new access token with
 a rotated refresh token, which proves the endpoint, client id, request shape
-and response parsing. What remains unconfirmed is only the *browser half* —
-opening the authorize page and pasting the code back — and Claude inference
-itself, because the test account has been rate-limited throughout (429 for a
-valid token vs 401 for an invalid one, so authentication is proven).
+and response parsing. The BROWSER HALF is now verified too: a real sign-in on Windows opened the
+authorize page, the pasted code exchanged, and the app reported "Signed in
+to Claude · renews automatically". What remains unconfirmed is Claude
+inference itself, because the account has been RATE-LIMITED throughout — which was
+misread for weeks as a spent plan. Captured from the real account moments
+after a successful sign-in: HTTP 429 with `x-should-retry: true` and
+`{"error":{"type":"rate_limit_error","message":"Error"}}`. A spent plan does
+not tell you to retry, so `x-should-retry` is the signal that separates the
+two, and the message is the single word "Error" and carries nothing. A 429
+still proves authentication (an invalid token gives 401).
 
 ## Not yet done / known gaps
 
 - macOS and Linux are **not verified on real hardware**. CI builds, tests and
   boots the app there, but cannot judge window chrome, native dialogs or
   keychain behaviour.
-- The Claude browser sign-in's *browser half* (authorize page + paste-back) is
-  unverified, as is Claude inference — the test account is rate-limited. The
-  token endpoint itself is confirmed (see above).
+- **Claude inference** is still unconfirmed: the account returns 429
+  `rate_limit_error` with `x-should-retry: true`, so authentication and the
+  whole sign-in path are proven and no completion has yet come back. The
+  browser half IS now verified — a real sign-in reported "Signed in to
+  Claude · renews automatically".
 - Installers are unsigned.
 - `docs/STATUS.md` carries the detailed status list.
 

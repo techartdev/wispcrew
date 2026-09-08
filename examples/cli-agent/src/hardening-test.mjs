@@ -119,6 +119,45 @@ console.log('\n[machine output] --json is exactly one object');
   check('and are JSON in machine modes', /mode === 'text'[\s\S]*?stderr[\s\S]*?JSON.stringify/.test(output));
 }
 
+console.log('\n[a 429 is not proof of a spent plan]');
+{
+  /*
+   * Reported straight after a successful sign-in: "it said I'm out of
+   * usage, which is wrong". It was wrong.
+   *
+   * Every 429 was reported as "Your Claude plan's usage limit is currently
+   * reached", and the response body was read and discarded. Captured from
+   * the reporter's own account, moments after signing in:
+   *
+   *   HTTP 429
+   *   x-should-retry: true
+   *   {"type":"error","error":{"type":"rate_limit_error","message":"Error"}}
+   *
+   * A spent plan does not tell you to retry. The two cases are hours apart
+   * in meaning — wait a moment, versus stop for the day — and the evidence
+   * to tell them apart was in the headers all along.
+   */
+  const src = fs.readFileSync(path.join(repo, 'packages/llm/src/anthropic.ts'), 'utf8');
+
+  check('the retry header is read', /x-should-retry/.test(src),
+    'the only reliable signal is being ignored');
+  check('and it prevents the quota claim',
+    /!shouldRetry && \/usage limit\|quota/.test(src));
+  check('a rate limit says what it is', /rate-limiting this request/.test(src));
+  check('and suggests when to retry', /Try again in \$\{retryAfter\}s\./.test(src));
+
+  /*
+   * Anthropic's 429 message is the single word "Error". Quoting it makes a
+   * clear sentence look like a stack trace, so a useless message is dropped
+   * rather than passed through.
+   */
+  check('a useless provider message is not quoted',
+    /\^\(error\|unknown\|bad request\)/.test(src));
+
+  // And the body is no longer read and thrown away.
+  check('the body is actually used', /extractAnthropicMessage\(text\)/.test(src));
+}
+
 console.log('\n[signing in] happens on the machine with the browser');
 {
   /*

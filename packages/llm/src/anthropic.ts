@@ -45,6 +45,39 @@ export interface AnthropicConfig extends ProviderConfig {
   onUsage?: (usage: UsageSnapshot) => void;
 }
 
+/**
+ * Anthropic's own sentence about what went wrong.
+ *
+ * Its errors are `{"type":"error","error":{"type":..., "message":...}}`.
+ * Quoting the message is what lets a reader tell a per-minute rate limit
+ * from a spent plan, which a status code alone cannot.
+ */
+/**
+ * Quote Anthropic only when it said something.
+ *
+ * Its 429 body carries `"message":"Error"` — a word that adds nothing and
+ * makes a clear sentence look like a stack trace. A useless message is worse
+ * than none, so it is dropped.
+ */
+function describeSaid(said: string | undefined): string {
+  if (!said) return '';
+  const useless = /^(error|unknown|bad request)\.?$/i.test(said.trim());
+  return useless ? '' : ` (${said})`;
+}
+
+function extractAnthropicMessage(body: string): string | undefined {
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string; type?: string } };
+    const message = parsed.error?.message?.trim();
+    if (message) return message;
+    return parsed.error?.type?.trim() || undefined;
+  } catch {
+    // Not JSON. A short body is still better evidence than silence.
+    const trimmed = body.trim();
+    return trimmed && trimmed.length <= 200 ? trimmed : undefined;
+  }
+}
+
 export class AnthropicProvider implements ChatProvider {
   readonly kind = 'anthropic' as const;
   readonly label: string;
@@ -204,16 +237,62 @@ export class AnthropicProvider implements ChatProvider {
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      // A 429 here means the plan's quota is spent, not that anything is
-      // misconfigured — so say that plainly rather than showing a status
-      // code. Anthropic sends no reset time on the subscription path
-      // (verified: the only hint is `x-should-retry`), so do not imply we
-      // know when it lifts.
+      /*
+       * A 429 is not proof that the plan's quota is spent.
+       *
+       * This asserted exactly that for every 429 and discarded the body,
+       * which produced "Your Claude plan's usage limit is currently
+       * reached" for somebody who had just signed in and had usage
+       * available. Anthropic answers 429 for a short-term REQUEST rate
+       * limit as well, and the two are hours apart in what they mean to a
+       * user: one says wait a moment, the other says stop for the day.
+       *
+       * The body says which. `error.type` is `rate_limit_error` for the
+       * transient case, and the message names the quota for the other. So
+       * the distinction is read rather than assumed, and Anthropic's own
+       * words are quoted either way — the same rule as never inventing a
+       * usage number for a provider that reports none.
+       */
       if (res.status === 429) {
+        const said = extractAnthropicMessage(text);
+        const retryAfter = res.headers.get('retry-after');
+
+        /*
+         * `x-should-retry` settles it, and it was the evidence being thrown
+         * away.
+         *
+         * Captured from a real subscription account that had just signed in
+         * and had usage available:
+         *
+         *   HTTP 429
+         *   x-should-retry: true
+         *   {"type":"error","error":{"type":"rate_limit_error",
+         *    "message":"Error"}}
+         *
+         * A spent plan does not tell you to retry. So a `true` here means
+         * the per-minute limiter whatever the prose says — and note the
+         * message is literally "Error", which is why the header and the
+         * type carry the meaning and the message carries none.
+         */
+        const shouldRetry = res.headers.get('x-should-retry') === 'true';
+        const looksLikeQuota =
+          !shouldRetry && /usage limit|quota|credit balance|spend/i.test(said ?? '');
+
+        if (!looksLikeQuota) {
+          const wait = retryAfter ? ` Try again in ${retryAfter}s.` : ' Try again in a moment.';
+          throw new Error(`Anthropic is rate-limiting this request.${wait}${describeSaid(said)}`);
+        }
+
         const when = usage?.resetsAt
           ? ` It resets ${describeReset(usage.resetsAt)}.`
-          : ' Anthropic does not say when it resets — try again later, or switch to an API key or another provider in Settings.';
-        throw new Error(`Your Claude plan's usage limit is currently reached.${when}`);
+          : retryAfter
+            ? ` Anthropic suggests retrying in ${retryAfter}s.`
+            : ' Anthropic does not say when it resets — try again later, or switch to an API key or another provider in Settings.';
+
+        throw new Error(
+          `Your Claude plan's usage limit is currently reached.${when}` +
+            (said ? ` (${said})` : ''),
+        );
       }
       throw new Error(`Anthropic returned HTTP ${res.status}: ${text.slice(0, 500)}`);
     }
