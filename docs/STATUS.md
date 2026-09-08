@@ -60,6 +60,7 @@ assertion — not by reading the code.
 | First run on a clean profile | Empty userData dir: onboarding banner, guided composer, a missing key reported as "needs an API key", never as "rejected" |
 | Accessibility | Live-region announcements, `aria-expanded` tool cards, modal focus trap with focus restore, visible focus rings |
 | ChatGPT subscription sign-in | Browser OAuth end to end: sign-in, token exchange, streaming, tool call, refresh with rotation |
+| **Claude subscription sign-in** | Browser OAuth end to end on Windows, then a real `claude-opus-5` turn answering `17 × 23 = 391`, streaming included |
 | The CLI, on a real server | `configure`, `agents create`, `ask`, `rooms`, `tasks`, `capabilities` on a Hetzner VPS over SSH |
 | Headless approval | `wispcrew ask` raised a shell request; `approvals allow` answered from a second terminal |
 | Paired remote nodes | Pairing without a desktop, surviving a node restart, an agent created on one machine staying routable from another |
@@ -130,11 +131,13 @@ silently does nothing costs trust in every other control.
    outside contribution.
 2. **Installers are unsigned.** SmartScreen and Gatekeeper will warn.
 3. **No auto-update channel.**
-4. **Claude inference is unconfirmed.** The sign-in path is now verified end
-   to end — browser, paste-back, token exchange, "Signed in to Claude ·
-   renews automatically" — but every completion returns 429
-   `rate_limit_error` with `x-should-retry: true`. That was misread as a
-   spent plan for weeks; a spent plan does not tell you to retry.
+4. **Claude on a subscription now works end to end** — browser sign-in,
+   token exchange, streaming inference, correct answers. It never was rate
+   limited: Anthropic refuses a request that does not carry
+   `You are Claude Code, Anthropic's official CLI for Claude.` as its FIRST
+   system BLOCK, and refuses it with a 429 that reads exactly like a rate
+   limit. Two wrong explanations — a spent plan, then a throttle — survived
+   weeks on that one misleading status code.
 5. **A group chat cannot bootstrap its own Telegram binding.** The bot
    accepts messages from the configured chat, or from one already bound, so
    `/connect` typed in a fresh group is refused for want of a binding. Using

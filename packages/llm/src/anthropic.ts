@@ -65,6 +65,15 @@ function describeSaid(said: string | undefined): string {
   return useless ? '' : ` (${said})`;
 }
 
+/**
+ * What Anthropic requires a subscription request to say about itself.
+ *
+ * Sent as the first system block for an `sk-ant-oat` token. Exact text
+ * matters: anything else, or the same words concatenated into a larger
+ * string, is refused with a 429 that claims to be a rate limit.
+ */
+const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.";
+
 function extractAnthropicMessage(body: string): string | undefined {
   try {
     const parsed = JSON.parse(body) as { error?: { message?: string; type?: string } };
@@ -113,6 +122,11 @@ export class AnthropicProvider implements ChatProvider {
    * The token's own prefix says which it is, so callers never have to
    * declare the mode and cannot get it wrong.
    */
+  /** True when authenticating with a subscription token rather than a key. */
+  private usesSubscription(): boolean {
+    return (this.config.apiKey ?? '').startsWith('sk-ant-oat');
+  }
+
   private authHeaders(): Record<string, string> {
     const credential = this.config.apiKey ?? '';
     const base: Record<string, string> = {
@@ -120,7 +134,7 @@ export class AnthropicProvider implements ChatProvider {
       'anthropic-version': '2023-06-01',
     };
 
-    if (credential.startsWith('sk-ant-oat')) {
+    if (this.usesSubscription()) {
       return {
         ...base,
         authorization: `Bearer ${credential}`,
@@ -209,7 +223,41 @@ export class AnthropicProvider implements ChatProvider {
        */
       max_tokens: Math.max(request.maxTokens ?? 4096, budget ? budget + 4096 : 0),
       messages,
-      ...(systemParts.length ? { system: systemParts.join('\n\n') } : {}),
+      /*
+       * A subscription token must identify as Claude Code, as the FIRST
+       * system block, or Anthropic refuses the request.
+       *
+       * This is why Claude inference never worked. The refusal is HTTP 429
+       * with `{"type":"rate_limit_error","message":"Error"}` and
+       * `x-should-retry: true` — indistinguishable from a real rate limit,
+       * and read as one for weeks, including in this repo's own notes.
+       *
+       * Measured against the live API on a subscription account, in one
+       * run:
+       *
+       *   identity only, as a string ............ 200
+       *   identity + our prompt, ONE STRING ..... 429
+       *   identity + our prompt, as BLOCKS ...... 200
+       *   our prompt first, identity second ..... 429
+       *   our prompt alone ...................... 429
+       *
+       * So it is not enough for the text to be present: the system must be
+       * an ARRAY whose first block is exactly that sentence. Concatenating
+       * into one string fails — which is the trap, because the obvious fix
+       * produces the same 429 it was already being mistaken for.
+       *
+       * An API key needs none of this and is left alone.
+       */
+      ...(this.usesSubscription()
+        ? {
+            system: [
+              { type: 'text', text: CLAUDE_CODE_IDENTITY },
+              ...(systemParts.length ? [{ type: 'text', text: systemParts.join('\n\n') }] : []),
+            ],
+          }
+        : systemParts.length
+          ? { system: systemParts.join('\n\n') }
+          : {}),
       ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
       ...(budget ? { thinking: { type: 'enabled', budget_tokens: budget } } : {}),
     };

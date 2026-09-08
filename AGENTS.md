@@ -350,6 +350,7 @@ documented for third-party use):
 | Claude token endpoint | `platform.claude.com/v1/oauth/token` — **not** `console.anthropic.com`, which an early draft guessed and which silently never works |
 | Claude redirect | One registered non-loopback URI; localhost is rejected, hence the paste-back step |
 | Claude auth header | `sk-ant-oat…` needs `Authorization: Bearer` + OAuth beta + Claude Code identity headers. Sent as `x-api-key` it returns 401 |
+| **Claude system prompt** | **The request MUST carry `You are Claude Code, Anthropic's official CLI for Claude.` as the FIRST system BLOCK.** An array is required — the same text concatenated into one system string is refused. Without it: 429 `rate_limit_error` with message `Error` and `x-should-retry: true`, which reads exactly like a rate limit |
 | ChatGPT endpoint | `chatgpt.com/backend-api/codex/responses`. `api.openai.com` returns 401 for these tokens |
 | ChatGPT required fields | `instructions` **and** `store: false`. Omit either and the backend returns HTTP 400 with an **empty body** |
 | ChatGPT redirect | Loopback on port **1455** — fixed by the client registration, not free choice |
@@ -382,27 +383,33 @@ through the real IPC handlers, and DPAPI encryption at rest.
 For Claude, the **token endpoint is confirmed working**: a real grant exchange
 against `platform.claude.com/v1/oauth/token` returned a new access token with
 a rotated refresh token, which proves the endpoint, client id, request shape
-and response parsing. The BROWSER HALF is now verified too: a real sign-in on Windows opened the
-authorize page, the pasted code exchanged, and the app reported "Signed in
-to Claude · renews automatically". What remains unconfirmed is Claude
-inference itself, because the account has been RATE-LIMITED throughout — which was
-misread for weeks as a spent plan. Captured from the real account moments
-after a successful sign-in: HTTP 429 with `x-should-retry: true` and
-`{"error":{"type":"rate_limit_error","message":"Error"}}`. A spent plan does
-not tell you to retry, so `x-should-retry` is the signal that separates the
-two, and the message is the single word "Error" and carries nothing. A 429
-still proves authentication (an invalid token gives 401).
+and response parsing. The BROWSER HALF is verified: a real sign-in on Windows opened the authorize
+page, the pasted code exchanged, and the app reported "Signed in to Claude ·
+renews automatically". **And Claude inference now works** — a real
+`claude-opus-5` turn returned `17 × 23 = 391`, streaming included.
+
+IT WAS NEVER RATE-LIMITED. For weeks the 429 was recorded here as a spent
+plan, then as a rate limit; it was Anthropic REFUSING A REQUEST THAT DID NOT
+IDENTIFY ITSELF. Measured live, in one run:
+
+    identity only, as a string ............ 200
+    identity + our prompt, ONE STRING ..... 429
+    identity + our prompt, as BLOCKS ...... 200
+    our prompt first, identity second ..... 429
+    our prompt alone ...................... 429
+
+So the text being present is not enough: `system` must be an ARRAY whose
+first block is exactly that sentence. That is the trap — the obvious fix,
+prepending it to the existing string, returns the same 429 and looks like
+confirmation that the account is throttled. A 429 does still prove
+authentication (an invalid token gives 401), which is what made the wrong
+explanation so durable.
 
 ## Not yet done / known gaps
 
 - macOS and Linux are **not verified on real hardware**. CI builds, tests and
   boots the app there, but cannot judge window chrome, native dialogs or
   keychain behaviour.
-- **Claude inference** is still unconfirmed: the account returns 429
-  `rate_limit_error` with `x-should-retry: true`, so authentication and the
-  whole sign-in path are proven and no completion has yet come back. The
-  browser half IS now verified — a real sign-in reported "Signed in to
-  Claude · renews automatically".
 - Installers are unsigned.
 - `docs/STATUS.md` carries the detailed status list.
 

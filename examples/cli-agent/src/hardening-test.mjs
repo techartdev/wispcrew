@@ -119,6 +119,48 @@ console.log('\n[machine output] --json is exactly one object');
   check('and are JSON in machine modes', /mode === 'text'[\s\S]*?stderr[\s\S]*?JSON.stringify/.test(output));
 }
 
+console.log('\n[claude subscription] the request must identify as Claude Code');
+{
+  /*
+   * Why Claude inference never worked, and why nobody could tell.
+   *
+   * Anthropic refuses a subscription request that does not identify itself,
+   * and the refusal is HTTP 429 with
+   * `{"type":"rate_limit_error","message":"Error"}` and
+   * `x-should-retry: true`. That is indistinguishable from a real rate
+   * limit, so it was recorded as one — in the code, in AGENTS.md, and in
+   * every status note — for weeks.
+   *
+   * Measured live against a real subscription account, all in one run:
+   *
+   *   identity only, as a string ............ 200
+   *   identity + our prompt, ONE STRING ..... 429
+   *   identity + our prompt, as BLOCKS ...... 200
+   *   our prompt first, identity second ..... 429
+   *   our prompt alone ...................... 429
+   *
+   * So the text being present is not enough. The system must be an ARRAY
+   * whose FIRST block is exactly that sentence — concatenating it into one
+   * string produces the same 429, which is the trap: the obvious fix looks
+   * like the bug it was already mistaken for.
+   */
+  const src = fs.readFileSync(path.join(repo, 'packages/llm/src/anthropic.ts'), 'utf8');
+
+  check('the identity is exact',
+    /You are Claude Code, Anthropic's official CLI for Claude\./.test(src));
+  check('it is sent as the first block',
+    /system: \[\s*\{ type: 'text', text: CLAUDE_CODE_IDENTITY \}/.test(src),
+    'concatenating into one string is refused with a 429');
+  check('and our own prompt follows as a second block',
+    /systemParts\.join\('\\n\\n'\) \}\] : \[\]\)/.test(src));
+
+  // An API key needs none of this, and adding it would be noise in every
+  // request from somebody who is not on a subscription.
+  check('only for a subscription token', /this\.usesSubscription\(\)/.test(src));
+  check('which is what the token prefix says',
+    /startsWith\('sk-ant-oat'\)/.test(src));
+}
+
 console.log('\n[a 429 is not proof of a spent plan]');
 {
   /*
