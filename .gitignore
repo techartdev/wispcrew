@@ -76,3 +76,9 @@ client-persistence.json
 .room-test.mjs
 .cp-test.mjs
 .dsh-recover/
+
+# Local one-off scripts: these carried a real router address and username.
+routeros-readonly.ps1
+_*.sh
+_*.cjs
+testkey*.txt

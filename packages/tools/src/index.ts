@@ -5,3 +5,4 @@ export * from './notify.js';
 export * from './schedule.js';
 export * from './skill.js';
 export * from './roommates.js';
+export * from './private-address.js';

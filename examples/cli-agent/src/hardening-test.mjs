@@ -14,6 +14,7 @@
  * Offline: reads files, executes nothing.
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -159,6 +160,119 @@ console.log('\n[claude subscription] the request must identify as Claude Code');
   check('only for a subscription token', /this\.usesSubscription\(\)/.test(src));
   check('which is what the token prefix says',
     /startsWith\('sk-ant-oat'\)/.test(src));
+}
+
+console.log('\n[web_fetch] auto-approved, so it must not reach the inside');
+{
+  /*
+   * `web_fetch` is in SAFE_TOOLS — it runs with no approval card, on the
+   * reasoning that reading a public page is harmless. It validated the
+   * PROTOCOL and nothing else, so an agent could read
+   * `http://169.254.169.254/latest/meta-data/` and hand back cloud
+   * credentials, with no card and nothing to deny: `readonly` policy only
+   * blocks calls that need approval, and this never did.
+   *
+   * Worst on exactly the deployment this project encourages — an agent on a
+   * VPS. Found by an agent reviewing this repository.
+   */
+  const { isPrivateAddress, ToolRegistry: Registry } = await import('@wispcrew/tools');
+
+  for (const [address, what] of [
+    ['169.254.169.254', 'cloud metadata'],
+    ['127.0.0.1', 'loopback'],
+    ['10.1.2.3', 'private'],
+    ['192.168.1.1', 'a home router'],
+    ['172.16.0.1', 'private'],
+    ['::1', 'IPv6 loopback'],
+    ['fd00::1', 'IPv6 unique-local'],
+    ['::ffff:127.0.0.1', 'IPv4-mapped loopback'],
+  ]) {
+    check(`${what} is refused`, isPrivateAddress(address), address);
+  }
+
+  // And the boundaries, because a range that is too wide silently breaks
+  // ordinary fetching, which is the failure nobody reports.
+  check('172.32.x is public', !isPrivateAddress('172.32.0.1'));
+  check('a public address is allowed', !isPrivateAddress('93.184.216.34'));
+
+  /*
+   * Checked at EVERY redirect hop. A public URL that redirects to
+   * 169.254.169.254 is a one-line redirector, and a check performed only on
+   * the URL the model supplied would not see it.
+   */
+  const web = fs.readFileSync(path.join(repo, 'packages/tools/src/web.ts'), 'utf8');
+  check('redirects are followed by hand', /redirect: 'manual'/.test(web));
+  check('and re-checked each hop', /await refuseIfPrivate\(target\)/.test(web));
+  check('with a hop limit', /MAX_REDIRECTS/.test(web));
+
+  // Through the real tool, not just the predicate.
+  const refused = await new Registry().execute(
+    'web_fetch',
+    { url: 'http://169.254.169.254/latest/meta-data/' },
+    { workspaceRoot: repo },
+  );
+  check('the tool itself refuses metadata', !refused.ok && refused.errorCode === 'blocked_address',
+    refused.errorCode);
+}
+
+console.log('\n[the node socket] an anonymous connection is bounded');
+{
+  /*
+   * `buffered += chunk` had no cap and nothing timed out before `hello`, on
+   * a port documented as internet-reachable. An anonymous connection
+   * sending an endless stream with no newline grew the string until the
+   * daemon died — no token, no pairing code, no protocol knowledge needed.
+   */
+  const src = fs.readFileSync(path.join(repo, 'packages/runtime/src/node-server.ts'), 'utf8');
+
+  check('a silent connection is closed', /AUTH_DEADLINE_MS/.test(src));
+  check('the pre-auth buffer is capped', /MAX_PREAUTH_BYTES/.test(src));
+  check('and an authenticated frame too', /MAX_FRAME_BYTES/.test(src));
+  check('the cap is enforced, not just declared',
+    /buffered\.length > cap/.test(src));
+  // A timer that keeps the process alive would trade one bug for another.
+  check('the deadline does not hold the process open', /authDeadline\.unref/.test(src));
+}
+
+console.log('\n[deleting an agent] takes everything it owned with it');
+{
+  /*
+   * The cleanup lived in the DESKTOP bridge only — clearSession,
+   * revokeForAgent, and deleting the agent's routines. The daemon's method
+   * table called the bare store function, and the daemon is normally what
+   * runs, because agent-scoped calls route to the node that owns the agent.
+   * So the complete path was the one that almost never executed.
+   *
+   * `grants.ts` promises a grant is "dropped when their agent is deleted,
+   * so a recreated id cannot inherit a permission granted to something
+   * else". Through the daemon, it was not. And an orphaned routine fires on
+   * its cron forever, because the scheduler never checks the agent exists.
+   *
+   * Tested through the STORE, which is what both hosts now call — the
+   * previous test could not have caught this, because it asserted against
+   * the same single function while the divergence lived in the callers.
+   */
+  const rt = await import('@wispcrew/runtime');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-delete-'));
+
+  rt.setHost({ dataDir: dir, defaultWorkspaceRoot: dir, nodeName: 't', crypto: rt.createNodeCrypto(dir) });
+  rt.initStore(dir);
+  rt.initGrants(dir);
+
+  const agent = rt.createAgent({ name: 'Doomed', presetId: 'openai', model: 'gpt-5.6-luna', workspaceRoot: dir });
+  rt.createRoutine({ agentId: agent.id, name: 'nightly', cron: '0 9 * * *', prompt: 'check' });
+  rt.grant(agent.id, 'shell');
+
+  check('the fixture is real', rt.listRoutines(agent.id).length === 1 && rt.isGranted(agent.id, 'shell'));
+
+  rt.deleteAgent(agent.id);
+
+  check('its routines go with it', rt.listRoutines(agent.id).length === 0,
+    'an orphan fires on its cron forever');
+  check('and its standing grants', !rt.isGranted(agent.id, 'shell'),
+    'a permission the user believes they destroyed');
+
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 console.log('\n[missing arguments] a tool says what it needed');

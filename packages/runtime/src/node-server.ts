@@ -76,6 +76,31 @@ function tokensMatch(a: string, b: string): boolean {
   return timingSafeEqual(bufA, bufB);
 }
 
+/**
+ * How long a connection may stay silent before sending `hello`.
+ *
+ * Only has to be shorter than forever: a real client authenticates as its
+ * first act. Anything still anonymous after this is not a client.
+ */
+const AUTH_DEADLINE_MS = 10_000;
+
+/**
+ * The most an UNAUTHENTICATED connection may buffer.
+ *
+ * A `hello` frame is a token and a client name — a few hundred bytes. This
+ * is far above that and far below anything that threatens the process.
+ */
+const MAX_PREAUTH_BYTES = 64 * 1024;
+
+/**
+ * The most an authenticated connection may buffer for one frame.
+ *
+ * Generous, because a legitimate request can carry an attachment; bounded,
+ * because `decodeFrames` returns the remainder untouched when it finds no
+ * newline, so an endless line is an endless string.
+ */
+const MAX_FRAME_BYTES = 32 * 1024 * 1024;
+
 export function serveNode(options: NodeServerOptions): { close(): Promise<void> } {
   const { server, token, nodeName, onCall } = options;
   const connections = new Set<Socket>();
@@ -139,8 +164,49 @@ export function serveNode(options: NodeServerOptions): { close(): Promise<void> 
       if (!socket.destroyed) socket.destroy();
     };
 
+    /*
+     * An unauthenticated connection may not hold the process open, and may
+     * not grow without limit.
+     *
+     * `buffered += chunk` had no cap and nothing timed out before `hello`,
+     * on a port this project documents as internet-reachable. So an
+     * anonymous connection that opened and sent an endless stream with no
+     * newline grew the string until the daemon died — a denial of service
+     * needing no token, no pairing code and no protocol knowledge.
+     *
+     * Found by an agent reviewing this repository.
+     *
+     * The deadline is generous because it only has to be shorter than
+     * "forever"; a real client sends `hello` immediately.
+     */
+    const authDeadline = setTimeout(() => {
+      if (!authenticated) {
+        fileLog('[node] closing a connection that never authenticated');
+        close();
+      }
+    }, AUTH_DEADLINE_MS);
+    // Do not keep the process alive for the sake of this timer.
+    authDeadline.unref?.();
+
+    socket.on('close', () => clearTimeout(authDeadline));
+
     socket.on('data', (chunk: string) => {
       buffered += chunk;
+
+      /*
+       * A frame that never ends is not a frame. Bounded hard before
+       * authentication, and generously after, because a legitimate request
+       * carrying an attachment is large but not unbounded.
+       */
+      const cap = authenticated ? MAX_FRAME_BYTES : MAX_PREAUTH_BYTES;
+      if (buffered.length > cap) {
+        fileLog(
+          `[node] closing: ${authenticated ? 'a frame' : 'an unauthenticated frame'} exceeded ${cap} bytes`,
+        );
+        close();
+        return;
+      }
+
       const { frames, rest } = decodeFrames(buffered);
       buffered = rest;
 

@@ -6,6 +6,15 @@
  * Both are best-effort; providers without network access will see errors.
  */
 import type { Tool, ToolResult } from '@wispcrew/shared';
+import { refuseIfPrivate } from './private-address.js';
+
+/**
+ * Redirect hops before giving up.
+ *
+ * Each hop is re-checked against the private-address rule, so this bounds
+ * both a redirect loop and the effort of walking one.
+ */
+const MAX_REDIRECTS = 5;
 
 const MAX_BODY = 300_000;
 const USER_AGENT =
@@ -63,10 +72,53 @@ export const webFetchTool: Tool<FetchArgs> = {
       return { id: '', name: 'web_fetch', ok: false, errorCode: 'bad_url', content: 'Only http/https URLs are supported' };
     }
     try {
-      const res = await fetch(url, {
-        headers: { 'user-agent': USER_AGENT, accept: 'text/html,text/plain,*/*' },
-        redirect: 'follow',
-      });
+      /*
+       * Follow redirects by hand, checking the address at every hop.
+       *
+       * `web_fetch` is auto-approved, so nothing else stands between a model
+       * and the address it names. Checking only the URL the model supplied
+       * would be defeated by any public URL that redirects to
+       * `169.254.169.254` — which is a one-line redirector to write.
+       */
+      let res: Response;
+      let target = url;
+      let hops = 0;
+
+      for (;;) {
+        const refusal = await refuseIfPrivate(target);
+        if (refusal) {
+          return { id: '', name: 'web_fetch', ok: false, errorCode: 'blocked_address', content: refusal };
+        }
+
+        res = await fetch(target, {
+          headers: { 'user-agent': USER_AGENT, accept: 'text/html,text/plain,*/*' },
+          redirect: 'manual',
+        });
+
+        const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+        if (!location) break;
+
+        if (++hops > MAX_REDIRECTS) {
+          return {
+            id: '',
+            name: 'web_fetch',
+            ok: false,
+            errorCode: 'too_many_redirects',
+            content: `Gave up after ${MAX_REDIRECTS} redirects starting at ${url.href}.`,
+          };
+        }
+
+        try {
+          target = new URL(location, target);
+        } catch {
+          return { id: '', name: 'web_fetch', ok: false, errorCode: 'bad_url', content: `Redirected to an unusable URL: ${location}` };
+        }
+
+        if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+          return { id: '', name: 'web_fetch', ok: false, errorCode: 'bad_url', content: `Redirected to a non-http URL: ${target.href}` };
+        }
+      }
+
       if (!res.ok) {
         return {
           id: '',

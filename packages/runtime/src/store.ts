@@ -43,6 +43,8 @@ import type {
 } from '@wispcrew/shared';
 import { fileLog } from './filelog.js';
 import { writeCheckpoint } from './checkpoints.js';
+import { revokeForAgent } from './grants.js';
+import { clearSession } from './agent-sessions.js';
 
 let baseDir = '';
 
@@ -392,6 +394,36 @@ export function deleteAgent(id: string): void {
    * whoever created it, and may hold other agents and a transcript the user
    * still wants.
    */
+  /*
+   * Everything the agent owned goes with it, from HERE.
+   *
+   * This cleanup lived in the desktop bridge only: `clearSession`,
+   * `revokeForAgent`, and deleting the agent's routines. The daemon's method
+   * table called the bare store function — and the daemon is normally the
+   * one that runs, because agent-scoped calls are routed to whichever node
+   * owns the agent. So the complete path was the one that almost never
+   * executed.
+   *
+   * Two consequences, both real:
+   *
+   *  - **A security invariant was violated.** `grants.ts` states that a
+   *    grant is "dropped when their agent is deleted, so a recreated id
+   *    cannot inherit a permission granted to something else". Deleting
+   *    through the daemon left the row behind, so an "always allow" the user
+   *    believed they had destroyed survived them.
+   *  - **Routines outlived their agent.** The scheduler iterates every
+   *    routine and never checks the agent still exists, so an orphan fires
+   *    on its cron forever — recreating a transcript file for a deleted
+   *    agent and recording a failed run, nightly, invisibly.
+   *
+   * Found by an agent reviewing this repository. The fix is not to add the
+   * missing lines to the second call site: it is to have one place that
+   * cannot be called incompletely.
+   */
+  for (const routine of listRoutines(id)) deleteRoutine(routine.id);
+  revokeForAgent(id);
+  clearSession(id);
+
   onAgentDeleted?.(id);
 }
 

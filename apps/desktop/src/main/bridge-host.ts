@@ -752,15 +752,18 @@ export function registerBridge(context: BridgeContext): void {
   });
 
   handle('deleteAgent', (id: string) => {
-    clearSession(id);
+    /*
+     * The cleanup itself lives in `store.deleteAgent` now.
+     *
+     * It used to live HERE and nowhere else, so deleting through the daemon
+     * — which is the path that normally runs — left standing grants and
+     * orphaned routines behind. Duplicating the lines into the node's method
+     * table would have fixed the symptom and kept the shape that caused it.
+     */
     store.deleteAgent(id);
-    // Drop standing grants with the agent, so an id that happens to be
-    // reused can never inherit a permission granted to something else.
-    revokeForAgent(id);
+
+    // Still announced from here: these are this client's own views.
     emitEvent({ type: 'grants-changed', grants: listGrants() });
-    // Routines belonging to a deleted agent would never fire again; remove
-    // them rather than leaving invisible orphans in the store.
-    for (const r of store.listRoutines(id)) store.deleteRoutine(r.id);
     emitAgents();
     emitRoutines();
   });
