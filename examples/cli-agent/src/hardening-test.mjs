@@ -161,6 +161,49 @@ console.log('\n[claude subscription] the request must identify as Claude Code');
     /startsWith\('sk-ant-oat'\)/.test(src));
 }
 
+console.log('\n[missing arguments] a tool says what it needed');
+{
+  /*
+   * A confusing error does not just fail one call — it teaches the model to
+   * keep failing.
+   *
+   * When arguments did not arrive, the tool ran anyway and failed inside
+   * itself, so the model was told `The "paths[1]" argument must be of type
+   * string. Received undefined`. That is Node's internals; it names nothing
+   * the model can act on, and it cannot even tell that its ARGUMENTS were
+   * the problem. So it retried the identical call, repeatedly.
+   *
+   * And every failure stays in the transcript. Measured on a real
+   * conversation: after the underlying serialisation bug was fixed, a FRESH
+   * agent on the same model, build and daemon called the tool correctly
+   * while the existing one kept sending `{}` — it was copying its own
+   * failures out of its history.
+   */
+  const { ToolRegistry } = await import('@wispcrew/tools');
+  const registry = new ToolRegistry();
+  const ctx = { workspaceRoot: repo };
+
+  const readFile = await registry.execute('read_file', {}, ctx);
+  check('the failure is about the arguments', readFile.errorCode === 'bad_arguments',
+    readFile.errorCode);
+  check('it names what was missing', /without `path`/.test(readFile.content), readFile.content);
+  check('and what the tool needs', /requires `path` \(string\)/.test(readFile.content));
+  // A shape is easier to copy than a description — and a description is
+  // exactly what this model had already failed to act on.
+  check('with a concrete example', /\{"path":"…"\}/.test(readFile.content), readFile.content);
+
+  const shell = await registry.execute('shell', {}, ctx);
+  check('the same for shell', /without `command`/.test(shell.content), shell.content);
+
+  /*
+   * And a tool with nothing required still runs. `list_dir` defaults to the
+   * workspace root, which is why it was the ONE call that worked throughout
+   * the incident — it could not tell the difference.
+   */
+  const listDir = await registry.execute('list_dir', {}, ctx);
+  check('a tool with no required arguments still runs', listDir.ok, listDir.content);
+}
+
 console.log('\n[claude tool calls] arguments have to survive the stream');
 {
   /*

@@ -40,6 +40,58 @@ export const defaultTools: Tool<any>[] = [
  */
 export const DEFAULT_TOOL_DEADLINE_MS = 330_000;
 
+/** The `required` names a call did not supply. */
+function missingRequired(def: ToolDefinition, args: Record<string, unknown>): string[] {
+  const schema = def.parameters as
+    | { required?: unknown; properties?: Record<string, unknown> }
+    | undefined;
+
+  const required = Array.isArray(schema?.required) ? (schema.required as string[]) : [];
+  const supplied = args ?? {};
+
+  return required.filter((key) => supplied[key] === undefined);
+}
+
+/** "`path` (string)" — enough for a model to fix the call without guessing. */
+function describeRequired(def: ToolDefinition): string {
+  const schema = def.parameters as
+    | { required?: unknown; properties?: Record<string, { type?: string }> }
+    | undefined;
+
+  const required = Array.isArray(schema?.required) ? (schema.required as string[]) : [];
+  if (!required.length) return 'no arguments';
+
+  return required
+    .map((key) => {
+      const type = schema?.properties?.[key]?.type;
+      return type ? `\`${key}\` (${type})` : `\`${key}\``;
+    })
+    .join(', ');
+}
+
+/**
+ * A concrete call, because a shape is easier to copy than a description.
+ *
+ * The model that hit this had emitted `{}` a dozen times; an abstract
+ * explanation of the schema is exactly what it had already failed to act on.
+ */
+function exampleCall(def: ToolDefinition): string {
+  const schema = def.parameters as
+    | { required?: unknown; properties?: Record<string, { type?: string }> }
+    | undefined;
+
+  const required = Array.isArray(schema?.required) ? (schema.required as string[]) : [];
+
+  const sample = Object.fromEntries(
+    required.map((key) => {
+      const type = schema?.properties?.[key]?.type;
+      return [key, type === 'number' ? 1 : type === 'boolean' ? true : '…'];
+    }),
+  );
+
+  return JSON.stringify(sample);
+}
+
 export class ToolRegistry {
   private tools = new Map<string, Tool<any>>();
 
@@ -76,6 +128,41 @@ export class ToolRegistry {
         ok: false,
         errorCode: 'unknown_tool',
         content: `Unknown tool: ${name}. Available: ${[...this.tools.keys()].join(', ')}`,
+      };
+    }
+
+    /*
+     * Say plainly when a required argument is missing.
+     *
+     * Without this the tool ran anyway and failed somewhere inside itself,
+     * so the model was told `The "paths[1]" argument must be of type
+     * string. Received undefined` — Node's internals, naming nothing the
+     * model can act on. It could not tell that its ARGUMENTS had not
+     * arrived, so it retried the identical call and failed identically.
+     *
+     * That mattered far more than it looks. Every failed call stays in the
+     * transcript, and the next turn sees a run of its own empty calls and
+     * copies the pattern: measured on a real conversation, a fresh agent on
+     * the same model, build and daemon called the same tool correctly while
+     * the poisoned one kept sending `{}` even after the underlying
+     * serialisation bug was fixed. A confusing error does not just fail a
+     * call — it teaches the model to keep failing.
+     *
+     * Checked here rather than in each tool because it is the one place
+     * that has both the arguments and the schema.
+     */
+    const missing = missingRequired(tool.definition, args);
+    if (missing.length) {
+      return {
+        id: '',
+        name,
+        ok: false,
+        errorCode: 'bad_arguments',
+        content:
+          `${name} was called without ${missing.map((m) => `\`${m}\``).join(', ')}. ` +
+          `It requires ${describeRequired(tool.definition)}. ` +
+          'Send the arguments as a JSON object, for example ' +
+          `${exampleCall(tool.definition)}.`,
       };
     }
     /*
