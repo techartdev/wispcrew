@@ -804,43 +804,111 @@ body {
   }
 }
 
-/* Tool cards */
+/*
+ * Tool activity — one line per run, not one card per call.
+ *
+ * The transcript is prose with work in it, and the work used to shout: every
+ * call was a bordered card the same weight as the answer, so eight commands
+ * buried the one sentence that mattered. This is deliberately the quietest
+ * thing in the conversation — no border, no raised surface, dimmed text —
+ * because the summary is enough for almost every reader and the detail is
+ * one click away for the one who needs it.
+ */
 
-.tool-card {
+.tool-run {
   max-width: 860px;
   margin: 0 auto 10px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
 }
 
-.tool-head {
+.tool-run-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
-  padding: 7px 10px;
+  padding: 5px 8px;
+  margin-left: -8px;
   background: transparent;
   border: 0;
-  color: inherit;
+  border-radius: 7px;
+  color: var(--text-dim);
   font: inherit;
+  font-size: 12.5px;
   cursor: pointer;
   text-align: left;
+  transition: background 120ms ease, color 120ms ease;
 }
 
-.tool-caret {
-  color: var(--text-dim);
+.tool-run-head:hover {
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+.tool-run-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
   font-size: 11px;
+  color: var(--ok);
 }
 
-.tool-name {
+/* A failure keeps its colour whatever the run summary says. */
+.tool-run-failed .tool-run-icon,
+.tool-run-failed-count {
+  color: var(--danger);
+}
+
+.tool-run-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-run-failed {
+  color: var(--danger);
+}
+
+.tool-run-caret {
+  flex: none;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/*
+ * The detail, once asked for. Indented under the summary and rendered as a
+ * quiet list rather than a stack of cards: the hierarchy is "this run, these
+ * calls", and nesting borders inside borders is what made the old view look
+ * like a form.
+ */
+.tool-run-body {
+  margin: 2px 0 4px 8px;
+  padding-left: 13px;
+  border-left: 2px solid var(--border);
+}
+
+.tool-detail + .tool-detail {
+  margin-top: 10px;
+}
+
+.tool-detail-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tool-detail-name {
+  flex: none;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
+  color: var(--text);
 }
 
-.tool-args {
+.tool-detail-args {
   flex: 1;
   min-width: 0;
   color: var(--text-dim);
@@ -851,38 +919,22 @@ body {
   text-overflow: ellipsis;
 }
 
-.tool-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--text-dim);
-}
-
-.tool-status-completed {
-  color: var(--ok);
-}
-
-.tool-status-failed,
-.tool-status-denied {
+.tool-detail-failed .tool-detail-name,
+.tool-detail-denied .tool-detail-name {
   color: var(--danger);
 }
 
-.tool-body {
-  border-top: 1px solid var(--border);
-  padding: 8px 10px;
-  background: var(--bg-inset);
-}
-
 .tool-pre {
-  margin: 0 0 6px;
-  padding: 8px;
-  max-height: 320px;
+  margin: 5px 0 0;
+  padding: 8px 9px;
+  max-height: 300px;
   overflow: auto;
-  background: var(--bg);
+  background: var(--bg-inset);
   border-radius: 6px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

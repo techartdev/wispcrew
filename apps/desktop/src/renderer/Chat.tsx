@@ -177,48 +177,163 @@ function formatBytes(bytes: number): string {
 /* Tool call card                                                      */
 /* ------------------------------------------------------------------ */
 
-function ToolCard({ entry }: { entry: Extract<TranscriptEntry, { kind: 'tool-call' }> }) {
-  // Long tool output is collapsed by default: a 4000-character file dump
-  // would otherwise bury the assistant's actual answer.
-  const [open, setOpen] = useState(false);
+type ToolEntry = Extract<TranscriptEntry, { kind: 'tool-call' }>;
 
-  const args = entry.args ? JSON.stringify(entry.args) : '';
-  const preview = args.length > 90 ? `${args.slice(0, 90)}…` : args;
+type TranscriptItem =
+  | { kind: 'tool-run'; entries: ToolEntry[] }
+  | { kind: 'entry'; entry: TranscriptEntry };
 
-  const statusLabel: Record<typeof entry.status, string> = {
-    running: 'Running',
-    completed: 'Done',
-    failed: 'Failed',
-    denied: 'Denied',
+/**
+ * Fold consecutive tool calls into one run.
+ *
+ * The model works in steps: it says something, calls three or four tools,
+ * then says what it found. Rendering each call as a peer of the prose made
+ * the transcript read as a log file with occasional sentences in it. Grouping
+ * restores the shape of the actual turn -- said, did, said -- and is purely a
+ * presentation concern: nothing here changes what is stored or sent.
+ *
+ * An approval interrupts a run deliberately. It is a question addressed to
+ * the person, and burying it inside a collapsed strip would hide the one
+ * entry that is waiting on them.
+ */
+function groupTranscript(entries: TranscriptEntry[]): TranscriptItem[] {
+  const out: TranscriptItem[] = [];
+
+  for (const entry of entries) {
+    if (entry.kind === 'tool-call') {
+      const last = out[out.length - 1];
+      if (last && last.kind === 'tool-run') {
+        last.entries.push(entry);
+        continue;
+      }
+      out.push({ kind: 'tool-run', entries: [entry] });
+      continue;
+    }
+    out.push({ kind: 'entry', entry });
+  }
+
+  return out;
+}
+
+
+/**
+ * What a run of tool calls DID, in one line.
+ *
+ * A card per call was honest and unreadable: eight shell commands pushed the
+ * one sentence that mattered off the screen, and the arguments -- raw JSON in
+ * a monospace strip -- were noise for everyone except the person debugging
+ * that exact call. The information is not thrown away, it stops being the
+ * loudest thing in the transcript.
+ *
+ * Verbs rather than tool names, because "ran 3 commands, read 2 files" is
+ * what somebody scanning the conversation wants to know; `shell`, `read_file`
+ * and `grep` are an implementation detail of the same sentence.
+ */
+function summariseRun(entries: ToolEntry[]): string {
+  const verbs: Record<string, string> = {
+    shell: 'ran',
+    read_file: 'read',
+    write_file: 'wrote',
+    edit_file: 'edited',
+    list_dir: 'listed',
+    grep: 'searched',
+    web_fetch: 'fetched',
+    web_search: 'searched the web',
+  };
+  const nouns: Record<string, [string, string]> = {
+    ran: ['command', 'commands'],
+    read: ['file', 'files'],
+    wrote: ['file', 'files'],
+    edited: ['file', 'files'],
+    listed: ['directory', 'directories'],
+    searched: ['search', 'searches'],
+    fetched: ['page', 'pages'],
   };
 
+  const counts = new Map<string, number>();
+  for (const e of entries) {
+    const verb = verbs[e.toolName] ?? e.toolName;
+    counts.set(verb, (counts.get(verb) ?? 0) + 1);
+  }
+
+  const parts: string[] = [];
+  for (const [verb, n] of counts) {
+    const noun = nouns[verb];
+    parts.push(noun ? `${verb} ${n} ${n === 1 ? noun[0] : noun[1]}` : `${verb}${n > 1 ? ` ×${n}` : ''}`);
+  }
+
+  const text = parts.join(', ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function ToolRun({ entries }: { entries: ToolEntry[] }) {
+  /*
+   * Closed by default. The summary is the answer for almost every reader;
+   * opening is for the one person, once, who needs to know what `grep`
+   * actually matched.
+   */
+  const [open, setOpen] = useState(false);
+
+  const running = entries.some((e) => e.status === 'running');
+  const failed = entries.filter((e) => e.status === 'failed' || e.status === 'denied');
+
+  /*
+   * A failure is never summarised away.
+   *
+   * Collapsing detail is fine while everything worked; hiding the fact that
+   * a command failed behind a cheerful one-liner is how a person ends up
+   * trusting a result that was never produced.
+   */
+  const state = running ? 'running' : failed.length ? 'failed' : 'done';
+
   return (
-    <div className={`tool-card tool-${entry.status}`}>
+    <div className={`tool-run tool-run-${state}`}>
       <button
         type="button"
-        className="tool-head"
+        className="tool-run-head"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label={`${entry.toolName}, ${statusLabel[entry.status]}. ${open ? 'Hide' : 'Show'} details`}
       >
-        <span className="tool-caret" aria-hidden="true">
+        <span className="tool-run-icon" aria-hidden="true">
+          {running ? <span className="spinner" /> : failed.length ? '!' : '✓'}
+        </span>
+        <span className="tool-run-label">
+          {summariseRun(entries)}
+          {failed.length > 0 && (
+            <span className="tool-run-failed">
+              {' · '}
+              {failed.length} failed
+            </span>
+          )}
+        </span>
+        <span className="tool-run-caret" aria-hidden="true">
           {open ? '▾' : '▸'}
         </span>
-        <span className="tool-name">{entry.toolName}</span>
-        {preview && <span className="tool-args">{preview}</span>}
-        <span className={`tool-status tool-status-${entry.status}`}>
-          {entry.status === 'running' && <span className="spinner" aria-hidden="true" />}
-          {statusLabel[entry.status]}
-        </span>
       </button>
+
       {open && (
-        <div className="tool-body">
-          {entry.args && Object.keys(entry.args).length > 0 && (
-            <pre className="tool-pre">{JSON.stringify(entry.args, null, 2)}</pre>
-          )}
-          {entry.content && <pre className="tool-pre">{entry.content}</pre>}
+        <div className="tool-run-body">
+          {entries.map((entry) => (
+            <ToolDetail key={entry.id} entry={entry} />
+          ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** One call, once somebody has asked to see the run. */
+function ToolDetail({ entry }: { entry: ToolEntry }) {
+  const args = entry.args ? JSON.stringify(entry.args) : '';
+  const preview = args.length > 120 ? `${args.slice(0, 120)}…` : args;
+
+  return (
+    <div className={`tool-detail tool-detail-${entry.status}`}>
+      <div className="tool-detail-head">
+        <span className="tool-detail-name">{entry.toolName}</span>
+        {preview && <span className="tool-detail-args">{preview}</span>}
+      </div>
+      {entry.content && <pre className="tool-pre">{entry.content}</pre>}
     </div>
   );
 }
@@ -1006,7 +1121,13 @@ export function Chat({
           </div>
         )}
 
-        {transcript.map((entry) => {
+        {groupTranscript(transcript).map((item) => {
+          if (item.kind === 'tool-run') {
+            const first = item.entries[0];
+            if (!first) return null;
+            return <ToolRun key={first.id} entries={item.entries} />;
+          }
+          const entry = item.entry;
           switch (entry.kind) {
             case 'message':
               return (
@@ -1055,8 +1176,6 @@ export function Chat({
                   </div>
                 </div>
               );
-            case 'tool-call':
-              return <ToolCard key={entry.id} entry={entry} />;
             case 'approval':
               return <ApprovalCard key={entry.id} entry={entry} onResolve={onResolveApproval} />;
             case 'notice':
