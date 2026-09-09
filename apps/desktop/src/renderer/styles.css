@@ -599,25 +599,48 @@ body {
 /* Top bar                                                           */
 /* ---------------------------------------------------------------- */
 
+/*
+ * The header names the conversation; it is not a toolbar.
+ *
+ * It carried its own raised surface, so with the sidebar and composer also
+ * raised the conversation sat in a well with three walls -- the layout was
+ * legible as boxes before it was legible as a conversation. One background
+ * for the whole window; the hairline rule is enough to separate them.
+ */
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 11px 16px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-raised);
+  background: var(--bg);
 }
 
 .topbar-title {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 9px;
   min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.topbar-title h1,
+.topbar-title h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .topbar-sub {
-  font-size: 12px;
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .topbar-actions {
@@ -632,9 +655,9 @@ body {
   gap: 16px;
   margin: 12px 16px 0;
   padding: 12px 14px;
-  background: var(--bg-inset);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 
 /* ---------------------------------------------------------------- */
@@ -1037,27 +1060,32 @@ body {
 
 /* Composer */
 
+/*
+ * The composer sits on the page, and the INPUT is the raised thing in it.
+ *
+ * A raised bar behind an inset field is two surfaces to say "type here".
+ */
 .composer {
   border-top: 1px solid var(--border);
-  background: var(--bg-raised);
-  padding: 10px 16px 12px;
+  background: var(--bg);
+  padding: 12px 16px 14px;
 }
 
 .composer-row {
   display: flex;
   gap: 8px;
   align-items: flex-end;
-  max-width: 860px;
+  max-width: 760px;
   margin: 0 auto;
 }
 
 .composer-input {
   flex: 1;
   resize: none;
-  padding: 9px 12px;
-  background: var(--bg-inset);
+  padding: 10px 13px;
+  background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--text);
   font: inherit;
   line-height: 1.5;
@@ -1070,7 +1098,7 @@ body {
 }
 
 .composer-hint {
-  max-width: 860px;
+  max-width: 760px;
   margin: 6px auto 0;
   font-size: 11.5px;
 }
@@ -1083,18 +1111,6 @@ body {
  * rather than somebody standing in it. Listing it as a member would be
  * tidier and would say something untrue.
  */
-.room-pane-elsewhere {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  align-items: baseline;
-  margin: 14px 0 0;
-}
-.room-pane-endpoint {
-  font-size: 12px;
-  color: var(--text);
-}
-
 /*
  * A step that is not available yet.
  *
@@ -1657,25 +1673,6 @@ body {
  * size, and there are enough of these -- header, member rows, panels -- that
  * they added up to a scattering of small rectangles.
  */
-.icon-btn {
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  color: var(--text-dim);
-  font-size: 15px;
-  cursor: pointer;
-  transition: background 110ms ease, color 110ms ease;
-}
-
-.icon-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
 /* ---------------------------------------------------------------- */
 /* Modals & forms                                                    */
 /* ---------------------------------------------------------------- */
@@ -2056,9 +2053,14 @@ body {
     color 120ms ease;
 }
 
+/*
+ * The edge appears on hover; at rest there is only the glyph. A drawn
+ * outline around a 30px icon is most of what the eye sees at that size, and
+ * there are enough of these -- header, member rows, panels -- that they
+ * added up to a scattering of small rectangles.
+ */
 .icon-btn:hover:not(:disabled) {
   background: var(--bg-hover);
-  border-color: var(--border-strong);
   color: var(--text);
 }
 
