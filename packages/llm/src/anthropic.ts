@@ -20,6 +20,8 @@ interface AnthropicContentBlock {
   content?: unknown;
   /** Present on `image` blocks (base64 source). */
   source?: { type: 'base64'; media_type: string; data: string };
+  /** Prompt-caching marker. */
+  cache_control?: { type: 'ephemeral' };
 }
 
 interface AnthropicEvent {
@@ -166,6 +168,20 @@ export class AnthropicProvider implements ChatProvider {
     const url = `${base}/v1/messages`;
 
     const systemParts: string[] = [];
+
+    /*
+     * The system prompt arrives as `request.system`, not as a message.
+     *
+     * Reading only `request.messages` for a `system` role — which the agent
+     * loop never emits — meant Claude ran with no identity, room roster or
+     * instructions at all. The subscription path still sent its hardcoded
+     * identity block, which is why inference worked while the agent's actual
+     * prompt was silently absent. Reported as "Claude did not know it could
+     * tag the other agents, but the GPT agent did": the GPT subscription
+     * backend reads `request.system`, the Anthropic one did not.
+     */
+    if (request.system) systemParts.push(request.system);
+
     const messages = [];
     for (const m of request.messages) {
       if (m.role === 'system') {
@@ -212,6 +228,33 @@ export class AnthropicProvider implements ChatProvider {
 
       // plain user/assistant text
       messages.push({ role: m.role, content: m.content });
+    }
+
+    /*
+     * Prompt caching: mark the end of the stable prefix.
+     *
+     * Anthropic caches nothing unless a block carries `cache_control`. The
+     * agent loop re-sends the whole conversation every step — a 92k-token
+     * history, mostly tool results, re-billed in full — and WispCrew sent no
+     * marker at all, so the entire prefix was paid for at write price every
+     * single time.
+     *
+     * One breakpoint on the LAST block of the last message turns the whole
+     * stable prefix (system, tools, every earlier turn) into a cache read,
+     * which Anthropic bills at roughly a tenth of a write. Each new step
+     * appends a message and moves the breakpoint onto it, so the prefix that
+     * did not change stays cached.
+     *
+     * Ignored rather than rejected when the prefix is below Anthropic's
+     * minimum cacheable length, so there is no downside to always asking.
+     */
+    if (messages.length > 0) {
+      const last = messages[messages.length - 1]!;
+      if (Array.isArray(last.content) && last.content.length > 0) {
+        last.content[last.content.length - 1]!.cache_control = { type: 'ephemeral' };
+      } else if (typeof last.content === 'string' && last.content.length > 0) {
+        last.content = [{ type: 'text', text: last.content, cache_control: { type: 'ephemeral' } }];
+      }
     }
 
     /*
@@ -263,23 +306,34 @@ export class AnthropicProvider implements ChatProvider {
        */
       ...(this.usesSubscription()
         ? {
+            // The last block carries the cache marker, so the identity AND the
+            // standing prompt are cached together and never re-billed.
             system: [
               { type: 'text', text: CLAUDE_CODE_IDENTITY },
               ...(systemParts.length ? [{ type: 'text', text: systemParts.join('\n\n') }] : []),
-            ],
+            ].map((block, i, all) =>
+              i === all.length - 1 ? { ...block, cache_control: { type: 'ephemeral' } } : block,
+            ),
           }
         : systemParts.length
-          ? { system: systemParts.join('\n\n') }
+          ? {
+              system: [{ type: 'text', text: systemParts.join('\n\n'), cache_control: { type: 'ephemeral' } }],
+            }
           : {}),
       ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
       ...(budget ? { thinking: { type: 'enabled', budget_tokens: budget } } : {}),
     };
     if (request.toolDefs?.length) {
-      body.tools = request.toolDefs.map((t) => ({
+      const tools = request.toolDefs.map((t) => ({
         name: t.name,
         description: t.description,
         input_schema: t.parameters,
       }));
+      // Cached alongside the system prompt: the tool set is identical every
+      // step, so re-billing its schema is pure waste. The marker is added
+      // after the map so the source of the schema stays typed as a schema.
+      (tools[tools.length - 1] as Record<string, unknown>).cache_control = { type: 'ephemeral' };
+      body.tools = tools;
     }
     if (request.stream !== false) body.stream = true;
     Object.assign(body, this.config.extra ?? {});

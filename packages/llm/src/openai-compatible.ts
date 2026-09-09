@@ -171,7 +171,21 @@ export class OpenAICompatibleProvider implements ChatProvider {
   private toWire(request: ChatRequest) {
     return {
       model: this.config.model,
-      messages: request.messages.map((m) => {
+      messages: [
+        /*
+         * The system prompt rides as the first message.
+         *
+         * It was dropped entirely: `toWire` mapped only `request.messages`,
+         * and the agent loop never puts the system prompt in there — it
+         * passes it as `request.system`. So every openai-compatible agent
+         * (NVIDIA, DeepSeek, Groq, OpenRouter, Ollama, LM Studio, custom)
+         * ran with no identity, no room roster, no tool-use instructions,
+         * no workspace boundary. The model still answered, so nothing looked
+         * wrong — which is exactly why a missing capability reads as a dumb
+         * model rather than a bug.
+         */
+        ...(request.system ? [{ role: 'system', content: request.system }] : []),
+        ...request.messages.map((m) => {
         if (m.role === 'tool') {
           return {
             role: 'tool',
@@ -208,7 +222,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
           };
         }
         return { role: m.role, content: m.content };
-      }),
+      })],
       tools: request.toolDefs?.length
         ? request.toolDefs.map((t) => ({
             type: 'function',
