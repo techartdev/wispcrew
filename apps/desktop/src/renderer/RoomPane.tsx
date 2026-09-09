@@ -193,6 +193,8 @@ export function RoomPane({
    * — with /connect, in the chat — and nothing in this window would
    * otherwise ever hear about it.
    */
+  const [greetingOpen, setGreetingOpen] = useState(false);
+
   const [endpoints, setEndpoints] = useState<{ channel: string; label?: string }[]>([]);
   useEffect(() => {
     let live = true;
@@ -346,7 +348,7 @@ export function RoomPane({
       */}
       {endpoints.length > 0 && (
         <div className="room-pane-elsewhere">
-          <span className="room-pane-elsewhere-label">Also reachable from</span>
+          <span className="room-pane-label">Also reachable from</span>
           {endpoints.map((e, i) => (
             <span key={i} className="room-pane-endpoint">
               {e.channel === 'telegram' ? 'Telegram' : e.channel}
@@ -376,9 +378,40 @@ export function RoomPane({
       */}
       {isGroup(room) && (
         <div className="room-greeting">
-          <label className="room-greeting-label" htmlFor="room-greeting-input">
-            Room instructions
-          </label>
+          {/*
+            Collapsed to its first line until somebody wants it.
+
+            The instructions are often a page of markdown, and a permanently
+            open textarea holding a page of markdown is the single largest
+            object in a two-hundred-pixel column -- it pushed what is
+            scheduled off the bottom of the pane entirely. Visible in
+            summary, one click from editable: the rule stays discoverable,
+            which is the whole reason it is shown at all, without the panel
+            being mostly a form.
+          */}
+          <button
+            type="button"
+            className="room-greeting-toggle"
+            onClick={() => setGreetingOpen((v) => !v)}
+            aria-expanded={greetingOpen}
+          >
+            <span className="room-pane-label">Instructions</span>
+            <span className="room-greeting-caret" aria-hidden="true">
+              {greetingOpen ? '▾' : '▸'}
+            </span>
+          </button>
+
+          {!greetingOpen && (
+            <p className="room-greeting-preview">
+              {room.greeting?.trim()
+                ? room.greeting.trim().split('\n').find((l) => l.trim() && !l.startsWith('#')) ??
+                  room.greeting.trim().split('\n')[0]
+                : 'None set.'}
+            </p>
+          )}
+
+          {greetingOpen && (
+          <>
           <textarea
             id="room-greeting-input"
             className="room-greeting-input"
@@ -395,17 +428,18 @@ export function RoomPane({
             }}
           />
           <p className="room-greeting-note">
-            Visible to everyone here, including the agents. They are told to follow it
-            and to say what it is if you ask.
+            Visible to everyone here, including the agents.
           </p>
+          </>
+          )}
         </div>
       )}
 
-      <div className="room-pane-head">
-        <h2>Scheduled</h2>
+      <div className="room-pane-section">
+        <span className="room-pane-label">Scheduled</span>
         <button
           type="button"
-          className="room-pane-close"
+          className="room-pane-add"
           onClick={onOpenRoutines}
           aria-label="Manage routines"
           title="Manage routines"
