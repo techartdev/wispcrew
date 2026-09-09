@@ -314,6 +314,23 @@ export class Agent {
 
         if (!toolCalls.length) {
           this.history.push(lastMessage);
+
+          /*
+           * The model answered, but somebody spoke while it was answering.
+           *
+           * Returning here stranded the queue: the message sat in the
+           * composer with no turn left to inject it into, and the next thing
+           * the user typed went in ahead of it. Measured as a message that
+           * simply never arrived.
+           *
+           * So the turn CONTINUES instead — the queued text becomes the next
+           * user message and the loop runs again, which is exactly what
+           * would have happened had they typed it a second later. The step
+           * budget still bounds it, and a queue that keeps refilling is a
+           * person still talking, not a runaway.
+           */
+          if (this.drainSteer()) continue;
+
           this.onEvent({ type: 'turn_end', turnId, usage });
           return lastMessage;
         }
@@ -389,14 +406,7 @@ export class Agent {
          * turn, and produced `user, user, assistant, assistant` — measured,
          * not theorised. One agent, one loop, one queue.
          */
-        const steer = this.pendingSteer;
-        if (steer.length) {
-          this.pendingSteer = [];
-          for (const message of steer) {
-            this.history.push({ role: 'user', content: message });
-            this.onEvent({ type: 'steer_applied', text: message });
-          }
-        }
+        this.drainSteer();
       }
 
       /*
@@ -427,6 +437,29 @@ export class Agent {
     } finally {
       this.abortController = null;
     }
+  }
+
+  /**
+   * Move queued messages into history, if there are any.
+   *
+   * Returns whether anything moved, so the caller can decide what that
+   * means: mid-loop it is simply the next request's context, and at the
+   * point the model would have finished it is a reason to keep going.
+   *
+   * One implementation for both, because they must agree. Two copies of
+   * "empty the queue into history and announce each one" is precisely the
+   * duplication that produces a queue drained in one place and not the
+   * other — the fault this whole area keeps repeating.
+   */
+  private drainSteer(): boolean {
+    if (!this.pendingSteer.length) return false;
+    const steer = this.pendingSteer;
+    this.pendingSteer = [];
+    for (const message of steer) {
+      this.history.push({ role: 'user', content: message });
+      this.onEvent({ type: 'steer_applied', text: message });
+    }
+    return true;
   }
 
   private handleChunk(chunk: ProviderChunk, emit: (e: AgentEvent) => void): void {
