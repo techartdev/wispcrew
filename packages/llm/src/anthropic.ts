@@ -189,16 +189,39 @@ export class AnthropicProvider implements ChatProvider {
         continue;
       }
       if (m.role === 'tool') {
-        messages.push({
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result',
-              tool_use_id: m.toolCallId,
-              content: m.content,
-            },
-          ],
-        });
+        /*
+         * All of a step's results go in ONE user message.
+         *
+         * Anthropic requires every `tool_use` block to be answered by a
+         * `tool_result` in the message IMMEDIATELY after. A step with two
+         * tool calls produces two `tool` messages, and giving each its own
+         * user message left the second one a message too late:
+         *
+         *   assistant: tool_use(A), tool_use(B)
+         *   user:      tool_result(A)      <- only A is "immediately after"
+         *   user:      tool_result(B)
+         *
+         * which the API rejects outright with "tool_use ids were found
+         * without tool_result blocks immediately after". The turn dies, and
+         * the message blames the model or the attachments.
+         *
+         * Appending to the previous user message when it is already a
+         * tool_result block keeps the mapping one-to-one with the step.
+         */
+        const block: AnthropicContentBlock = {
+          type: 'tool_result',
+          tool_use_id: m.toolCallId,
+          content: m.content,
+        };
+        const prev = messages[messages.length - 1];
+        const prevIsToolResult =
+          prev?.role === 'user' &&
+          Array.isArray(prev.content) &&
+          prev.content.length > 0 &&
+          prev.content.every((b: AnthropicContentBlock) => b.type === 'tool_result');
+
+        if (prevIsToolResult) (prev.content as AnthropicContentBlock[]).push(block);
+        else messages.push({ role: 'user', content: [block] });
         continue;
       }
       if (m.role === 'assistant' && m.toolCalls?.length) {
