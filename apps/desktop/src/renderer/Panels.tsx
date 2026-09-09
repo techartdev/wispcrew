@@ -598,9 +598,10 @@ function SubscriptionSignIn({
       */}
       {vendor === 'anthropic' && !status?.signedIn && (
         <p className="warn-inline signin-warning">
-          Signing in may end an existing <strong>Claude Code</strong> session on this
-          machine — they share a sign-in, and the newer one appears to win. Run{' '}
-          <code>claude</code> once afterwards to sign it back in.
+          Signing in may end an existing <strong>Claude Code</strong> or{' '}
+          <strong>Claude extension</strong> session on this machine — they all use
+          Anthropic's public OAuth client, and the newest grant appears to retire the
+          others. Run <code>claude</code> (or sign back into the extension) afterwards.
         </p>
       )}
 
