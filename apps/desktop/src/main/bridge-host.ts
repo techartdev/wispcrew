@@ -40,6 +40,7 @@ import type {
   RoutineRecord,
   SettingsView,
   SkillRecord,
+  ToolGrant,
   TranscriptEntry,
 } from '@wispcrew/shared';
 import { handleFor } from '@wispcrew/shared';
@@ -564,6 +565,16 @@ export function registerBridge(context: BridgeContext): void {
     'forgetNode',
     'configureNode',
     'presetsForNode',
+
+    /*
+     * Answered by gathering, not by forwarding.
+     *
+     * Grants live on whichever machine will act on them, and this call names
+     * no agent — so there is no single node to ask. Forwarded whole it
+     * reported one node's rows as if they were all of them. The handler
+     * merges every open link's answer with this machine's own.
+     */
+    'listToolGrants',
 
     /*
      * Signing in needs a browser, and importing a CLI sign-in needs that
@@ -1110,7 +1121,35 @@ export function registerBridge(context: BridgeContext): void {
     })),
   );
 
-  handle('listToolGrants', () => listGrants());
+  /*
+   * Every machine's grants, in one list.
+   *
+   * A grant is stored on the node that will act on it, and this call is not
+   * agent-scoped — so it cannot be routed to one machine. Forwarded whole it
+   * showed a single node's rows; answered locally it showed none of them.
+   * Either way a permission the user had granted was invisible in the one
+   * panel that exists to review and withdraw them.
+   *
+   * Gathered from the open links and merged with this machine's own. A node
+   * that is asleep contributes nothing rather than failing the call: the
+   * panel is still usable, and a grant that cannot be reached also cannot be
+   * exercised by an agent that is equally unreachable.
+   */
+  handle('listToolGrants', async () => {
+    const local = listGrants();
+    const remote = await Promise.all(
+      listNodes(ctx.userDataDir).map(async (node) => {
+        const link = existingLink(node.id);
+        if (!link) return [];
+        try {
+          return ((await link.call('listToolGrants')) as ToolGrant[]) ?? [];
+        } catch {
+          return [];
+        }
+      }),
+    );
+    return [...local, ...remote.flat()];
+  });
 
   handle('revokeToolGrant', (agentId: string, toolName: string) => {
     revoke(agentId, toolName);

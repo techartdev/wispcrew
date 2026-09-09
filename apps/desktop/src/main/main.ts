@@ -72,6 +72,7 @@ import {
   setNodeApprovalAsker,
   existingLink,
   routeForCall,
+  setRoutineOwnerLookup,
 } from './node-links.js';
 import * as store from '@wispcrew/runtime';
 import {
@@ -437,6 +438,18 @@ app.whenReady().then(async () => {
     remoteForAgent: (method, args) =>
       routeForCall((agentId) => store.getAgent(agentId)?.nodeId, method, args),
   });
+
+  /*
+   * Resolve a routine to its agent, so routine calls reach the right machine.
+   *
+   * `updateRoutine('routine_x')` carries no machine in its arguments. The
+   * mirrored roster here knows which agent owns it, and that agent knows
+   * which node — so the lookup lives beside the agent lookup above rather
+   * than inside the routing module, which must not read the store.
+   */
+  setRoutineOwnerLookup(
+    (routineId) => store.listRoutines().find((r) => r.id === routineId)?.agentId,
+  );
 
   /*
    * Connect the headless engine to this host.

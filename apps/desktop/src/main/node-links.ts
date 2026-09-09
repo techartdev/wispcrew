@@ -73,7 +73,40 @@ const AGENT_SCOPED = new Set([
   'getQueuedSteer',
   'setQueuedSteer',
   'flushQueuedSteer',
+
+  /*
+   * A standing permission belongs to the machine that will act on it.
+   *
+   * `revokeToolGrant` ran against the LOCAL grant store for an agent living
+   * elsewhere, so the row on the node survived: the user pressed Revoke, the
+   * list refreshed, and the agent kept the permission. Worse since a node
+   * can now record its own grants — "always allow" on a remote card is
+   * written there, which is precisely what this could not remove.
+   */
+  'revokeToolGrant',
 ]);
+
+/**
+ * Methods whose first argument is a ROUTINE id.
+ *
+ * Routed by the routine's owning agent rather than by `args[0]`, which names
+ * the routine and not a machine. `listRoutines` is deliberately absent: it
+ * takes an optional AGENT id and is handled by the ordinary rule.
+ */
+const ROUTINE_SCOPED = new Set(['updateRoutine', 'deleteRoutine', 'runRoutineNow']);
+
+/**
+ * Which agent owns a routine, so a routine id can be routed.
+ *
+ * Injected because this module must not read the store directly — the
+ * roster is assembled by the bridge from every node, and that is the only
+ * place that knows the whole picture.
+ */
+let routineOwner: ((routineId: string) => string | undefined) | null = null;
+
+export function setRoutineOwnerLookup(lookup: (routineId: string) => string | undefined): void {
+  routineOwner = lookup;
+}
 
 /**
  * Which providers a particular machine can actually use.
@@ -278,10 +311,40 @@ export function routeForCall(
     return patch?.nodeId ? existingLink(patch.nodeId) : null;
   }
 
+  /*
+   * Methods whose first argument identifies a ROUTINE, not an agent.
+   *
+   * `updateRoutine('routine_x')` says nothing about which machine owns it,
+   * so the id is resolved to its agent first. Without this these ran against
+   * the local store for an agent living elsewhere: the panel listed the
+   * routine (it is mirrored here), the edit appeared to succeed, and the
+   * node that actually fires it never heard.
+   */
+  if (ROUTINE_SCOPED.has(method)) {
+    const routineId = args[0];
+    if (typeof routineId !== 'string') return null;
+    const owner = routineOwner?.(routineId);
+    return owner ? linkForAgent(agentNodeOf, owner) : null;
+  }
+
   if (!AGENT_SCOPED.has(method)) return null;
   const agentId = args[0];
   if (typeof agentId !== 'string') return null;
 
+  return linkForAgent(agentNodeOf, agentId);
+}
+
+/**
+ * The link that serves this agent, or an error naming the machine.
+ *
+ * Shared by both routing paths so an agent-scoped call and a routine-scoped
+ * one cannot disagree about where the work belongs, or about what to say
+ * when that machine is asleep.
+ */
+function linkForAgent(
+  agentNodeOf: (agentId: string) => string | undefined,
+  agentId: string,
+): NodeClient | null {
   const nodeId = agentNodeOf(agentId);
   if (!nodeId) return null; // genuinely local
 
