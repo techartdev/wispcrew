@@ -9,6 +9,7 @@ import type {
 } from '@wispcrew/shared';
 import { usageFromAnthropicHeaders, type UsageSnapshot } from './usage-limits.js';
 import { reasoningFor, THINKING_BUDGETS } from '@wispcrew/shared';
+import { fetchWithRetry, type RetryOptions } from './retry.js';
 
 interface AnthropicContentBlock {
   type: string;
@@ -58,6 +59,13 @@ function describeReset(at: number): string {
 export interface AnthropicConfig extends ProviderConfig {
   /** Called with any quota information the response reports. */
   onUsage?: (usage: UsageSnapshot) => void;
+  /**
+   * Notified before each backoff wait, so a pause can be explained.
+   *
+   * Same shape the OpenAI-compatible adapter takes; without it a retry is
+   * indistinguishable from a hang.
+   */
+  onRetry?: RetryOptions['onRetry'];
 }
 
 /**
@@ -361,12 +369,31 @@ export class AnthropicProvider implements ChatProvider {
     if (request.stream !== false) body.stream = true;
     Object.assign(body, this.config.extra ?? {});
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: this.authHeaders(),
-      body: JSON.stringify(body),
-      signal: request.signal,
-    });
+    /*
+     * Retried, which for a long time it was not.
+     *
+     * `retry.ts` was written for this and the OpenAI-compatible adapter used
+     * it; this one called bare `fetch`, so every transient Anthropic failure
+     * killed the turn outright. The one that exposed it was **529
+     * Overloaded** — Anthropic's own status for "capacity full right now",
+     * absent from `RETRYABLE` because the list looked like a complete 5xx
+     * set and 529 is not a registered code.
+     *
+     * The 429-with-`x-should-retry` case below is left exactly as it was: it
+     * distinguishes a spent plan from a busy one, and that reasoning is
+     * about the MESSAGE, not the attempt. What changes is that a genuinely
+     * transient status is now retried with backoff before any of it is
+     * reached.
+     */
+    const res = await fetchWithRetry(
+      url,
+      {
+        method: 'POST',
+        headers: this.authHeaders(),
+        body: JSON.stringify(body),
+      },
+      { signal: request.signal, onRetry: this.config.onRetry },
+    );
 
     // Quota information rides on both success and failure responses, so read
     // it before any early return — a 429 is precisely when it matters.

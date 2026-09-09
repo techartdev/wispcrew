@@ -44,8 +44,14 @@
  * misspelled model spends a few hundred milliseconds before reporting the
  * same error. The cost of NOT retrying was a conversation that died
  * mid-turn and advised the user to change a model that works.
+ *
+ * **529 is Anthropic's "Overloaded"** — not an IANA-registered status, which
+ * is exactly why it was missing from a list that otherwise reads like a
+ * standard 5xx set. It means their capacity was momentarily full: the most
+ * transient failure there is, and the one most worth retrying. Observed
+ * live, mid-turn, on a turn that was doing nothing unusual.
  */
-const RETRYABLE = new Set([404, 429, 500, 502, 503, 504]);
+const RETRYABLE = new Set([404, 429, 500, 502, 503, 504, 529]);
 
 /**
  * How many attempts a 404 gets, as against the rest.
