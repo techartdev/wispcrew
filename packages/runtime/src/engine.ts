@@ -473,6 +473,20 @@ function factsFor(
   });
 }
 
+/**
+ * An agent's handle within a conversation, if it is a room with company.
+ *
+ * Returns undefined for a one-to-one chat, which is what suppresses the
+ * labelling entirely: a single assistant voice needs no attribution, and
+ * prefixing it would only teach the model to write its own handle.
+ */
+function handleInRoom(conversationId: string, agentId: string): string | undefined {
+  const participants = getConversation(conversationId)?.participants ?? [];
+  if (participants.filter((p) => p.kind === 'agent').length < 2) return undefined;
+  const found = participants.find((p) => p.kind === 'agent' && p.id === agentId);
+  return found && 'handle' in found ? (found.handle as string) : undefined;
+}
+
 function systemPromptFor(
   agent: AgentRecord | undefined,
   personaId: string | undefined,
@@ -648,7 +662,12 @@ export async function contextForAgent(
   const report = buildContextReport({
     systemPrompt,
     tools: tools.definitions(),
-    messages: rebuildHistory(store.loadTranscript(conversationId)),
+    // Measured with the same labels the turn will really send, or the
+    // report is of a request that never happens.
+    messages: rebuildHistory(store.loadTranscript(conversationId), {
+      selfId: agent.id,
+      nameFor: (id) => handleInRoom(conversationId, id),
+    }),
     model: preset.model,
     measuredInput: conversation?.lastInputTokens,
     limitOverride: agent.contextWindow,
@@ -1332,7 +1351,17 @@ export async function runPrompt(
     // The caller has already appended this turn's user message to the
     // transcript, and `Agent.run` appends it again — so the trailing user
     // entry is dropped here to avoid sending it twice.
-    initialHistory: rebuildHistory(dropTrailingUserEntry(store.loadTranscript(outputId))),
+    initialHistory: rebuildHistory(dropTrailingUserEntry(store.loadTranscript(outputId)), {
+      /*
+       * Who is reading, so the other agents' messages arrive labelled.
+       *
+       * Without this every agent in a room reads one anonymous assistant
+       * voice: its own words and its colleagues' are indistinguishable, and
+       * an agent cannot tell a task assigned to it from its own reply.
+       */
+      selfId: agentId,
+      nameFor: (id) => handleInRoom(outputId, id),
+    }),
     onApprovalRequired: async (req) => {
       // `readonly` denies anything needing approval; `auto` grants it.
       if (effectivePolicy === 'readonly') return false;

@@ -58,7 +58,55 @@ function describeAge(ms: number): string {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
-export function rebuildHistory(entries: TranscriptEntry[]): ChatMessage[] {
+/**
+ * How an agent's own words are marked when several agents share a history.
+ *
+ * Every chat API has exactly one `assistant` role, so a room's transcript --
+ * which knows perfectly well who wrote what -- collapses into a single
+ * undifferentiated voice the moment it becomes a request. The consequences
+ * were not subtle:
+ *
+ *   - An agent read its own previous message as a colleague's, described its
+ *     own plan in the third person, and waited for itself to reply.
+ *   - It could not tell a task assigned TO it from its own acknowledgement
+ *     of that task, so concrete work sat unowned.
+ *
+ * Both were reported as the model being confused about its identity. It was
+ * not: the information had been removed before it ever arrived. `authorId`
+ * is recorded on every room message and was dropped here -- the same
+ * declared-but-never-read fault as `via` and the age of a tool result, and
+ * the comment below has named `authorId` as an example of it for months
+ * while the field itself stayed dropped.
+ *
+ * Marked in the text rather than in a field, because a field would need
+ * every provider adapter to agree on how to render it, and one that forgot
+ * would silently reintroduce exactly this bug. A prefix costs a few tokens
+ * and cannot be dropped by an adapter that has not heard of it.
+ */
+function speakerPrefix(
+  entry: Extract<TranscriptEntry, { kind: 'message' }>,
+  selfId: string | undefined,
+  nameFor: ((id: string) => string | undefined) | undefined,
+): string {
+  if (entry.role !== 'assistant' || !entry.authorId) return '';
+  // A solo conversation has one voice and needs no label.
+  if (!nameFor) return '';
+  if (selfId && entry.authorId === selfId) return '';
+
+  const handle = nameFor(entry.authorId);
+  return handle ? `[@${handle}] ` : '';
+}
+
+export function rebuildHistory(
+  entries: TranscriptEntry[],
+  /**
+   * Who is reading this history, and what the other agents are called.
+   *
+   * Omitted for a one-to-one conversation, where there is a single assistant
+   * and nothing to disambiguate.
+   */
+  speakers?: { selfId?: string; nameFor?: (id: string) => string | undefined },
+): ChatMessage[] {
   const out: ChatMessage[] = [];
 
   for (const entry of entries) {
@@ -86,7 +134,16 @@ export function rebuildHistory(entries: TranscriptEntry[]): ChatMessage[] {
           ? `[via ${entry.via}] `
           : '';
 
-        out.push({ role: entry.role, content: `${via}${entry.content}` });
+        /*
+         * Whose words these are, when the room holds more than one agent.
+         *
+         * Only OTHER agents are labelled. Prefixing an agent's own messages
+         * would teach it to write its own handle into its replies, which is
+         * both noise and a second way for it to lose track of itself.
+         */
+        const speaker = speakerPrefix(entry, speakers?.selfId, speakers?.nameFor);
+
+        out.push({ role: entry.role, content: `${speaker}${via}${entry.content}` });
         break;
       }
       case 'tool-call': {
