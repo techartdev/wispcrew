@@ -147,6 +147,34 @@ export function rebuildHistory(
         break;
       }
       case 'tool-call': {
+        /*
+         * A colleague's tool call is not this agent's memory.
+         *
+         * Tool entries had no author at all until now, so in a room every
+         * agent received every other agent's calls as unattributed
+         * assistant turns -- which is precisely the shape of its own work.
+         * One agent was handed several hundred commands it had never run.
+         * It could no longer tell a task assigned to it from its own reply,
+         * because the turns around that assignment all looked like its own.
+         *
+         * Dropped rather than labelled, unlike prose. A tool call is a
+         * REQUEST with a matching result, and a request the model never
+         * made -- carrying output it never received -- is a false memory
+         * whichever way it is worded. What a colleague did belongs in the
+         * room as the sentence that colleague wrote about it.
+         *
+         * It also costs nothing to lose: tool output is the bulk of a
+         * working transcript, so every agent's window stops filling with
+         * every other agent's shell output.
+         */
+        if (
+          speakers?.selfId &&
+          entry.authorId &&
+          entry.authorId !== speakers.selfId
+        ) {
+          break;
+        }
+
         // The assistant turn that requested the tool, then its result. Both
         // must be present or the provider rejects the whole conversation.
         out.push({

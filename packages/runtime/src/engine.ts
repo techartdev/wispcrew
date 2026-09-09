@@ -1421,6 +1421,9 @@ export async function runPrompt(
         id: e.call.id,
         toolName: e.call.name,
         args: e.call.args,
+        // Whose work this is. In a room, an unattributed tool call reads as
+        // the reader's own -- see `TranscriptEntry`.
+        authorId: agentId,
         status: 'running',
         createdAt: Date.now(),
       });
@@ -1429,6 +1432,10 @@ export async function runPrompt(
         kind: 'tool-call',
         id: e.result.id,
         toolName: e.result.name,
+        // The result entry REPLACES the start entry, so the author has to be
+        // repeated here or it is lost the moment the call finishes -- the
+        // same trap that once dropped `args`.
+        authorId: agentId,
         /*
          * Carried across from the start event, because this entry REPLACES
          * that one — `upsertTranscriptEntry` overwrites by id rather than

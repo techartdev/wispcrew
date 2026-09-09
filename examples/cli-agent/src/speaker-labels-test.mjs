@@ -106,6 +106,67 @@ console.log('\n[6] labelling survives alongside the channel marker');
   check('and the speaker label too', built[1]?.content === '[@bob] on it', built[1]?.content);
 }
 
+console.log("\n[7] a colleague's tool calls are not your memory");
+{
+  /*
+   * The larger half of the bug. Tool entries carried no author at all, so
+   * in a room every agent received every OTHER agent's calls as
+   * unattributed assistant turns -- the exact shape of its own work. In the
+   * room where this was found: 453 tool entries, none with an author. One
+   * agent was effectively handed several hundred commands it had never run,
+   * and could no longer tell a task assigned to it from its own reply,
+   * because the turns surrounding that assignment all looked like its own.
+   *
+   * Dropped rather than labelled, unlike prose: a tool call is a request
+   * with a matching result, and a request the model never made carrying
+   * output it never received is a false memory however it is worded.
+   */
+  const mixed = [
+    { kind: 'message', id: 'x1', role: 'user', content: 'get to work', createdAt: 1 },
+    { kind: 'tool-call', id: 't1', toolName: 'shell', authorId: A, args: { command: 'alice' }, status: 'completed', content: 'alice output', createdAt: 2 },
+    { kind: 'tool-call', id: 't2', toolName: 'shell', authorId: B, args: { command: 'bob' }, status: 'completed', content: 'bob output', createdAt: 3 },
+  ];
+
+  const asA = rebuildHistory(mixed, { selfId: A, nameFor });
+  const argsA = asA.flatMap((m) => m.toolCalls ?? []).map((c) => c.args.command);
+  check('own tool call kept', argsA.includes('alice'), argsA.join(','));
+  check("colleague's tool call dropped", !argsA.includes('bob'), argsA.join(','));
+  check(
+    "and its result went with it",
+    !asA.some((m) => m.role === 'tool' && /bob output/.test(m.content)),
+  );
+
+  const asB = rebuildHistory(mixed, { selfId: B, nameFor });
+  const argsB = asB.flatMap((m) => m.toolCalls ?? []).map((c) => c.args.command);
+  check('the reverse holds for the other agent', argsB.includes('bob') && !argsB.includes('alice'), argsB.join(','));
+}
+
+console.log('\n[8] history written before authors existed still works');
+{
+  /*
+   * Every tool entry recorded before this change has no author. Dropping
+   * those would erase an agent's entire memory of its own past work, so an
+   * absent author means "mine" -- the same rule messages already use.
+   */
+  const legacy = [
+    { kind: 'tool-call', id: 't9', toolName: 'shell', args: { command: 'from before' }, status: 'completed', content: 'old output', createdAt: 1 },
+  ];
+  const built = rebuildHistory(legacy, { selfId: A, nameFor });
+  const args = built.flatMap((m) => m.toolCalls ?? []).map((c) => c.args.command);
+  check('kept, not dropped', args.includes('from before'), args.join(','));
+}
+
+console.log('\n[9] a solo conversation is untouched');
+{
+  const mixed = [
+    { kind: 'tool-call', id: 't1', toolName: 'shell', authorId: A, args: { command: 'alice' }, status: 'completed', content: 'a', createdAt: 1 },
+    { kind: 'tool-call', id: 't2', toolName: 'shell', authorId: B, args: { command: 'bob' }, status: 'completed', content: 'b', createdAt: 2 },
+  ];
+  const solo = rebuildHistory(mixed);
+  const args = solo.flatMap((m) => m.toolCalls ?? []).map((c) => c.args.command);
+  check('nothing is filtered without a reader', args.length === 2, args.join(','));
+}
+
 console.log('');
 if (failures) {
   console.error(`SPEAKER-LABELS TEST FAILED — ${failures} assertion(s)\n`);

@@ -315,6 +315,26 @@ export type TranscriptEntry =
       status: 'running' | 'completed' | 'failed' | 'denied';
       /** Truncated result text for display. */
       content?: string;
+      /**
+       * Which agent ran it.
+       *
+       * Message entries have carried an author since rooms existed; tool
+       * calls never did, and in a shared conversation that is the larger
+       * half of the transcript by far -- 453 tool entries to 150 messages in
+       * the room where this was found.
+       *
+       * The consequence was not cosmetic. An agent rebuilding room history
+       * received every colleague's tool call as an unattributed assistant
+       * turn, which reads as its own work: it appeared to have run hundreds
+       * of commands it never ran, and could not tell a task assigned to it
+       * from its own reply because the surrounding turns all looked like
+       * its own.
+       *
+       * Optional for the same reason as on messages: entries written before
+       * this existed have none, and an absent author means "the single agent
+       * in this conversation", which is what those transcripts meant.
+       */
+      authorId?: string;
       createdAt: number;
     }
   | {
