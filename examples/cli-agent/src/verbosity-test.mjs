@@ -113,6 +113,26 @@ console.log('\n[6] it survives every persona');
   check('all personas carry it', missing.length === 0, missing.join(', '));
 }
 
+console.log('\n[7] identity in a room is operational, not a label');
+{
+  /*
+   * Observed live: Local GPT read its own plan as "GPT's plan", waited for
+   * GPT to reply, and did not take work explicitly assigned to @local-gpt.
+   * The data had always been there -- handle plus self:true -- but "you are
+   * @local-gpt" was too weak to connect those facts to the shared transcript.
+   */
+  const prompt = defaultSystemPrompt({
+    agentName: 'Local GPT',
+    verbosity: 'normal',
+    handle: 'local-gpt',
+    room,
+  });
+  check('the handle explicitly means self', /@local-gpt means you/i.test(prompt));
+  check('own room messages are named as own', /Your earlier messages\s+are your own work/i.test(prompt));
+  check('assigned work means ownership', /you own it/i.test(prompt));
+  check('it forbids waiting for itself', /wait for yourself to reply/i.test(prompt));
+}
+
 console.log('');
 if (failures) {
   console.error(`VERBOSITY TEST FAILED — ${failures} assertion(s)\n`);

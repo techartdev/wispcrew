@@ -114,6 +114,25 @@ function identitySection(opts: SystemPromptOptions): string[] {
   if (opts.handle) lines[0] += `, addressed as **@${opts.handle}**`;
   lines[0] += '.';
 
+  /*
+   * A handle is not just an address other people use. In a room an agent
+   * reads its own previous messages in the shared transcript, and a model
+   * that only sees "addressed as @local-gpt" can still narrate about
+   * "GPT's plan" in the third person, wait for itself to answer, and never
+   * take work explicitly assigned to it. Observed live.
+   *
+   * State the identity relation in both directions: this handle names YOU;
+   * entries marked self / @handle are yours, not a colleague's; ownership is
+   * an instruction to act, not something to wait for another agent to do.
+   */
+  if (opts.handle) {
+    lines.push(
+      `**@${opts.handle} means you.** In a shared conversation, a message marked ` +
+        `"you" or addressed to @${opts.handle} is yours; do not describe it as a ` +
+        "colleague's message or wait for yourself to reply.",
+    );
+  }
+
   return [...lines, ''];
 }
 
@@ -334,13 +353,20 @@ function roomSection(opts: SystemPromptOptions): string[] {
     lines.push(`- **${p.name}**${handle}${self ? ' — you' : via}`);
   }
 
-  lines.push('', '- Everyone sees every message, including yours.');
+  lines.push(
+    '',
+    '- Everyone sees every message, including yours.',
+    '- The member marked **you** is you, not another agent. Your earlier messages',
+    '  are your own work and plans; continue them rather than waiting for that member.',
+  );
 
   const mode = modeLine(room.mode);
   if (mode) lines.push(mode);
 
   lines.push(
-    '- When you are addressed, answer directly.',
+    '- When you are addressed, answer directly. If another agent assigns you a concrete',
+    '  task, you own it: confirm briefly, do the work, and report the result. Do not wait',
+    '  for another participant to take a task assigned to you.',
     '- Do not hand the question to another participant. They are colleagues in the',
     '  room, not helpers you delegate to; the user can address them themselves.',
     /*
