@@ -150,93 +150,114 @@ interface Link {
 }
 
 const links = new Map<string, Link>();
+const connecting = new Map<string, Promise<NodeClient | null>>();
+
+/*
+ * A disconnected machine is normal, but it should not remain disconnected
+ * forever just because it was offline during startup. Keep retry state here,
+ * rather than making `existingLink` asynchronous: bridge routing must remain
+ * an immediate map lookup.
+ */
+const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const reconnectAttempts = new Map<string, number>();
+const RECONNECT_INITIAL_MS = 1_000;
+const RECONNECT_MAX_MS = 30_000;
+let reconnectingEnabled = true;
+
+function scheduleReconnect(dataDir: string, nodeId: string, onEvent: (event: unknown) => void): void {
+  if (
+    !reconnectingEnabled ||
+    links.has(nodeId) ||
+    connecting.has(nodeId) ||
+    reconnectTimers.has(nodeId)
+  ) {
+    return;
+  }
+
+  const attempt = reconnectAttempts.get(nodeId) ?? 0;
+  const delay = Math.min(RECONNECT_INITIAL_MS * 2 ** attempt, RECONNECT_MAX_MS);
+  reconnectAttempts.set(nodeId, attempt + 1);
+  fileLog('[nodes] reconnecting to', nodeNames.get(nodeId) ?? nodeId, `in ${delay}ms`);
+  const timer = setTimeout(() => {
+    reconnectTimers.delete(nodeId);
+    void linkToNode(dataDir, nodeId, onEvent);
+  }, delay);
+  reconnectTimers.set(nodeId, timer);
+}
 
 /**
- * Connect to a node, reusing an existing link.
+ * Connect to a node, reusing an existing link or connection attempt.
  *
  * Returns null when the node cannot be reached. The caller falls back to the
  * local engine or reports the agent as unavailable — a paired laptop that is
- * closed should not make the app feel broken.
+ * closed should not make the app feel broken. Failed and closed connections
+ * retry in the background with a capped exponential delay.
  */
-export async function linkToNode(
+export function linkToNode(
   dataDir: string,
   nodeId: string,
   onEvent: (event: unknown) => void,
 ): Promise<NodeClient | null> {
   const existing = links.get(nodeId);
-  if (existing) return existing.client;
+  if (existing) return Promise.resolve(existing.client);
+  const pending = connecting.get(nodeId);
+  if (pending) return pending;
 
   const node = getNode(dataDir, nodeId);
   if (!node) {
     fileLog('[nodes] no record or token for', nodeId);
-    return null;
+    return Promise.resolve(null);
   }
 
   nodeNames.set(nodeId, node.name);
   const { host, port } = parseAddress(node.address);
-  try {
-    const client = await connectRemoteNode(
-      { host, port, fingerprint: node.fingerprint, token: node.token },
-      {
-        clientName: 'wispcrew-desktop',
-        onEvent,
+  let client: NodeClient | null = null;
+  let retryAfterFailure = false;
+  const connection = connectRemoteNode(
+    { host, port, fingerprint: node.fingerprint, token: node.token },
+    {
+      clientName: 'wispcrew-desktop',
+      onEvent,
 
-        /*
-         * A node asking this desktop for permission.
-         *
-         * Before this, an agent on another machine that needed a tool had
-         * nobody to ask: the node parked the request until it timed out as
-         * a denial, and the conversation hung with no card and no
-         * explanation. Measured — asking the VPS agent to run `date`
-         * produced only run-state events and zero approval cards.
-         *
-         * Routed through the same function a local request uses, so the
-         * card, the standing grants and "always allow" stay one
-         * implementation rather than two that drift.
-         */
-        /*
-         * The user's actual answer, forwarded verbatim.
-         *
-         * This collapsed to `allow-once` for every allow, so "Always allow"
-         * on a remote agent's card was a lie: the protocol carries
-         * `allow-always`, the node handles it, and the one path that could
-         * ever send it never did. The user was asked again on the next call,
-         * and again after that, with no way to make it stop.
-         *
-         * The grant is recorded on the NODE, which is where that agent's
-         * permissions live and where they can be listed and revoked.
-         */
-        onAsk: async (request) =>
-          (await onAsk?.(request.agentId, {
-            toolName: request.tool,
-            summary: request.summary,
-            detail: request.detail,
-            /*
-             * The node already wrote the card into its own transcript, so
-             * the desktop must resolve THAT id and must not write a second
-             * entry into a store the conversation is not reading from.
-             */
-            requestId: request.requestId,
-            alreadyShown: true,
-          })) ?? 'deny',
+      /* A node asking this desktop for permission. */
+      onAsk: async (request) =>
+        (await onAsk?.(request.agentId, {
+          toolName: request.tool,
+          summary: request.summary,
+          detail: request.detail,
+          requestId: request.requestId,
+          alreadyShown: true,
+        })) ?? 'deny',
 
-        onClose: () => {
-          // Drop the link so the next call reconnects rather than writing
-          // into a dead socket.
-          links.delete(nodeId);
-          fileLog('[nodes] disconnected from', node.name);
-        },
-        timeoutMs: 8000,
+      onClose: () => {
+        // A stale socket must not remove a newer connection for this node.
+        if (client && links.get(nodeId)?.client === client) links.delete(nodeId);
+        fileLog('[nodes] disconnected from', node.name);
+        if (client) scheduleReconnect(dataDir, nodeId, onEvent);
+        else retryAfterFailure = true;
       },
-    );
-    links.set(nodeId, { client, nodeId });
-    markNodeSeen(dataDir, nodeId);
-    fileLog('[nodes] connected to', node.name);
-    return client;
-  } catch (err) {
-    fileLog('[nodes] could not reach', node.name, (err as Error).message);
-    return null;
-  }
+      timeoutMs: 8000,
+    },
+  )
+    .then((connected) => {
+      client = connected;
+      links.set(nodeId, { client, nodeId });
+      reconnectAttempts.delete(nodeId);
+      markNodeSeen(dataDir, nodeId);
+      fileLog('[nodes] connected to', node.name);
+      return client;
+    })
+    .catch((err) => {
+      fileLog('[nodes] could not reach', node.name, (err as Error).message);
+      if (!retryAfterFailure) scheduleReconnect(dataDir, nodeId, onEvent);
+      return null;
+    });
+
+  connecting.set(nodeId, connection);
+  void connection.finally(() => {
+    if (connecting.get(nodeId) === connection) connecting.delete(nodeId);
+  });
+  return connection;
 }
 
 /** An already-open link, without attempting to connect. */
@@ -400,8 +421,12 @@ export async function connectKnownNodes(
   );
 }
 
-/** Close every link. Used at quit. */
+/** Close every link and stop background reconnects. Used at quit. */
 export function closeNodeLinks(): void {
+  reconnectingEnabled = false;
+  for (const timer of reconnectTimers.values()) clearTimeout(timer);
+  reconnectTimers.clear();
+  reconnectAttempts.clear();
   for (const { client } of links.values()) client.close();
   links.clear();
 }
