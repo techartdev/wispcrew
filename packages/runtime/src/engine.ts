@@ -1162,6 +1162,12 @@ export async function runPrompt(
      * exactly like the setting not working.
      */
     effort: agent.reasoningEffort ?? '',
+    /*
+     * Same reason as the reasoning level: the Agent reads `maxSteps` once, in
+     * its constructor. A cached session would keep the old budget, so raising
+     * it in the panel would appear to do nothing until the app restarted.
+     */
+    steps: agent.maxSteps ?? 0,
     // The delegation roster and depth change the tool set, so a session
     // built at one depth must not be reused at another.
     delegates: askAgent ? askAgent.definition.description.length : 0,
@@ -1256,6 +1262,8 @@ export async function runPrompt(
     workspaceRoot: cfg.workspaceRoot,
     // How hard to think, where this provider and model have such a knob.
     reasoningEffort: agent.reasoningEffort,
+    // How long this agent may work before it must stop and report.
+    maxSteps: agent.maxSteps,
     // `outputId` names the room when there is one, so an agent in company is
     // told so — otherwise it cannot tell that `@sums` addresses it, or that
     // its reply will be read by everyone.
@@ -1299,6 +1307,26 @@ export async function runPrompt(
     if (e.type === 'delta') {
       text += e.text;
       flush(true);
+    } else if (e.type === 'steer_applied') {
+      /*
+       * A queued message, written where it actually reached the model.
+       *
+       * Recorded at injection rather than when it was typed: the two are
+       * separated by however long the tool call took, and a message shown
+       * above the tool it was meant to redirect reads as though the agent
+       * ignored it. Here it lands after the tool result, which is the truth.
+       *
+       * `settleSegment` first, so any prose already streamed is closed and
+       * the message does not appear inside the middle of a paragraph.
+       */
+      settleSegment();
+      pushTranscript(outputId, {
+        kind: 'message',
+        id: store.newId('usr'),
+        role: 'user',
+        content: e.text,
+        createdAt: Date.now(),
+      });
     } else if (e.type === 'tool_call_start') {
       // Close any prose written before this call so the card lands *after*
       // it, and the answer the model writes next lands after the card.

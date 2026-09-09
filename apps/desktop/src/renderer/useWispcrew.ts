@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ConversationRecord,
   AgentRecord,
+  AgentPatch,
   AgentRunState,
   BridgeEvent,
   DetectedSignIn,
@@ -53,10 +54,22 @@ export interface WispcrewState {
   toast: { level: 'info' | 'error'; text: string } | null;
 }
 
+/** Stable empty queue, so an idle conversation does not re-render on identity. */
+const EMPTY_QUEUE: readonly string[] = [];
+
 export function useWispcrew() {
   const [agents, setAgents] = useState<AgentRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+
+  /**
+   * Messages typed during a live turn, not yet seen by the model.
+   *
+   * Per conversation, because switching agents while one is working must not
+   * show somebody else's queue. Cleared when the engine reports them applied
+   * — at which point they arrive as ordinary transcript entries.
+   */
+  const [queuedSteer, setQueuedSteer] = useState<Record<string, readonly string[]>>({});
 
   /*
    * An entry shown before the engine has confirmed it.
@@ -130,6 +143,16 @@ export function useWispcrew() {
   // every change, so it reads from a ref rather than a closure capture.
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedId;
+
+  /*
+   * Run states, readable from inside a callback without re-creating it.
+   *
+   * `actions` is memoised, so reading `runStates` directly there would close
+   * over whatever it was when the callback was built — which is `{}` on the
+   * first render, exactly when a turn is most likely to be running.
+   */
+  const runStatesRef = useRef<Record<string, AgentRunState>>({});
+  runStatesRef.current = runStates;
 
   // Actions need the current transcript without being rebuilt on every
   // streamed token, which would re-render the whole tree each frame.
@@ -317,6 +340,9 @@ export function useWispcrew() {
           });
           return;
         }
+        case 'steer-queued':
+          setQueuedSteer((prev) => ({ ...prev, [event.agentId]: event.queued }));
+          return;
         case 'run-state':
           setRunStates((prev) => ({ ...prev, [event.agentId]: event.state }));
           /*
@@ -592,7 +618,9 @@ export function useWispcrew() {
         }
       },
 
-      async updateAgent(id: string, patch: Partial<AgentRecord>) {
+      // `AgentPatch` carries `clear`, which is what removes a field rather
+      // than overwriting it — see the bridge declaration.
+      async updateAgent(id: string, patch: AgentPatch) {
         try {
           await api.updateAgent(id, patch);
         } catch (err) {
@@ -630,16 +658,37 @@ export function useWispcrew() {
          * The placeholder is replaced by the real entry when it lands.
          */
         const target = selectedRef.current;
-        setTranscript((prev) => [
-          ...prev,
-          {
-            kind: 'message',
-            id: `${PENDING_PREFIX}${Date.now()}`,
-            role: 'user',
-            content: prompt,
-            createdAt: Date.now(),
-          } as TranscriptEntry,
-        ]);
+
+        /*
+         * A message sent mid-turn is QUEUED, not posted.
+         *
+         * No placeholder for it: it has not reached the model, and showing
+         * it in the transcript would claim otherwise. It appears above the
+         * composer instead, editable, until the engine says it was applied —
+         * which is when the real entry arrives.
+         *
+         * Predicted here rather than waiting for the round trip, for the
+         * same reason the placeholder exists at all: the composer clears
+         * immediately and something has to hold the text meanwhile.
+         */
+        const willQueue = runStatesRef.current[target] === 'thinking';
+        if (willQueue) {
+          setQueuedSteer((prev) => ({
+            ...prev,
+            [target]: [...(prev[target] ?? []), prompt],
+          }));
+        } else {
+          setTranscript((prev) => [
+            ...prev,
+            {
+              kind: 'message',
+              id: `${PENDING_PREFIX}${Date.now()}`,
+              role: 'user',
+              content: prompt,
+              createdAt: Date.now(),
+            } as TranscriptEntry,
+          ]);
+        }
 
         /*
          * Kept OUT of `runStates`, which belongs to the engine.
@@ -819,6 +868,35 @@ export function useWispcrew() {
       },
 
       pickFiles: api.pickFiles,
+
+      /**
+       * Edit or drop messages still waiting to be sent.
+       *
+       * The queue is the user's until the model reads it, so this writes
+       * through to the engine rather than only to local state — the engine
+       * holds the copy that will actually be injected.
+       */
+      async editQueuedSteer(messages: string[]) {
+        const target = selectedRef.current;
+        if (!target) return;
+        setQueuedSteer((prev) => ({ ...prev, [target]: messages }));
+        try {
+          await api.setQueuedSteer(target, messages);
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      /** "Send now" — stop holding the queue for editing. */
+      async flushQueuedSteer() {
+        const target = selectedRef.current;
+        if (!target) return;
+        try {
+          await api.flushQueuedSteer(target);
+        } catch (err) {
+          fail(err);
+        }
+      },
 
       async interrupt() {
         if (!selectedRef.current) return;
@@ -1152,6 +1230,8 @@ export function useWispcrew() {
       nodes,
       conversations,
       contextReport,
+      /** Queued steering messages for the visible conversation. */
+      queuedSteer: (selectedId ? queuedSteer[selectedId] : undefined) ?? EMPTY_QUEUE,
       routines,
       skills,
       grants,

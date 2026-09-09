@@ -26,6 +26,10 @@ import {
   allStatuses,
   clearSession,
   clearTranscript,
+  steerSession,
+  queuedSteer,
+  setQueuedSteer,
+  isSessionRunning,
   emitEngineEvent,
   fileLog,
   duplicateAgent,
@@ -457,6 +461,23 @@ export function nodeMethods(): MethodTable {
       if (!text) return;
 
       /*
+       * A turn is already running: queue, do not start a second one.
+       *
+       * `runRoomTurn` deduplicates by (message, agent), so an identical
+       * resend is caught — but a DIFFERENT message walked straight past it
+       * and called `Agent.run` again on the same session. Measured: two
+       * concurrent provider streams, a history of `user, user, assistant,
+       * assistant`, and `this.abortController` overwritten so Stop could
+       * only reach the newer turn while the older one ran on.
+       *
+       * Queued instead, and the model sees it at the next step boundary.
+       */
+      if (steerSession(agentId, text)) {
+        emitEngineEvent({ type: 'steer-queued', agentId, queued: queuedSteer(agentId) });
+        return;
+      }
+
+      /*
        * Through the room, which writes the entry and claims the turn.
        *
        * This used to write the entry itself and call `runPrompt`, so a
@@ -483,6 +504,36 @@ export function nodeMethods(): MethodTable {
           text: err?.message ?? 'The turn failed.',
         });
       });
+    },
+    /*
+     * The queue, as the composer shows it.
+     *
+     * Reachable per agent because a queue belongs to one running turn, and
+     * an agent on another machine keeps its own — asking the local engine
+     * for it would answer about the wrong session.
+     */
+    getQueuedSteer: (id: never) => queuedSteer(id as unknown as string),
+    setQueuedSteer: (id: never, messages: never) => {
+      const agentId = id as unknown as string;
+      const list = Array.isArray(messages) ? (messages as unknown as string[]) : [];
+      setQueuedSteer(agentId, list.map((m) => String(m)));
+      const queued = queuedSteer(agentId);
+      emitEngineEvent({ type: 'steer-queued', agentId, queued });
+      return queued;
+    },
+    /*
+     * "Send now" — the arrow beside a queued message.
+     *
+     * There is deliberately nothing to force here. Injection already happens
+     * at the next step boundary, which is the earliest point a message can
+     * reach the model without wedging it between a tool call and its result.
+     * The arrow exists to say "stop holding this for me to edit", and the
+     * queue is already in that state, so this settles to a no-op that keeps
+     * the UI honest rather than pretending to preempt the provider.
+     */
+    flushQueuedSteer: (id: never) => {
+      const agentId = id as unknown as string;
+      emitEngineEvent({ type: 'steer-queued', agentId, queued: queuedSteer(agentId) });
     },
     stopAgent: (id: never) => abortSession(id),
     // The UI calls this `interrupt`; same operation, kept under both names so

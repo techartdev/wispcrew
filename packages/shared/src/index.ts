@@ -83,6 +83,15 @@ export type AgentEvent =
   | { type: 'approval_required'; call: ToolCall; summary: string; requestId: string }
   | { type: 'approval_resolved'; requestId: string; approved: boolean }
   | { type: 'delta'; text: string }
+  /**
+   * A queued message reached the model at a step boundary.
+   *
+   * Carried so the transcript can show it where it actually landed, rather
+   * than where it was typed — the two differ by however long a tool call
+   * took, and a message shown before the tool it was meant to redirect
+   * reads as though it were ignored.
+   */
+  | { type: 'steer_applied'; text: string }
   | { type: 'turn_end'; turnId: string; usage?: TokenUsage }
   | { type: 'error'; message: string; fatal: boolean };
 

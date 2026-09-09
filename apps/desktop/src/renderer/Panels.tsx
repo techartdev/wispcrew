@@ -13,9 +13,27 @@
 import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ModelPicker } from './ModelPicker';
 import { useProviderModels } from './useProviderModels';
-import { describeModelMismatch, isGroup, reasoningFor } from '@wispcrew/shared';
+import {
+  describeModelMismatch,
+  isGroup,
+  reasoningFor,
+  DEFAULT_MAX_STEPS,
+  MAX_MAX_STEPS,
+} from '@wispcrew/shared';
+
+/**
+ * The lowest value this panel suggests.
+ *
+ * Deliberately above `MIN_MAX_STEPS`, which is the hard floor the agent loop
+ * enforces (1 — anything less describes a turn that cannot call a tool at
+ * all). A single-digit budget is legitimate for a scripted caller and merely
+ * a poor choice for an interactive agent, so it is discouraged here rather
+ * than refused there.
+ */
+const SUGGESTED_MIN_STEPS = 5;
 import type {
   AgentRecord,
+  AgentPatch,
   ApprovalPolicy,
   GlobalSettings,
   McpServerRecord,
@@ -1361,7 +1379,15 @@ export function AgentPanel({
   globalPolicy?: ApprovalPolicy;
   /** Paired machines; empty when everything runs locally. */
   nodes: NodeSummary[];
-  onSave(patch: Partial<AgentRecord>): void;
+  /*
+   * `AgentPatch`, not `Partial<AgentRecord>`.
+   *
+   * The panel already sent `clear: ['channelPolicies']` to remove an
+   * override, and this type had no `clear` — so the excess-property check
+   * struck it out and clearing a per-channel policy never worked. Typing the
+   * seam properly is what makes the removal actually travel.
+   */
+  onSave(patch: AgentPatch): void;
   onDelete(): void;
   onDuplicate(): void;
   onPickDirectory(): Promise<string | null>;
@@ -1373,6 +1399,9 @@ export function AgentPanel({
   const [presetId, setPresetId] = useState(agent.presetId ?? '');
   const [model, setModel] = useState(agent.model ?? '');
   const [reasoningEffort, setReasoningEffort] = useState(agent.reasoningEffort ?? '');
+  const [maxSteps, setMaxSteps] = useState(
+    agent.maxSteps ? String(agent.maxSteps) : '',
+  );
   const [baseUrl, setBaseUrl] = useState(agent.baseUrl ?? '');
   const [nodeId, setNodeId] = useState(agent.nodeId ?? '');
   const [workspaceRoot, setWorkspaceRoot] = useState(agent.workspaceRoot ?? '');
@@ -1504,6 +1533,9 @@ export function AgentPanel({
        * like on disk.
        */
       reasoningEffort: reasoningEffort || undefined,
+      // Blank means "use the default", which is not the same as zero — so an
+      // empty box clears the override rather than saving one.
+      maxSteps: maxSteps.trim() ? Number(maxSteps) : undefined,
       baseUrl: baseUrl.trim() || undefined,
       // Empty means this computer. `undefined` deletes the field, which is
       // what "runs here" has always looked like on disk.
@@ -1521,7 +1553,22 @@ export function AgentPanel({
       // `undefined` is dropped in transit and the old value survives.
       ...(telegramPolicy
         ? { channelPolicies: { telegram: telegramPolicy as ApprovalPolicy } }
-        : { clear: ['channelPolicies'] }),
+        : {}),
+      /*
+       * One `clear` list, built from every field that can be emptied.
+       *
+       * Written as a single array rather than two spreads: a second
+       * `clear:` key would silently replace the first, so clearing the step
+       * budget would un-clear the channel policy. That is the same
+       * dropped-field bug this mechanism exists to prevent, one level up.
+       */
+      clear: [
+        ...(telegramPolicy ? [] : ['channelPolicies']),
+        // Blank means "use the default", which an explicit `undefined`
+        // cannot express across IPC — it is dropped and the old number
+        // survives, so the box appears to reset and does not.
+        ...(maxSteps.trim() ? [] : ['maxSteps']),
+      ],
       channels: agentChannels as never,
     });
     onClose();
@@ -1673,6 +1720,45 @@ export function AgentPanel({
             {reasoning.note && <span className="muted small">{reasoning.note}</span>}
           </label>
         )}
+
+        {/*
+          How long this agent may work before it has to stop and report.
+
+          A step is one model call plus the tools it asked for, so this is the
+          budget for sustained work. The default suits a chat agent; an agent
+          doing real work on a codebase hits it mid-task and hands back
+          something half-finished, which is the failure this exists to fix.
+
+          Deliberately a plain number and not a slider: the useful values span
+          two orders of magnitude and somebody who needs 200 should be able to
+          type 200.
+        */}
+        <label className="field">
+          <span>
+            Tool steps per turn <em className="muted">— how long it works before reporting</em>
+          </span>
+          <input
+            type="number"
+            /*
+             * The panel suggests a workable range; `MIN_MAX_STEPS` is the
+             * hard floor the loop enforces and is deliberately lower. A
+             * single-digit budget is legitimate for a scripted caller and
+             * merely a poor choice for an interactive agent, so it is
+             * discouraged here rather than refused.
+             */
+            min={SUGGESTED_MIN_STEPS}
+            max={MAX_MAX_STEPS}
+            step={5}
+            value={maxSteps}
+            placeholder={`Default (${DEFAULT_MAX_STEPS})`}
+            onChange={(e) => setMaxSteps(e.target.value)}
+          />
+          <span className="muted small">
+            Blank uses the default of {DEFAULT_MAX_STEPS}. Raise it for an agent that does long
+            pieces of work; it stops and summarises when the budget runs out. Between{' '}
+            {SUGGESTED_MIN_STEPS} and {MAX_MAX_STEPS}.
+          </span>
+        </label>
 
         {preset && !preset.configured && (
           <p className="warn-inline">

@@ -26,6 +26,8 @@ export interface SessionSeed {
   workspaceRoot: string;
   /** Provider-specific reasoning level, where the provider has one. */
   reasoningEffort?: string;
+  /** Tool steps this agent may take in one turn; unset means the default. */
+  maxSteps?: number;
   /** Identity of the config that produced this session; change ⇒ rebuild. */
   fingerprint: string;
   onApprovalRequired: (request: ApprovalRequest) => Promise<boolean>;
@@ -64,6 +66,7 @@ export function getSession(agentId: string, seed: SessionSeed): Agent {
     systemPrompt: seed.systemPrompt,
     workspaceRoot: seed.workspaceRoot,
     reasoningEffort: seed.reasoningEffort,
+    maxSteps: seed.maxSteps,
     onApprovalRequired: seed.onApprovalRequired,
   });
 
@@ -126,6 +129,41 @@ export function seedSessionHistory(agentId: string, messages: ChatMessage[]): vo
   s.agent.abort();
   s.agent.setHistory(messages);
   s.running = false;
+}
+
+/**
+ * Queue a message for a turn that is already running.
+ *
+ * Returns false when nothing is in flight, which is the caller's cue to send
+ * it as an ordinary prompt. Deliberately NOT a second `run()`: two loops on
+ * one Agent interleave `history` and orphan the abort handle, so Stop stops
+ * only the newer turn while the older one runs on uninterruptible.
+ */
+export function steerSession(agentId: string, message: string): boolean {
+  const s = sessions.get(agentId);
+  if (!s) return false;
+  return s.agent.steer(message);
+}
+
+/** Messages waiting to reach the model, oldest first. */
+export function queuedSteer(agentId: string): readonly string[] {
+  return sessions.get(agentId)?.agent.queuedSteer ?? [];
+}
+
+/** Replace the queue — the user editing or dropping something not yet sent. */
+export function setQueuedSteer(agentId: string, messages: string[]): void {
+  sessions.get(agentId)?.agent.setQueuedSteer(messages);
+}
+
+/**
+ * Is a turn actually in flight?
+ *
+ * Asked of the Agent rather than the `running` flag beside it: the flag is
+ * set by `runPrompt` and was never read anywhere (`isRunning` here was dead
+ * code), so the Agent's own view is the one that cannot drift.
+ */
+export function isSessionRunning(agentId: string): boolean {
+  return sessions.get(agentId)?.agent.isRunning ?? false;
 }
 
 /** Number of live sessions (diagnostics). */

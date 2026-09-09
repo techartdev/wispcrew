@@ -1316,6 +1316,84 @@ body {
   margin: 0 auto 8px;
 }
 
+/*
+ * Messages queued while the agent works.
+ *
+ * Sits directly above the composer, styled as a draft rather than a sent
+ * message: an inset row with a live input, not a chat bubble. That
+ * difference is the whole point — the model has not seen these yet, and
+ * anything that looked like the transcript would claim otherwise.
+ */
+.steer-queue {
+  max-width: 860px;
+  margin: 0 auto 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.steer-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 10px;
+  background: var(--bg-inset);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+/* A dashed left edge in the accent colour: queued, not sent. */
+.steer-item::before {
+  content: '';
+  width: 3px;
+  align-self: stretch;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.6;
+}
+
+.steer-text {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 2px;
+}
+
+.steer-send,
+.steer-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  flex: none;
+}
+
+.steer-send:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.steer-remove:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.steer-hint {
+  font-size: 11px;
+  padding-left: 2px;
+}
+
 .attach-chip {
   display: inline-flex;
   align-items: center;

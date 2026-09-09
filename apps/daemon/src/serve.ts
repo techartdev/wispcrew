@@ -22,6 +22,8 @@ import {
   askApprovalClients,
   emitEngineEvent,
   fileLog,
+  grant,
+  listGrants,
   initGrants,
   installNotifySender,
   startTelegram,
@@ -328,14 +330,30 @@ export async function serve(options: ServeOptions): Promise<RunningDaemon> {
         createdAt: Date.now(),
       });
       emitEngineEvent({ type: 'run-state', agentId, state: 'thinking' });
+
+      /*
+       * "Always allow" is recorded HERE, because this is where it lives.
+       *
+       * The agent belongs to this machine, so its standing grants belong in
+       * this machine's store — that is what `isGranted` consults before the
+       * next call, and what `wispcrew grants` lists and revokes.
+       *
+       * It was recorded nowhere. The desktop deliberately does not write a
+       * grant for an agent it does not own, and the node never looked at the
+       * word, so the user's "always" evaporated and the same card came back
+       * on every single call.
+       */
+      if (decision === 'allow-always') {
+        grant(agentId, req.toolName);
+        emitEngineEvent({ type: 'grants-changed', grants: listGrants() });
+      }
+
       /*
        * The engine wants a yes or no, not the vocabulary.
        *
-       * "Always" is recorded as a standing grant by whoever asked; here the
-       * only question is whether this call proceeds. `null` means nobody
-       * answered, which falls through to the denial below rather than being
-       * read as a no from a person — the outcome is the same, the reason is
-       * not, and the notice explains it.
+       * `null` means nobody answered, which falls through to the denial
+       * below rather than being read as a no from a person — the outcome is
+       * the same, the reason is not, and the notice explains it.
        */
       if (decision) return decision === 'allow-once' || decision === 'allow-always';
     }

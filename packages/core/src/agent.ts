@@ -17,6 +17,9 @@ import {
   type ToolCall,
   type ToolContext,
   type TokenUsage,
+  DEFAULT_MAX_STEPS,
+  MIN_MAX_STEPS,
+  MAX_MAX_STEPS,
 } from '@wispcrew/shared';
 import { ToolRegistry } from '@wispcrew/tools';
 import { defaultSystemPrompt } from './prompt.js';
@@ -61,6 +64,18 @@ export interface AgentOptions {
 
 const SAFE_TOOLS = new Set(['read_file', 'list_dir', 'web_fetch', 'web_search']);
 
+/**
+ * Keep a hand-edited or out-of-range value inside something workable.
+ *
+ * The bounds live in `@wispcrew/shared` because the Configure panel needs
+ * them too, and a limit the UI and the loop disagreed about would be a
+ * setting that silently does something other than what it says.
+ */
+export function clampSteps(steps: number | undefined): number {
+  if (typeof steps !== 'number' || !Number.isFinite(steps)) return DEFAULT_MAX_STEPS;
+  return Math.min(Math.max(Math.floor(steps), MIN_MAX_STEPS), MAX_MAX_STEPS);
+}
+
 export class Agent {
   readonly history: ChatMessage[] = [];
   readonly provider: ChatProvider;
@@ -87,12 +102,34 @@ export class Agent {
   private abortController: AbortController | null = null;
   private turnCounter = 0;
 
+  /**
+   * Messages typed while a turn was running, waiting for a step boundary.
+   *
+   * Held here rather than pushed straight into `history` because a turn is
+   * mid-flight: the model has asked for tools whose results are not in yet,
+   * and a user message wedged between a tool call and its result is a
+   * conversation providers refuse to accept.
+   *
+   * Drained in `run`'s loop after the tool results land. A queue rather than
+   * a single slot: somebody correcting themselves twice should not silently
+   * lose the first correction.
+   */
+  private pendingSteer: string[] = [];
+
   constructor(options: AgentOptions) {
     this.provider = options.provider;
     this.tools = options.tools ?? new ToolRegistry();
     this.workspaceRoot = options.workspaceRoot ?? process.cwd();
     this.systemPrompt = options.systemPrompt ?? defaultSystemPrompt({ modelHint: options.provider.label });
-    this.maxSteps = options.maxSteps ?? 30;
+    /*
+     * Clamped, because this arrives from a record a user can hand-edit.
+     *
+     * Zero would be a turn that cannot call a single tool and reports that
+     * it ran out before starting; a huge value would run until the context
+     * window bursts, which fails less clearly than a budget ending. Both are
+     * worse than a number that is merely wrong.
+     */
+    this.maxSteps = clampSteps(options.maxSteps);
     this.maxTokens = options.maxTokens;
     this.reasoningEffort = options.reasoningEffort;
     this.temperature = options.temperature;
@@ -127,6 +164,46 @@ export class Agent {
   /** Replace the approval resolver (rebindable for the same reason). */
   setApprovalResolver(onApprovalRequired: (request: ApprovalRequest) => Promise<boolean>): void {
     this.onApprovalRequired = onApprovalRequired;
+  }
+
+  /**
+   * Queue a message to reach the model at the next step boundary.
+   *
+   * This is what "send while it works" does. It never starts a second loop:
+   * two loops on one Agent corrupt the history and orphan the abort handle,
+   * which is exactly the bug this replaces.
+   *
+   * Returns false when there is no live turn, which means the caller should
+   * send it as an ordinary prompt instead — a queue that silently swallowed
+   * a message because nothing was running would be worse than not having one.
+   */
+  steer(message: string): boolean {
+    const text = message.trim();
+    if (!text) return false;
+    if (!this.isRunning) return false;
+    this.pendingSteer.push(text);
+    return true;
+  }
+
+  /** Messages waiting to be sent, oldest first. Shown in the composer. */
+  get queuedSteer(): readonly string[] {
+    return this.pendingSteer;
+  }
+
+  /**
+   * Replace the queue — editing a message before it goes, or dropping one.
+   *
+   * The queue is the user's until the model sees it, which is the whole
+   * point of showing it above the composer rather than posting it straight
+   * into the transcript.
+   */
+  setQueuedSteer(messages: string[]): void {
+    this.pendingSteer = messages.map((m) => m.trim()).filter(Boolean);
+  }
+
+  /** True while a turn is in flight. */
+  get isRunning(): boolean {
+    return this.abortController !== null;
   }
 
   /** Drop all conversation history (New Chat / clear conversation). */
@@ -293,6 +370,32 @@ export class Agent {
           this.settleUnansweredToolCalls(toolCalls);
           this.onEvent({ type: 'error', message: 'Turn aborted by user.', fatal: false });
           return { role: 'assistant', content: text || '(aborted)' };
+        }
+
+        /*
+         * A steering message the user sent while this turn was running.
+         *
+         * HERE, and nowhere else, is the only safe seam. Every tool call in
+         * this step has just been answered, so the history is well-formed —
+         * each assistant tool call has its matching tool result — and the
+         * next model request has not been built yet. Injecting anywhere
+         * inside the step would leave a tool call unanswered, which
+         * providers reject outright.
+         *
+         * The alternative that was in place, and why it was wrong: the UI
+         * simply called `run()` a second time. That pushed a user message
+         * onto the SAME history from a second concurrent loop, overwrote
+         * `this.abortController` so Stop could no longer reach the first
+         * turn, and produced `user, user, assistant, assistant` — measured,
+         * not theorised. One agent, one loop, one queue.
+         */
+        const steer = this.pendingSteer;
+        if (steer.length) {
+          this.pendingSteer = [];
+          for (const message of steer) {
+            this.history.push({ role: 'user', content: message });
+            this.onEvent({ type: 'steer_applied', text: message });
+          }
         }
       }
 

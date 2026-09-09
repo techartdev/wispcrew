@@ -38,6 +38,36 @@ import type { ChannelId, RoomEvent } from './conversation.js';
  * a name; wrong for a permission, because a user who cleared a remote
  * override would still have granted it.
  */
+/**
+ * Tool steps per turn, when an agent does not say.
+ *
+ * Enough for an ordinary question with a few lookups. An agent doing
+ * sustained work should raise it: the failure mode of too small a budget is
+ * a turn that stops mid-task and hands back something half-finished.
+ */
+export const DEFAULT_MAX_STEPS = 30;
+
+/**
+ * One step is the floor, because one step is a coherent turn.
+ *
+ * A tighter-looking floor was tried at 5 and was wrong: it silently RAISED
+ * a caller that asked for 3, which broke a test asserting an exact call
+ * count and would equally have broken anyone deliberately running a short
+ * budget. A clamp exists to reject the impossible — zero and negatives,
+ * which describe a turn that can never call a tool — not to overrule a
+ * choice somebody made on purpose.
+ *
+ * The Configure panel offers a sensible range separately; that is guidance,
+ * and this is the hard bound.
+ */
+export const MIN_MAX_STEPS = 1;
+
+/**
+ * Ceiling. Not a safety limit — approvals are that — but a bound on how long
+ * one turn may run before the user hears anything at all.
+ */
+export const MAX_MAX_STEPS = 500;
+
 export interface AgentPatch extends Partial<AgentRecord> {
   /** Field names to delete from the stored record. */
   clear?: string[];
@@ -105,6 +135,27 @@ export interface AgentRecord {
    * than no control. See `reasoningFor` in `@wispcrew/llm`.
    */
   reasoningEffort?: string;
+
+  /**
+   * How many tool steps one turn may take before it must stop and report.
+   *
+   * A step is one model call plus whatever tools it asked for, so this is
+   * the real budget for "keep working without checking in". The default of
+   * `DEFAULT_MAX_STEPS` suits a chat agent answering a question; it is far
+   * too tight for one doing sustained work on a codebase, where a single
+   * task legitimately runs to dozens of reads, edits and test runs.
+   *
+   * Raising it does not make a turn open-ended. The loop is still bounded,
+   * the budget is still spent one step at a time, and the summary at the end
+   * still happens — this only decides where that end is.
+   *
+   * Unset means the default. Clamped when applied, so a hand-edited record
+   * cannot set it to zero (a turn that can never call a tool) or to
+   * something that would run until the context window bursts.
+   */
+  maxSteps?: number;
+  // See DEFAULT_MAX_STEPS / MIN_MAX_STEPS / MAX_MAX_STEPS below for the
+  // bounds this is clamped to when it reaches the agent loop.
 
   /**
    * Endpoint override for this agent.

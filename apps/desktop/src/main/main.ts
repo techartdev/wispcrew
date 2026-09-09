@@ -509,7 +509,9 @@ app.whenReady().then(async () => {
    */
   startDesktopNotifications(userDataDir);
   attachWindowEventSink();
-  setApprovalAsker((agentId, req) => requestApproval(agentId, req));
+  // The engine wants a yes or no; the vocabulary matters only to whoever
+  // records the standing grant, which `requestApproval` has already done.
+  setApprovalAsker(async (agentId, req) => (await requestApproval(agentId, req)) !== 'deny');
 
   /*
    * The same person, asked by a machine across the network.
@@ -517,6 +519,13 @@ app.whenReady().then(async () => {
    * A node with an agent that needs a tool now reaches whoever is driving
    * this desktop, instead of parking the request until it times out as a
    * denial with no card ever shown.
+   */
+  /*
+   * The full resolution, not a boolean.
+   *
+   * "Always allow" on a remote agent's card has to reach the node: the grant
+   * belongs in that machine's store, and collapsing it to yes/no here meant
+   * the node was re-asked forever.
    */
   setNodeApprovalAsker((agentId, req) => requestApproval(agentId, req));
 

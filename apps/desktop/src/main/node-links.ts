@@ -6,6 +6,7 @@
  * quietly: a node that is asleep, unplugged or on another network is a
  * normal state, not an error to interrupt someone with.
  */
+import type { ApprovalResolution } from '@wispcrew/shared';
 import {
   connectRemoteNode,
   fileLog,
@@ -61,6 +62,17 @@ const AGENT_SCOPED = new Set([
   'renameConversation',
   'listTurns',
   'cancelTurn',
+
+  /*
+   * The steering queue lives with the turn it belongs to.
+   *
+   * A queue is state inside a running `Agent`, and that Agent is on the
+   * machine that owns the conversation. Answering these locally would show
+   * an empty queue for a remote agent and edit a session nobody is running.
+   */
+  'getQueuedSteer',
+  'setQueuedSteer',
+  'flushQueuedSteer',
 ]);
 
 /**
@@ -139,6 +151,18 @@ export async function linkToNode(
          * card, the standing grants and "always allow" stay one
          * implementation rather than two that drift.
          */
+        /*
+         * The user's actual answer, forwarded verbatim.
+         *
+         * This collapsed to `allow-once` for every allow, so "Always allow"
+         * on a remote agent's card was a lie: the protocol carries
+         * `allow-always`, the node handles it, and the one path that could
+         * ever send it never did. The user was asked again on the next call,
+         * and again after that, with no way to make it stop.
+         *
+         * The grant is recorded on the NODE, which is where that agent's
+         * permissions live and where they can be listed and revoked.
+         */
         onAsk: async (request) =>
           (await onAsk?.(request.agentId, {
             toolName: request.tool,
@@ -151,9 +175,7 @@ export async function linkToNode(
              */
             requestId: request.requestId,
             alreadyShown: true,
-          }))
-            ? 'allow-once'
-            : 'deny',
+          })) ?? 'deny',
 
         onClose: () => {
           // Drop the link so the next call reconnects rather than writing
@@ -216,7 +238,7 @@ let onAsk:
         requestId?: string;
         alreadyShown?: boolean;
       },
-    ) => Promise<boolean>)
+    ) => Promise<ApprovalResolution>)
   | null = null;
 
 export function setNodeApprovalAsker(
@@ -229,7 +251,7 @@ export function setNodeApprovalAsker(
       requestId?: string;
       alreadyShown?: boolean;
     },
-  ) => Promise<boolean>,
+  ) => Promise<ApprovalResolution>,
 ): void {
   onAsk = asker;
 }

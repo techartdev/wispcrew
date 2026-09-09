@@ -57,7 +57,14 @@ import { readSettings, writeSettings } from '@wispcrew/runtime';
 import { readSecrets, upsertSecrets, isEncryptionAvailable } from '@wispcrew/runtime';
 import { statuses as mcpStatuses, syncMcpServers } from '@wispcrew/runtime';
 import { runRoutineNow, refreshNextRunTime, refreshNextRunTimes } from '@wispcrew/runtime';
-import { abortSession, clearSession, seedSessionHistory } from '@wispcrew/runtime';
+import {
+  abortSession,
+  clearSession,
+  seedSessionHistory,
+  steerSession,
+  queuedSteer,
+  setQueuedSteer,
+} from '@wispcrew/runtime';
 import { prefixBefore, prefixThrough, rebuildHistory } from '@wispcrew/runtime';
 import { isClientOnlyMethod } from '@wispcrew/shared';
 import { existingLink, linkToNode, presetsForNode } from './node-links.js';
@@ -241,15 +248,34 @@ export interface BridgeContext {
 
 let ctx: BridgeContext;
 
-/** Pending approvals: requestId to the resolver awaiting the user's decision. */
-const pendingApprovals = new Map<string, (approved: boolean) => void>();
+/**
+ * Pending approvals: requestId to the resolver awaiting the user's decision.
+ *
+ * Carries the RESOLUTION, not a boolean. "Always allow" has to survive the
+ * trip back to whoever asked: when a node asked, the grant belongs in that
+ * node's store, and a boolean cannot say which of the two allows it was.
+ */
+const pendingApprovals = new Map<string, (resolution: ApprovalResolution) => void>();
 /** Tools the user chose "always allow" for, per agent, for this app run. */
 /**
  * Approvals still awaiting a decision, keyed by requestId. The tool name is
  * kept alongside the resolver so "always allow" can record a grant for the
  * right tool once the user answers.
  */
-const pendingMeta = new Map<string, { agentId: string; toolName: string }>();
+const pendingMeta = new Map<
+  string,
+  {
+    agentId: string;
+    toolName: string;
+    /**
+     * True when a node asked, not this machine.
+     *
+     * A grant for a remote agent belongs in that node's store; recording it
+     * here would be a permission nothing ever reads.
+     */
+    remote?: boolean;
+  }
+>();
 
 /* ------------------------------------------------------------------ */
 /* Event fan-out                                                       */
@@ -317,17 +343,23 @@ function resolveLocalApproval(requestId: string, resolution: ApprovalResolution)
   if (!resolve) return;
   pendingApprovals.delete(requestId);
 
-  // "Always allow" records a standing grant for this agent + tool. Only an
-  // explicit allow-always does so — a denial never creates a grant.
-  if (resolution === 'allow-always') {
-    const meta = pendingMeta.get(requestId);
-    if (meta) {
-      grant(meta.agentId, meta.toolName);
-      emitEvent({ type: 'grants-changed', grants: listGrants() });
-    }
+  /*
+   * "Always allow" records a standing grant for this agent + tool. Only an
+   * explicit allow-always does so — a denial never creates a grant.
+   *
+   * Local agents only. When a NODE asked, the agent's grants live in that
+   * node's store, and writing one here would record a permission against a
+   * machine that never consults it — visible in this Settings panel, and
+   * doing nothing. The resolution travels back over the wire instead, and
+   * the node grants it on its own side.
+   */
+  const meta = pendingMeta.get(requestId);
+  if (resolution === 'allow-always' && meta && !meta.remote) {
+    grant(meta.agentId, meta.toolName);
+    emitEvent({ type: 'grants-changed', grants: listGrants() });
   }
 
-  resolve(resolution !== 'deny');
+  resolve(resolution);
 }
 
 export function requestApproval(
@@ -347,11 +379,19 @@ export function requestApproval(
     requestId?: string;
     alreadyShown?: boolean;
   },
-): Promise<boolean> {
-  // A standing grant the user made earlier, in this session or a previous
-  // one. Persisted grants are listed and revocable in Settings — a permission
-  // the user cannot see or withdraw would be worse than asking every time.
-  if (isGranted(agentId, req.toolName)) return Promise.resolve(true);
+): Promise<ApprovalResolution> {
+  /*
+   * A standing grant the user made earlier, in this session or a previous
+   * one. Persisted grants are listed and revocable in Settings — a permission
+   * the user cannot see or withdraw would be worse than asking every time.
+   *
+   * Only consulted for agents that live HERE. A node keeps its own grants and
+   * checks them before it asks, so testing this machine's store for a remote
+   * agent would answer from the wrong one.
+   */
+  if (!req.alreadyShown && isGranted(agentId, req.toolName)) {
+    return Promise.resolve('allow-once');
+  }
 
   const requestId = req.requestId ?? store.newId('appr');
 
@@ -379,10 +419,17 @@ export function requestApproval(
     detail: req.detail,
   });
 
-  pendingMeta.set(requestId, { agentId, toolName: req.toolName });
+  pendingMeta.set(requestId, {
+    agentId,
+    toolName: req.toolName,
+    // `alreadyShown` is set only when a node wrote the card in its own
+    // transcript, which is exactly the case where the grant is not ours.
+    remote: req.alreadyShown === true,
+  });
 
-  return new Promise<boolean>((resolve) => {
-    pendingApprovals.set(requestId, (approved) => {
+  return new Promise<ApprovalResolution>((resolve) => {
+    pendingApprovals.set(requestId, (resolution) => {
+      const approved = resolution !== 'deny';
       pendingMeta.delete(requestId);
 
       /*
@@ -405,7 +452,7 @@ export function requestApproval(
         });
       }
 
-      resolve(approved);
+      resolve(resolution);
     });
   });
 }
@@ -786,6 +833,22 @@ export function registerBridge(context: BridgeContext): void {
     const paths = Array.isArray(attachmentPaths) ? attachmentPaths.filter((p) => typeof p === 'string') : [];
     if (!text && paths.length === 0) return;
 
+    /*
+     * A turn is already running: queue rather than start a second one.
+     *
+     * Same rule as the daemon's `sendPrompt`, and it has to be here too —
+     * this handler runs whenever the agent's engine is this process, which
+     * is the ordinary case with no daemon attached. Two `Agent.run` loops on
+     * one session interleave `history` and orphan the abort handle.
+     *
+     * Attachments are not queued: they belong to the message that opened the
+     * turn, and re-sending files mid-run is a different feature.
+     */
+    if (text && paths.length === 0 && steerSession(agentId, text)) {
+      emitEvent({ type: 'steer-queued', agentId, queued: queuedSteer(agentId) });
+      return;
+    }
+
     const attachments = paths.length ? await loadAttachments(paths) : [];
 
     /*
@@ -940,6 +1003,25 @@ export function registerBridge(context: BridgeContext): void {
   handle('resolveApproval', (requestId: string, resolution: ApprovalResolution) =>
     resolveLocalApproval(requestId, resolution),
   );
+
+  /*
+   * The steering queue, for an agent whose engine is THIS process.
+   *
+   * Routed to the owning node for a remote agent by `AGENT_SCOPED`; these
+   * handlers answer only when the work is local.
+   */
+  handle('getQueuedSteer', (agentId: string) => queuedSteer(agentId));
+
+  handle('setQueuedSteer', (agentId: string, messages: string[]) => {
+    setQueuedSteer(agentId, Array.isArray(messages) ? messages.map(String) : []);
+    const queued = queuedSteer(agentId);
+    emitEvent({ type: 'steer-queued', agentId, queued });
+    return queued;
+  });
+
+  handle('flushQueuedSteer', (agentId: string) => {
+    emitEvent({ type: 'steer-queued', agentId, queued: queuedSteer(agentId) });
+  });
 
   /* -- subscription sign-in ------------------------------------ */
 
@@ -1553,6 +1635,26 @@ export function registerBridge(context: BridgeContext): void {
     const paths = Array.isArray(attachmentPaths)
       ? attachmentPaths.filter((p) => typeof p === 'string')
       : [];
+    /*
+     * Queue when that agent is mid-turn, rather than starting a second one.
+     *
+     * This is the path the composer actually uses, so the guard has to be
+     * here and not only on `sendPrompt`. A one-to-one room shares the
+     * agent's id, which is what `steerSession` keys on; a multi-agent room
+     * has a `room_…` id that matches no session, so `steerSession` returns
+     * false and the message runs as an ordinary turn — which is right, since
+     * there is no single running agent to steer.
+     */
+    const steerText = String(text ?? '').trim();
+    if (steerText && paths.length === 0 && steerSession(conversationId, steerText)) {
+      emitEvent({
+        type: 'steer-queued',
+        agentId: conversationId,
+        queued: queuedSteer(conversationId),
+      });
+      return;
+    }
+
     const attachments = paths.length ? await loadAttachments(paths) : [];
 
     // Fire and forget: a turn can take minutes, and the caller must be free

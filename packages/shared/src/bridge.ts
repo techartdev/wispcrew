@@ -20,6 +20,7 @@
  */
 import type {
   AgentRecord,
+  AgentPatch,
   AgentRunState,
   GlobalSettings,
   McpServerRecord,
@@ -44,6 +45,13 @@ export type BridgeEvent =
   | { type: 'transcript'; agentId: string; entry: TranscriptEntry }
   /** The agent's run state changed (drives the roster status dot). */
   | { type: 'run-state'; agentId: string; state: AgentRunState }
+  /**
+   * Messages typed during a live turn, still waiting to reach the model.
+   *
+   * Rendered above the composer, where they stay editable until the model
+   * sees them — the point at which they move into the transcript proper.
+   */
+  | { type: 'steer-queued'; agentId: string; queued: readonly string[] }
   /** A tool call needs a decision; resolve with `resolveApproval`. */
   | {
       type: 'approval';
@@ -231,7 +239,15 @@ export interface WispBridge {
 
   listAgents(): Promise<AgentRecord[]>;
   createAgent(patch: Partial<AgentRecord>): Promise<AgentRecord>;
-  updateAgent(id: string, patch: Partial<AgentRecord>): Promise<AgentRecord>;
+  /**
+   * `AgentPatch`, so a field can be REMOVED and not merely overwritten.
+   *
+   * An explicit `undefined` does not survive `JSON.stringify` and therefore
+   * does not survive IPC, so a spread merge on the far side keeps the old
+   * value. `clear` names the fields to delete, which is the only way a
+   * cleared override actually reaches the store.
+   */
+  updateAgent(id: string, patch: AgentPatch): Promise<AgentRecord>;
   deleteAgent(id: string): Promise<void>;
   /** Copy profile/persona/skills — never conversation history. */
   duplicateAgent(id: string): Promise<AgentRecord>;
@@ -245,6 +261,19 @@ export interface WispBridge {
    * the renderer never loads file contents itself.
    */
   sendPrompt(agentId: string, prompt: string, attachmentPaths?: string[]): Promise<void>;
+  /**
+   * Messages queued during a live turn, oldest first.
+   *
+   * They belong to the user until the model reads them, so they can be
+   * edited or dropped with `setQueuedSteer` while they wait.
+   */
+  getQueuedSteer(agentId: string): Promise<readonly string[]>;
+  setQueuedSteer(agentId: string, messages: string[]): Promise<readonly string[]>;
+  /**
+   * Send the queue to the model at the next step boundary rather than
+   * waiting — the arrow button beside a queued message.
+   */
+  flushQueuedSteer(agentId: string): Promise<void>;
   /** Native file picker for attachments; returns absolute paths. */
   pickFiles(): Promise<string[]>;
   /** Abort the in-flight turn, leaving a provider-valid history. */

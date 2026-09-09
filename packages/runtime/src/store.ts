@@ -239,6 +239,16 @@ export function createAgent(patch: Partial<AgentRecord>): AgentRecord {
      * consequences.
      */
     channelPolicies: patch.channelPolicies,
+    /*
+     * And this one, for exactly the reason the comment above gives.
+     *
+     * It was omitted, so `createAgent({ maxSteps })` produced an agent on the
+     * default budget: accepted without complaint, wrong on its first long
+     * turn, and indistinguishable from the setting not working. The same
+     * shape as `nodeId` and `runAt` before it — a field-by-field build drops
+     * whatever nobody remembered to list.
+     */
+    maxSteps: patch.maxSteps,
     disabledTools: patch.disabledTools,
     pinned: patch.pinned ?? false,
     archived: false,

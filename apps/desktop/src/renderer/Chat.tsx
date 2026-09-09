@@ -75,6 +75,10 @@ interface ChatProps {
   onOpenHistory(): void;
   onOpenRoom(): void;
   onSend(prompt: string, attachmentPaths?: string[]): void;
+  /** Messages typed during a live turn, not yet seen by the model. */
+  queuedSteer: readonly string[];
+  onEditQueuedSteer(messages: string[]): void;
+  onFlushQueuedSteer(): void;
   /**
    * Text to append to the draft, e.g. a handle the user clicked.
    *
@@ -301,6 +305,9 @@ export function Chat({
   onOpenHistory,
   onOpenRoom,
   onSend,
+  queuedSteer,
+  onEditQueuedSteer,
+  onFlushQueuedSteer,
   insertText,
   onInsertConsumed,
   onInterrupt,
@@ -416,16 +423,55 @@ export function Chat({
     if (el && atBottom(el)) pinnedRef.current = true;
   }, []);
 
-  useLayoutEffect(() => {
+  /**
+   * Stick to the bottom, for as long as the content keeps growing.
+   *
+   * `scrollTop = scrollHeight` on a transcript change is not enough, and this
+   * is why the pane followed a reply sometimes and stalled other times:
+   *
+   *  - A streaming message grows by MUTATING one entry's text. React commits
+   *    that as a new array, so this effect runs — but it runs against the DOM
+   *    as it is at commit time, and a long markdown paragraph reflows to its
+   *    final height afterwards. We scrolled to the old height and stopped.
+   *  - Anything that settles late — a code block, a table, an image — lands
+   *    after every effect has finished, and nothing was watching for it.
+   *
+   * A ResizeObserver on the content is the honest signal: it fires whenever
+   * the scrollable height actually changes, whatever caused it. The pin is
+   * still the only thing that decides WHETHER to follow, so a user who has
+   * scrolled up is left alone exactly as before.
+   */
+  const stickToBottom = useCallback(() => {
     if (!pinnedRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 1) return;
     // Mark this as ours so `handleScroll` does not treat it as the user
     // choosing to be at the bottom (which would be circular, but more
     // importantly would mask a genuine scroll that arrives in the same tick).
     selfScrollingRef.current = true;
     el.scrollTop = el.scrollHeight;
-  }, [transcript]);
+  }, []);
+
+  useLayoutEffect(stickToBottom, [transcript, stickToBottom]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    /*
+     * Observe the children, not just the container.
+     *
+     * The container's own box is pinned by the grid, so it never resizes
+     * while a message inside it grows — observing only `el` would report
+     * nothing for the entire stream.
+     */
+    const observer = new ResizeObserver(stickToBottom);
+    observer.observe(el);
+    for (const child of Array.from(el.children)) observer.observe(child);
+
+    return () => observer.disconnect();
+  }, [stickToBottom, subject?.id, transcript.length]);
 
   /*
    * Whether to offer "jump to latest".
@@ -702,13 +748,29 @@ export function Chat({
     }
     const text = draft.trim();
     // An attachment with no words is a legitimate message ("look at this").
-    if ((!text && pending.length === 0) || busy) return;
+    if (!text && pending.length === 0) return;
+    /*
+     * Sending WHILE the agent works is allowed — this is steering.
+     *
+     * `|| busy` used to sit in the line above, and it was the only thing
+     * stopping it. The engine has supported a mid-run message since the
+     * daemon stopped awaiting the whole turn in `sendPrompt`; there is a test
+     * for it (`steering-test.mjs`, case 2) asserting a second message is
+     * accepted and kept in order. The desktop simply never let one through,
+     * so the capability existed everywhere except where a person could reach
+     * it: you watch it head down the wrong path and cannot say so.
+     *
+     * Approval is the one exception. A card is a question with two answers,
+     * and typing past it would leave the run parked on a prompt nobody
+     * answered while the message queued behind it.
+     */
+    if (runState === 'awaiting-approval') return;
     onSend(text, pending.length ? pending : undefined);
     setDraft('');
     setPending([]);
     // Collapse the textarea back to one row after sending.
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-  }, [draft, pending, busy, onSend, hasProvider, onOpenSettings]);
+  }, [draft, pending, runState, onSend, hasProvider, onOpenSettings]);
 
   const addFiles = useCallback((paths: string[]) => {
     // De-duplicate: dropping the same file twice should not send it twice.
@@ -1002,6 +1064,61 @@ export function Chat({
             ))}
           </div>
         )}
+        {/*
+          Messages waiting for the model, above the composer.
+
+          They sit here rather than in the transcript because the model has
+          not seen them: a queued message shown as a sent one is a claim the
+          agent read something it has not. Editable until it goes, which is
+          the point — you queue a correction, the tool result arrives, and
+          you may want to change what you were going to say.
+        */}
+        {queuedSteer.length > 0 && (
+          <div className="steer-queue" role="list" aria-label="Queued messages">
+            {queuedSteer.map((message, i) => (
+              <div className="steer-item" role="listitem" key={`${i}-${message.slice(0, 24)}`}>
+                <input
+                  className="steer-text"
+                  value={message}
+                  aria-label={`Queued message ${i + 1}`}
+                  onChange={(e) => {
+                    const next = [...queuedSteer];
+                    next[i] = e.target.value;
+                    onEditQueuedSteer(next);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      onFlushQueuedSteer();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="steer-send"
+                  onClick={onFlushQueuedSteer}
+                  title="Send at the next step — as soon as any running tool finishes"
+                  aria-label="Send now"
+                >
+                  <IconSend />
+                </button>
+                <button
+                  type="button"
+                  className="steer-remove"
+                  onClick={() => onEditQueuedSteer(queuedSteer.filter((_, at) => at !== i))}
+                  title="Remove"
+                  aria-label={`Remove queued message ${i + 1}`}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            <div className="steer-hint muted">
+              {queuedSteer.length === 1 ? 'Queued' : `${queuedSteer.length} queued`} — goes to the
+              agent after the running step finishes
+            </div>
+          </div>
+        )}
         {pending.length > 0 && (
           <div className="attach-row attach-pending">
             {pending.map((p) => (
@@ -1043,9 +1160,11 @@ export function Chat({
             placeholder={
               !hasProvider
                 ? 'Configure a provider in Settings to start chatting…'
-                : busy
-                  ? 'Agent is working — Esc to stop'
-                  : `Message ${subject.name}…`
+                : runState === 'awaiting-approval'
+                  ? 'Waiting for your approval above…'
+                  : busy
+                    ? 'Working — send a message to steer it, Esc to stop'
+                    : `Message ${subject.name}…`
             }
             onChange={(e) => {
               setDraft(e.target.value);
@@ -1062,29 +1181,46 @@ export function Chat({
             onKeyDown={onKeyDown}
             spellCheck
           />
-          {busy ? (
+          {/*
+            Stop and Send stand together while a turn runs.
+            
+            Stop REPLACED Send here, so a running agent left no control that
+            could send anything — the composer accepted text and had nowhere
+            to put it. Steering needs both: "stop" and "no, do it this way"
+            are different instructions, and only one of them was reachable.
+          */}
+          {busy && (
             <button type="button" className="btn btn-stop" onClick={onInterrupt} title="Stop (Esc)">
               <IconStop />
               Stop
             </button>
-          ) : (
-            <button
-              type="button"
-              className="btn btn-primary btn-send"
-              onClick={submit}
-              // With no provider the button stays live and routes to
-              // Settings — a greyed-out control with no explanation is a
-              // worse dead end than one that tells you what to do.
-              disabled={hasProvider && !draft.trim() && pending.length === 0}
-            >
-              {/*
-                No paper-plane on "Set up": it would promise a message is
-                about to be sent, and that button opens Settings instead.
-              */}
-              {hasProvider && <IconSend />}
-              {hasProvider ? 'Send' : 'Set up'}
-            </button>
           )}
+          <button
+            type="button"
+            className="btn btn-primary btn-send"
+            onClick={submit}
+            // With no provider the button stays live and routes to
+            // Settings — a greyed-out control with no explanation is a
+            // worse dead end than one that tells you what to do.
+            disabled={
+              (hasProvider && !draft.trim() && pending.length === 0) ||
+              runState === 'awaiting-approval'
+            }
+            title={
+              runState === 'awaiting-approval'
+                ? 'Answer the approval request above first'
+                : busy
+                  ? 'Send a message to steer the running turn'
+                  : undefined
+            }
+          >
+            {/*
+              No paper-plane on "Set up": it would promise a message is
+              about to be sent, and that button opens Settings instead.
+            */}
+            {hasProvider && <IconSend />}
+            {hasProvider ? 'Send' : 'Set up'}
+          </button>
         </div>
         {/*
           One agent, one meter. With several, this would have to choose

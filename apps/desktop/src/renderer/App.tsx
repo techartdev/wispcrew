@@ -524,6 +524,9 @@ export function App() {
           onOpenHistory={() => setPanel('history')}
           onOpenRoom={() => setPanel('room')}
           onSend={send}
+          queuedSteer={state.queuedSteer}
+          onEditQueuedSteer={(messages) => void actions.editQueuedSteer(messages)}
+          onFlushQueuedSteer={() => void actions.flushQueuedSteer()}
           insertText={draftMention}
           onInsertConsumed={() => setDraftMention(null)}
           onInterrupt={() => void actions.interrupt()}
