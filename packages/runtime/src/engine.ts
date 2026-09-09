@@ -344,6 +344,16 @@ function environmentOptions(agent: AgentRecord | undefined, conversationId?: str
               .map((c) => (c === 'telegram' ? 'Telegram' : 'desktop notifications'));
 
             return {
+    /*
+     * How much this agent narrates.
+     *
+     * Threaded from the record rather than left to the model's temperament.
+     * Declared-but-unread is the recurring fault in this codebase -- the
+     * system prompt itself was silently dropped for every non-subscription
+     * provider until 6c27be0 -- so there is a guard asserting this reaches
+     * the assembled prompt.
+     */
+    verbosity: agent?.verbosity,
               kind: 'human' as const,
               name: p.name,
               via: doors.length

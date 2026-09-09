@@ -73,6 +73,19 @@ export interface AgentPatch extends Partial<AgentRecord> {
   clear?: string[];
 }
 
+/**
+ * How much an agent narrates. See `AgentRecord.verbosity`.
+ *
+ * Deliberately three, not a number. A slider invites fiddling with a value
+ * nobody can predict the effect of; three named settings map onto the three
+ * things people actually want — leave me alone, work normally, show me
+ * everything.
+ */
+export type AgentVerbosity = 'quiet' | 'normal' | 'full';
+
+/** The default, when an agent has no preference recorded. */
+export const DEFAULT_VERBOSITY: AgentVerbosity = 'normal';
+
 export interface AgentRecord {
   id: string;
   /** User-facing name, e.g. "Refactor Bot". */
@@ -156,6 +169,33 @@ export interface AgentRecord {
   maxSteps?: number;
   // See DEFAULT_MAX_STEPS / MIN_MAX_STEPS / MAX_MAX_STEPS below for the
   // bounds this is clamped to when it reaches the agent loop.
+
+  /**
+   * How much this agent says while it works.
+   *
+   * A setting rather than a matter of each model's temperament, because the
+   * temperaments differ wildly and the cost is paid by everyone else. In one
+   * evening in a three-way room, one agent wrote 122 messages and another
+   * 19: the room read as a monologue with interjections, and the quieter
+   * agent's contributions were unfindable between walls of narration. Both
+   * had been told "keep replies short" in the room instructions. Politeness
+   * in a prompt is not a mechanism.
+   *
+   * It costs more than attention. Every message is context for every other
+   * agent in the room, so one verbose member spends everyone's window; and
+   * an agent's own narration used to consume the shared turn budget that
+   * exists to stop two agents looping, which silently broke delegation.
+   *
+   *  - `quiet`  — results only. One line when a batch of work completes.
+   *  - `normal` — the default. Say what is about to happen when it is slow
+   *               or surprising, then report what happened.
+   *  - `full`   — narrate each step. For watching an agent think, or
+   *               debugging why it did something.
+   *
+   * Fewer messages rather than shorter ones: five short messages cost five
+   * context hits for every listener, one paragraph costs one.
+   */
+  verbosity?: AgentVerbosity;
 
   /**
    * Endpoint override for this agent.

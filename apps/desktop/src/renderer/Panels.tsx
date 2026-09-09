@@ -1400,6 +1400,7 @@ export function AgentPanel({
   const [presetId, setPresetId] = useState(agent.presetId ?? '');
   const [model, setModel] = useState(agent.model ?? '');
   const [reasoningEffort, setReasoningEffort] = useState(agent.reasoningEffort ?? '');
+  const [verbosity, setVerbosity] = useState(agent.verbosity ?? 'normal');
   const [maxSteps, setMaxSteps] = useState(
     agent.maxSteps ? String(agent.maxSteps) : '',
   );
@@ -1537,6 +1538,7 @@ export function AgentPanel({
       // Blank means "use the default", which is not the same as zero — so an
       // empty box clears the override rather than saving one.
       maxSteps: maxSteps.trim() ? Number(maxSteps) : undefined,
+      verbosity,
       baseUrl: baseUrl.trim() || undefined,
       // Empty means this computer. `undefined` deletes the field, which is
       // what "runs here" has always looked like on disk.
@@ -1734,6 +1736,35 @@ export function AgentPanel({
           two orders of magnitude and somebody who needs 200 should be able to
           type 200.
         */}
+        {/*
+          How much the agent narrates.
+
+          Beside the step budget because the two answer related questions --
+          how long it works unattended, and how much it says while doing it.
+
+          A real setting rather than a line in the room instructions: those
+          already asked for brevity, and in one evening one agent still wrote
+          122 messages to another's 19. In a room the cost is shared, since
+          every message lands in every other member's context.
+        */}
+        <label className="field">
+          <span>
+            How much it says <em className="muted">— while it works</em>
+          </span>
+          <select value={verbosity} onChange={(e) => setVerbosity(e.target.value as typeof verbosity)}>
+            <option value="quiet">Quiet — results only</option>
+            <option value="normal">Normal — enough to follow</option>
+            <option value="full">Full — narrate every step</option>
+          </select>
+          <span className="muted small">
+            {verbosity === 'quiet'
+              ? 'One message when a piece of work finishes. No progress updates.'
+              : verbosity === 'full'
+                ? 'Thinks aloud as it works. Useful for watching it reason, noisy in a room.'
+                : 'Says what it is doing when that is slow or surprising, then reports what changed.'}
+          </span>
+        </label>
+
         <label className="field">
           <span>
             Tool steps per turn <em className="muted">— how long it works before reporting</em>

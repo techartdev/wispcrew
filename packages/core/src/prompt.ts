@@ -70,6 +70,13 @@ export interface SystemPromptOptions {
   /** Where this agent may reach the user, e.g. "Telegram". */
   channels?: string[];
 
+  /**
+   * How much to narrate. See `AgentRecord.verbosity`.
+   *
+   * Undefined means `normal`.
+   */
+  verbosity?: 'quiet' | 'normal' | 'full';
+
   /* -- the room ------------------------------------------------- */
 
   room?: {
@@ -380,6 +387,67 @@ function conductSection(): string[] {
  * on Telegram — the exact failures these sections exist to prevent, fixed
  * for one persona out of four.
  */
+/**
+ * How much to say while working.
+ *
+ * Stated as rules about specific acts, not as an adjective. "Be concise" is
+ * what the room instructions already said to two agents; one of them then
+ * wrote 122 messages in an evening while the other wrote 19. A model cannot
+ * act on a preference, only on a rule it can check itself against, so every
+ * line here names something observable: do not narrate a read, do not
+ * announce a plan you are about to carry out anyway, one message per batch.
+ *
+ * The room case is stricter and says why. An agent that knows its messages
+ * cost its colleagues context behaves differently from one merely asked to
+ * be brief — and it is true, which matters more: every message in a room is
+ * appended to every other member's history.
+ */
+function verbositySection(opts: SystemPromptOptions): string[] {
+  const level = opts.verbosity ?? 'normal';
+  const inRoom = (opts.room?.participants ?? []).filter((p) => p.kind === 'agent').length > 1;
+
+  const lines = ['## How much to say', ''];
+
+  if (level === 'quiet') {
+    lines.push(
+      'Results only.',
+      '',
+      '- Do not narrate what you are about to do. Do it, then report.',
+      '- One message when a piece of work is finished, not one per step.',
+      '- No progress updates unless something takes minutes or needs a decision.',
+      '- If nothing needs saying, say nothing.',
+    );
+  } else if (level === 'full') {
+    lines.push(
+      'Narrate your work as you go: what you are trying, what you found, what',
+      'you concluded. The person is watching to understand your reasoning, so',
+      'thinking aloud is the point rather than a cost.',
+    );
+  } else {
+    lines.push(
+      'Enough to follow, not a running commentary.',
+      '',
+      '- Say what you are doing when it is slow or surprising. Otherwise just do it.',
+      '- Never narrate reading a file, listing a directory, or searching.',
+      '- One message per batch of tool calls, not one per call.',
+      '- Report what you found and what changed. Skip the steps that got you there.',
+      '- Finish with what happened and anything still open.',
+    );
+  }
+
+  if (inRoom) {
+    lines.push(
+      '',
+      'You are in a room with other agents. Every message you write is added to',
+      "every other member's context, so a running commentary spends their",
+      'window as well as your own and buries what they need to see. Prefer one',
+      'considered message over five quick ones.',
+    );
+  }
+
+  return lines;
+}
+
 function compose(purpose: string[], opts: SystemPromptOptions): string {
   return [
     ...identitySection(opts),
@@ -388,6 +456,7 @@ function compose(purpose: string[], opts: SystemPromptOptions): string {
     ...productSection(),
     ...environmentSection(opts),
     ...roomSection(opts),
+    ...verbositySection(opts),
     ...conductSection(),
   ]
     .join('\n')
