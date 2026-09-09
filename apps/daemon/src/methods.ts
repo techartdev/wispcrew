@@ -61,6 +61,7 @@ import {
   listConversations,
   listProviderModels,
   visibleParticipants,
+  loadAttachments,
   loadTranscript,
   removeParticipant,
   runRoomTurn,
@@ -330,8 +331,17 @@ export function nodeMethods(): MethodTable {
      * transcript, spends that agent's own provider on the summary, and
      * writes the checkpoint beside the rest of that machine's history.
      */
-    compactConversation: (conversationId: never) =>
-      compactConversation(conversationId as unknown as string),
+    /*
+     * `agentId` decides WHOSE model writes the summary, and dropping it made
+     * a room fall back to whichever agent is listed first -- so the button
+     * beside one name spent another member's provider and answered in their
+     * voice.
+     */
+    compactConversation: (conversationId: never, agentId?: never) =>
+      compactConversation(
+        conversationId as unknown as string,
+        agentId as unknown as string | undefined,
+      ),
 
     deleteRoom: (conversationId: never) => {
       const id = conversationId as unknown as string;
@@ -417,19 +427,44 @@ export function nodeMethods(): MethodTable {
       );
     },
 
-    sendToRoom: (conversationId: never, text: never) => {
+    /**
+     * A message to a room, with whatever was attached to it.
+     *
+     * The third parameter is not optional decoration. The desktop has always
+     * SENT attachment paths — composer, file picker and pasted screenshots
+     * all arrive here — but this signature accepted two arguments and the
+     * third was discarded silently. With the daemon owning the engine (the
+     * ordinary case), every image a user attached in a room was written to
+     * disk, shown in the composer, and then dropped on the way to the model.
+     * The user saw a thumbnail before sending, no preview afterwards, and an
+     * agent that answered as though nothing had been attached.
+     *
+     * Paths are resolved to bytes HERE rather than in the desktop, because
+     * the daemon is the process that runs the turn and may be on another
+     * machine than the window.
+     */
+    sendToRoom: (conversationId: never, text: never, attachmentPaths?: never) => {
+      const paths = (attachmentPaths as unknown as string[] | undefined) ?? [];
+
       /*
        * Fire and forget, like sendPrompt.
        *
        * A turn can take minutes and the caller must stay free to send
        * another message or interrupt. An un-awaited rejection here would
        * take down the daemon and every agent with it, so it is caught.
+       *
+       * Loading the files is part of that async chain: a failed read must
+       * surface as a notice, not as an unhandled rejection.
        */
-      void runRoomTurn({
-        conversationId: conversationId as unknown as string,
-        text: text as unknown as string,
-        speakerId: LOCAL_HUMAN_ID,
-      }).catch((err: Error) => {
+      void (async () => {
+        const attachments = paths.length ? await loadAttachments(paths) : [];
+        await runRoomTurn({
+          conversationId: conversationId as unknown as string,
+          text: text as unknown as string,
+          speakerId: LOCAL_HUMAN_ID,
+          attachments,
+        });
+      })().catch((err: Error) => {
         emitEngineEvent({ type: 'notice', level: 'error', text: err.message });
       });
     },
@@ -455,8 +490,17 @@ export function nodeMethods(): MethodTable {
      * The message is now persisted first and the run is deliberately not
      * awaited: results stream back as events, exactly as they do locally.
      */
-    sendPrompt: (id: never, prompt: never) => {
+    sendPrompt: (id: never, prompt: never, attachmentPaths?: never) => {
       const agentId = id as unknown as string;
+      /*
+       * Attachments, which this dropped for the same reason `sendToRoom`
+       * did: the parameter was simply not in the signature, so every file
+       * a client attached was discarded without a word. Steering is the one
+       * case that legitimately ignores them -- a queued mid-turn message is
+       * text injected at a step boundary, and re-sending files there is a
+       * different feature -- so the guard below keeps that behaviour.
+       */
+      const attachPaths = (attachmentPaths as unknown as string[] | undefined) ?? [];
       const text = String(prompt ?? '').trim();
       if (!text) return;
 
@@ -472,7 +516,7 @@ export function nodeMethods(): MethodTable {
        *
        * Queued instead, and the model sees it at the next step boundary.
        */
-      if (steerSession(agentId, text)) {
+      if (attachPaths.length === 0 && steerSession(agentId, text)) {
         emitEngineEvent({ type: 'steer-queued', agentId, queued: queuedSteer(agentId) });
         return;
       }
@@ -492,11 +536,15 @@ export function nodeMethods(): MethodTable {
        * the process dies: every other agent stops and every scheduled
        * routine with it, because one turn failed.
        */
-      void runRoomTurn({
-        conversationId: agentId,
-        text,
-        speakerId: LOCAL_HUMAN_ID,
-      }).catch((err: Error) => {
+      void (async () => {
+        const attachments = attachPaths.length ? await loadAttachments(attachPaths) : [];
+        await runRoomTurn({
+          conversationId: agentId,
+          text,
+          speakerId: LOCAL_HUMAN_ID,
+          attachments,
+        });
+      })().catch((err: Error) => {
         fileLog('[node] turn failed', agentId, err?.message ?? String(err));
         emitEngineEvent({
           type: 'notice',
@@ -738,7 +786,11 @@ export function nodeMethods(): MethodTable {
      */
     conversationEndpoints: (conversationId: never) => endpointsFor(conversationId),
 
-    listRoutines: () => listRoutines(),
+    /*
+     * Filtered by agent when asked. Ignoring the argument returned EVERY
+     * routine on the node, so one agent's panel listed another's schedules.
+     */
+    listRoutines: (agentId?: never) => listRoutines(agentId as unknown as string | undefined),
     createRoutine: (patch: never) => announceRoutines(createRoutine(patch)),
     updateRoutine: (id: never, patch: never) => announceRoutines(updateRoutine(id, patch)),
     deleteRoutine: (id: never) => announceRoutines(deleteRoutine(id)),

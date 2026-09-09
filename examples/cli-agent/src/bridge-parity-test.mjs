@@ -182,6 +182,99 @@ console.log('\n[6] routine-scoped methods take a routine id, not an agent id');
   check('the two routing sets are disjoint', overlap.length === 0, overlap.join(', '));
 }
 
+
+/*
+ * [7] A method that accepts fewer arguments than the interface declares.
+ *
+ * This is the quietest failure in the whole seam. JavaScript discards extra
+ * arguments in silence, so a daemon method with a short parameter list keeps
+ * answering, keeps type-checking (the table is typed `never`), and simply
+ * loses whatever the caller passed last. Found in the wild: `sendToRoom` and
+ * `sendPrompt` both omitted `attachmentPaths`, so with a daemon attached --
+ * the ordinary case -- every pasted screenshot was written to disk, shown in
+ * the composer, then dropped on the way to the model. The user saw a
+ * thumbnail before sending and no image after it.
+ *
+ * Counting parameters is crude, and it is exactly what nobody rechecks by
+ * hand when adding one to an interface.
+ */
+console.log('\n[7] no daemon method silently drops a declared argument');
+{
+  const splitTop = (s) => {
+    const out = [];
+    let depth = 0;
+    let cur = '';
+    for (const ch of s) {
+      if ('([{<'.includes(ch)) depth++;
+      if (')]}>'.includes(ch)) depth--;
+      if (ch === ',' && depth === 0) {
+        out.push(cur);
+        cur = '';
+        continue;
+      }
+      cur += ch;
+    }
+    if (cur.trim()) out.push(cur);
+    return out.map((x) => x.trim()).filter(Boolean);
+  };
+
+  /** The parameter list of the call whose '(' is at or after `from`. */
+  const paramsAt = (src, from) => {
+    const open = src.indexOf('(', from);
+    if (open === -1) return null;
+    let depth = 0;
+    for (let j = open; j < src.length; j++) {
+      if (src[j] === '(') depth++;
+      else if (src[j] === ')') {
+        depth--;
+        if (!depth) return src.slice(open + 1, j);
+      }
+    }
+    return null;
+  };
+
+  const ifaceBody = bridgeSrc.slice(bridgeSrc.indexOf('export interface WispBridge'));
+  const declared = new Map();
+  for (const m of ifaceBody.matchAll(/^\s{2}([a-zA-Z][A-Za-z0-9_]*)\s*\(/gm)) {
+    const p = paramsAt(ifaceBody, m.index + m[0].length - 1);
+    if (p !== null) declared.set(m[1], splitTop(p));
+  }
+
+  const implemented = new Map();
+  for (const m of methodsSrc.matchAll(/^\s{4}([A-Za-z][A-Za-z0-9_]*)\s*:\s*(?:async\s*)?\(/gm)) {
+    const p = paramsAt(methodsSrc, m.index + m[0].length - 1);
+    if (p !== null) implemented.set(m[1], splitTop(p));
+  }
+
+  /*
+   * Refusals, not implementations. These need a browser or this machine's
+   * own credential store, so on a remote node they throw by design and have
+   * no use for the argument.
+   */
+  const refuses = new Set(['oauthSignIn', 'oauthImportFromCli']);
+
+  /*
+   * `getTranscript(agentId, limit?)`: the runtime's `loadTranscript` takes no
+   * limit, so no daemon can honour it. Listed here so the count passes while
+   * naming the gap rather than hiding it -- the honest fix is to drop
+   * `limit` from the interface or implement it in the store.
+   */
+  const knownGaps = new Set(['getTranscript']);
+
+  const dropped = [];
+  for (const [name, want] of declared) {
+    if (refuses.has(name) || knownGaps.has(name)) continue;
+    const got = implemented.get(name);
+    if (got && got.length < want.length) {
+      dropped.push(`${name}: interface takes ${want.length} (${want
+        .map((x) => x.split(':')[0].trim())
+        .join(', ')}), daemon takes ${got.length}`);
+    }
+  }
+
+  check('every daemon method accepts what the interface declares', dropped.length === 0, dropped.join('\n       '));
+}
+
 console.log('');
 if (failures) {
   console.error(`BRIDGE-PARITY TEST FAILED — ${failures} assertion(s)\n`);
