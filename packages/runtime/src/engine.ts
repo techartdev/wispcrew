@@ -909,6 +909,21 @@ export async function runPrompt(
         ? 'anthropic'
         : null;
 
+  /*
+   * Which channel carries "who said this".
+   *
+   * Anthropic's Messages API has no `name` field, so for Claude the only
+   * place to put a speaker is the text itself. Every other provider here
+   * speaks the OpenAI shape and has one -- which is what AutoGen uses, and
+   * what a model cannot mistake for its own prose.
+   *
+   * Never both. Two signals, one of them inside text the model also writes,
+   * taught it that the prefix was part of the format: it emitted one itself,
+   * and then read its own stored message as a colleague's.
+   */
+  const inlineSpeaker =
+    cfg.presetId === 'claude-subscription' || cfg.presetId === 'anthropic';
+
   const preset = {
     ...configFromPreset(cfg.presetId, {
       apiKey: cfg.apiKey,
@@ -1391,6 +1406,7 @@ export async function runPrompt(
        */
       selfId: agentId,
       nameFor: (id) => handleInRoom(outputId, id),
+      inline: inlineSpeaker,
     }),
     onApprovalRequired: async (req) => {
       // `readonly` denies anything needing approval; `auto` grants it.

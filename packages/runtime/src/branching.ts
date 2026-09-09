@@ -105,7 +105,19 @@ export function rebuildHistory(
    * Omitted for a one-to-one conversation, where there is a single assistant
    * and nothing to disambiguate.
    */
-  speakers?: { selfId?: string; nameFor?: (id: string) => string | undefined },
+  speakers?: {
+    selfId?: string;
+    nameFor?: (id: string) => string | undefined;
+    /**
+     * Put the speaker in the TEXT, for providers with no `name` field.
+     *
+     * True for Anthropic, false everywhere else. Both channels at once
+     * teaches a model that the prefix is part of the format it should
+     * produce, and a stored echo of it makes an agent read its own messages
+     * as somebody else's.
+     */
+    inline?: boolean;
+  },
 ): ChatMessage[] {
   const out: ChatMessage[] = [];
 
@@ -162,9 +174,23 @@ export function rebuildHistory(
             ? speakers.nameFor(entry.authorId)
             : undefined;
 
+        /*
+         * One attribution channel, chosen by the caller -- never both.
+         *
+         * Sending `name` AND an inline "[@handle] " prefix gives a model two
+         * competing signals about who is speaking, one of them inside text
+         * it also produces itself. Belt and braces reads as safety and is
+         * the opposite: the model learns the prefix is part of the format,
+         * writes one, and then cannot recognise its own words.
+         *
+         * `inline` is for providers with nowhere structured to put a
+         * speaker -- Anthropic's Messages API has no `name` field, so the
+         * text is the only channel there is. Everything else uses the field,
+         * which a model cannot confuse with its own prose.
+         */
         out.push({
           role: entry.role,
-          content: `${speaker}${via}${entry.content}`,
+          content: speakers?.inline ? `${speaker}${via}${entry.content}` : `${via}${entry.content}`,
           ...(authored ? { name: authored } : {}),
         });
         break;

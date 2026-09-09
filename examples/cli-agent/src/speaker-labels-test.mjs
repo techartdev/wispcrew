@@ -25,6 +25,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rebuildHistory, stripSpeakerLabel } from '@wispcrew/runtime';
 
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+
 let failures = 0;
 const check = (label, cond, detail) => {
   if (cond) console.log(`  ok   ${label}`);
@@ -47,7 +49,7 @@ const entries = [
 
 console.log('\n[1] a colleague is named, and you are not');
 {
-  const asA = rebuildHistory(entries, { selfId: A, nameFor });
+  const asA = rebuildHistory(entries, { selfId: A, nameFor, inline: true });
   const mine = asA.find((m) => m.content.includes('I will take the parser'));
   const theirs = asA.find((m) => m.content.includes('you own the parser'));
 
@@ -57,7 +59,7 @@ console.log('\n[1] a colleague is named, and you are not');
 
 console.log('\n[2] the labels flip with the reader');
 {
-  const asB = rebuildHistory(entries, { selfId: B, nameFor });
+  const asB = rebuildHistory(entries, { selfId: B, nameFor, inline: true });
   const alices = asB.find((m) => m.content.includes('I will take the parser'));
   const own = asB.find((m) => m.content.includes('you own the parser'));
 
@@ -78,7 +80,7 @@ console.log('\n[3] a one-to-one chat is untouched');
 
 console.log('\n[4] the user is never labelled');
 {
-  const asA = rebuildHistory(entries, { selfId: A, nameFor });
+  const asA = rebuildHistory(entries, { selfId: A, nameFor, inline: true });
   const user = asA.find((m) => m.role === 'user');
   check("the person's words are their own", user?.content === 'both of you, plan this', user?.content);
 }
@@ -93,7 +95,7 @@ console.log('\n[5] an unknown author is not guessed at');
     ...entries,
     { kind: 'message', id: 'm4', role: 'assistant', authorId: 'agent_gone', content: 'from before.', createdAt: 4 },
   ];
-  const built = rebuildHistory(withGhost, { selfId: A, nameFor });
+  const built = rebuildHistory(withGhost, { selfId: A, nameFor, inline: true });
   const ghost = built.find((m) => m.content.includes('from before'));
   check('no label, no raw id', ghost?.content === 'from before.', ghost?.content);
 }
@@ -104,7 +106,7 @@ console.log('\n[6] labelling survives alongside the channel marker');
     { kind: 'message', id: 'v1', role: 'user', via: 'telegram', content: 'from my phone', createdAt: 1 },
     { kind: 'message', id: 'v2', role: 'assistant', authorId: B, content: 'on it', createdAt: 2 },
   ];
-  const built = rebuildHistory(viaEntries, { selfId: A, nameFor });
+  const built = rebuildHistory(viaEntries, { selfId: A, nameFor, inline: true });
   check('the channel marker still works', built[0]?.content === '[via telegram] from my phone', built[0]?.content);
   check('and the speaker label too', built[1]?.content === '[@bob] on it', built[1]?.content);
 }
@@ -130,7 +132,7 @@ console.log("\n[7] a colleague's tool calls are not your memory");
     { kind: 'tool-call', id: 't2', toolName: 'shell', authorId: B, args: { command: 'bob' }, status: 'completed', content: 'bob output', createdAt: 3 },
   ];
 
-  const asA = rebuildHistory(mixed, { selfId: A, nameFor });
+  const asA = rebuildHistory(mixed, { selfId: A, nameFor, inline: true });
   const argsA = asA.flatMap((m) => m.toolCalls ?? []).map((c) => c.args.command);
   check('own tool call kept', argsA.includes('alice'), argsA.join(','));
   check("colleague's tool call dropped", !argsA.includes('bob'), argsA.join(','));
@@ -139,7 +141,7 @@ console.log("\n[7] a colleague's tool calls are not your memory");
     !asA.some((m) => m.role === 'tool' && /bob output/.test(m.content)),
   );
 
-  const asB = rebuildHistory(mixed, { selfId: B, nameFor });
+  const asB = rebuildHistory(mixed, { selfId: B, nameFor, inline: true });
   const argsB = asB.flatMap((m) => m.toolCalls ?? []).map((c) => c.args.command);
   check('the reverse holds for the other agent', argsB.includes('bob') && !argsB.includes('alice'), argsB.join(','));
 }
@@ -154,7 +156,7 @@ console.log('\n[8] history written before authors existed still works');
   const legacy = [
     { kind: 'tool-call', id: 't9', toolName: 'shell', args: { command: 'from before' }, status: 'completed', content: 'old output', createdAt: 1 },
   ];
-  const built = rebuildHistory(legacy, { selfId: A, nameFor });
+  const built = rebuildHistory(legacy, { selfId: A, nameFor, inline: true });
   const args = built.flatMap((m) => m.toolCalls ?? []).map((c) => c.args.command);
   check('kept, not dropped', args.includes('from before'), args.join(','));
 }
@@ -178,7 +180,7 @@ console.log('\n[10] the structured name field is set, where a provider can use i
    * and impossible for a model to mistake for its own prose. Anthropic has no
    * such field, so the inline prefix stays as the fallback. Both are set.
    */
-  const asA = rebuildHistory(entries, { selfId: A, nameFor });
+  const asA = rebuildHistory(entries, { selfId: A, nameFor, inline: true });
   const theirs = asA.find((m) => m.content.includes('you own the parser'));
   const mine = asA.find((m) => m.content.includes('I will take the parser'));
 
@@ -240,7 +242,7 @@ console.log('\n[12] the sanitiser is actually WIRED, not merely exported');
    * assistant segment is written. Reading source is crude, and it is the
    * only thing that fails when somebody deletes the call.
    */
-  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+  // `root` is hoisted above; kept here for readability of this case.
   const engine = fs.readFileSync(path.join(root, 'packages/runtime/src/engine.ts'), 'utf8');
 
   check(
@@ -262,6 +264,48 @@ console.log('\n[12] the sanitiser is actually WIRED, not merely exported');
     /name:\s*named/.test(adapter),
     'ChatMessage.name is set but never reaches the provider',
   );
+}
+
+console.log('\n[13] one attribution channel, never two');
+{
+  /*
+   * The prefix exists ONLY because Anthropic's Messages API has no `name`
+   * field. Sending both to a provider that has one gives the model two
+   * competing signals about who is speaking -- one of them inside text it
+   * also writes itself.
+   *
+   * That is not hypothetical. It taught Local GPT that "[@claude] " was part
+   * of the format; it emitted one, we stored it, and it then read its own
+   * message as mine, narrated itself in the third person, and waited for a
+   * reply from an agent that had never spoken.
+   */
+  const one = [
+    { kind: 'message', id: 'z1', role: 'assistant', authorId: B, content: 'take the parser', createdAt: 1 },
+  ];
+
+  const structured = rebuildHistory(one, { selfId: A, nameFor, inline: false })[0];
+  check('a name-capable provider gets the field', structured.name === 'bob', JSON.stringify(structured));
+  check(
+    'and clean text',
+    structured.content === 'take the parser',
+    JSON.stringify(structured.content),
+  );
+
+  const inline = rebuildHistory(one, { selfId: A, nameFor, inline: true })[0];
+  check('a provider without one gets the prefix', inline.content === '[@bob] take the parser', inline.content);
+
+  /*
+   * The engine picks per provider. Reading source because the choice is a
+   * boolean threaded through a call -- there is no behaviour to observe from
+   * here, and this is exactly the wiring that keeps rotting.
+   */
+  const engine = fs.readFileSync(path.join(root, 'packages/runtime/src/engine.ts'), 'utf8');
+  check(
+    'the engine chooses inline only for Anthropic',
+    /inlineSpeaker\s*=\s*\n?\s*cfg\.presetId === 'claude-subscription' \|\| cfg\.presetId === 'anthropic'/.test(engine),
+    'inline is not selected per provider',
+  );
+  check('and passes it to rebuildHistory', /inline:\s*inlineSpeaker/.test(engine));
 }
 
 console.log('');
