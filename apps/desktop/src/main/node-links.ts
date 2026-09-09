@@ -59,6 +59,16 @@ const AGENT_SCOPED = new Set([
   'deleteRoom',
   'getContextReports',
   'compactConversation',
+  /*
+   * Which outside chats are attached to this conversation.
+   *
+   * The bindings are stored beside the conversation, so for an agent on
+   * another machine they live there too. Answered locally it reported this
+   * machine's bindings for a room that is not here — usually none, so the
+   * room panel showed a Telegram chat as unattached while the node went on
+   * delivering to it.
+   */
+  'conversationEndpoints',
   'renameConversation',
   'listTurns',
   'cancelTurn',
