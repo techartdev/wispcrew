@@ -148,6 +148,24 @@ silently does nothing costs trust in every other control.
    Whether that is the right trade is an open question, not a settled one.
 7. **Web search quality depends on the configured backend.** See
    `packages/tools/src/web.ts`.
+8. **A subscription token can be revoked mid-session, apparently by our own
+   refresh.** Observed 2026-09-09: two turns failed with
+   `OAuth access token has been revoked`, and the session recovered on its
+   own without the user signing in again. That self-recovery is the tell —
+   a real sign-out does not heal itself.
+
+   The suspicion is a refresh race. `wispcrew-secrets.enc` is shared by
+   every process on the profile (daemon, desktop, CLI, Telegram host), and
+   twenty-two node processes were live on the reporting machine. If the
+   provider rotates refresh tokens, two processes refreshing concurrently
+   each invalidate the other's. `2a0c1a3` pinned a single-flight, but that
+   guard is in-process; whether it holds ACROSS processes sharing one
+   credential file is untested.
+
+   Not a stopper — it recovers — so it is logged rather than fixed. Anyone
+   picking it up should start by proving the race exists rather than
+   hardening on a guess: two processes, one file, forced concurrent
+   refresh, and check whether both tokens survive.
 
 ## Roadmap
 
