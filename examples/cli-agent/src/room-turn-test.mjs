@@ -373,6 +373,10 @@ console.log('\n[the backstop] a chain stops, and says that it stopped');
     },
   });
 
+  /*
+   * Bounded by handoff DEPTH now, which trips earlier than the coarse turn
+   * budget: A -> B -> A -> B is a loop long before twelve turns have passed.
+   */
   check('the chain is bounded', ran.length <= DEFAULT_TURN_BUDGET + 1,
     `${ran.length} turns ran`);
   check('and it actually ran a chain', ran.length > 2, `${ran.length} turns ran`);
@@ -383,9 +387,21 @@ console.log('\n[the backstop] a chain stops, and says that it stopped');
    * between "they finished" and "I stopped them" is the whole point of
    * having a budget.
    */
-  const notice = loadTranscript(room.id).filter((e) => e.kind === 'notice').pop();
-  check('the room says it stopped them', /stopping to check/.test(notice?.text ?? ''),
-    notice?.text);
+  /*
+   * The stop notice, not merely the last notice.
+   *
+   * `.pop()` assumed nothing else could write after it. An earlier case in
+   * this same file leaves a failure notice in the transcript ("could not
+   * finish: provider unreachable"), and once the chain began stopping
+   * EARLIER -- on handoff depth rather than on raw turn count -- that older
+   * entry became the final one and these assertions read it instead. The
+   * test was asserting on whichever notice happened to be last, which is a
+   * property of test ordering rather than of the behaviour under test.
+   */
+  const notice = loadTranscript(room.id)
+    .filter((e) => e.kind === 'notice' && /stopping to check/.test(e.text ?? ''))
+    .pop();
+  check('the room says it stopped them', Boolean(notice), notice?.text);
   check('and how to continue', /Say something/.test(notice?.text ?? ''), notice?.text);
 }
 

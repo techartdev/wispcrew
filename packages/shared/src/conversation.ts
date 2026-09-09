@@ -321,4 +321,13 @@ export interface TurnRecord {
   finishedAt?: number;
   /** Why it ended, when that is not obvious. */
   detail?: string;
+  /**
+   * What the agent was asked, normalised for comparison.
+   *
+   * Kept so two deliveries of ONE question -- a colleague's relay and the
+   * user's own message, seconds apart under different entry ids -- can be
+   * recognised as the same request. Without it the only identity a claim
+   * has is the entry id, which by definition differs between them.
+   */
+  text?: string;
 }

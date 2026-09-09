@@ -80,6 +80,14 @@ export interface RoomTurnInput {
    * message left the count at zero and recursed until it was killed.
    */
   agentTurnsSoFar?: number;
+  /**
+   * How many handoffs deep this chain already is.
+   *
+   * Zero for anything a person said. One agent tagging another makes it 1,
+   * that agent tagging back makes it 2, and so on -- so A -> B -> A -> B is
+   * visible as a loop forming long before a raw message count would notice.
+   */
+  chainDepth?: number;
 
   /** Injected by tests. */
   run?: typeof runPrompt;
@@ -109,14 +117,29 @@ export interface RoomTurnResult {
  */
 function agentTurnsSinceHuman(conversationId: string): number {
   const transcript = store.loadTranscript(conversationId);
-  let count = 0;
+
+  /*
+   * Distinct agents, not messages.
+   *
+   * This counted every assistant entry at the end of the transcript, which
+   * made one agent's own narration spend a budget that exists to stop TWO
+   * agents looping. A tool-using agent writes five or eight messages in a
+   * single working turn; after two such turns the allowance was gone, and
+   * the next `@colleague` was refused delivery with "12 agent turns without
+   * you". The user saw it precisely: their own tags worked, ours did not.
+   *
+   * A loop needs at least two participants, so what matters is how many
+   * DIFFERENT agents have spoken since a person did. One agent talking to
+   * itself, however verbosely, can never be the runaway this guards.
+   */
+  const speakers = new Set<string>();
   for (let i = transcript.length - 1; i >= 0; i--) {
     const entry = transcript[i]!;
     if (entry.kind !== 'message') continue;
     if (entry.role === 'user') break;
-    count++;
+    if (entry.authorId) speakers.add(entry.authorId);
   }
-  return count;
+  return speakers.size;
 }
 
 /**
@@ -230,6 +253,17 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
   // Explicit when carried along a chain; derived for the first turn.
   const turnsSoFar = input.agentTurnsSoFar ?? agentTurnsSinceHuman(conversation.id);
 
+  /*
+   * How deep the current run of handoffs is.
+   *
+   * One binding, read by the routing decision AND passed to the recursion.
+   * They were computed separately and drifted immediately: the recursive
+   * call added one to `input.chainDepth`, which is the depth of the turn
+   * that started this one, so every link in the chain re-sent 1 and the
+   * loop guard never tripped.
+   */
+  const chainDepth = input.chainDepth ?? 0;
+
   const routing = input.authorId
     ? routeAgentMessage({
         conversation,
@@ -237,6 +271,7 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
         speakerId: input.speakerId,
         authorId: input.authorId,
         agentTurnsSoFar: turnsSoFar,
+        chainDepth,
       })
     : routeHumanMessage({
         conversation,
@@ -258,7 +293,31 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
       kind: 'notice',
       id: store.newId('note'),
       level: 'info',
-      text: `${routing.reason}. Say something to let them carry on.`,
+      /*
+       * Name who was held back, or the notice is unactionable.
+       *
+       * "12 agent turns without you" told the user a number and nothing
+       * they could do with it. What they need is which colleague did not
+       * hear the message, so they can repeat the tag themselves -- which is
+       * exactly what happened here, repeatedly, without anybody realising
+       * that was the workaround.
+       */
+      /*
+       * Both halves matter, so both are always said.
+       *
+       * WHO was held back, because "12 agent turns without you" is a number
+       * the user cannot act on -- what they need is the colleague that did
+       * not hear the message, which is exactly the workaround they had been
+       * performing by hand without knowing it was one.
+       *
+       * And HOW to continue, because a conversation that halts with no way
+       * forward is indistinguishable from a broken app.
+       */
+      text:
+        routing.mayRequest.length > 0
+          ? `${routing.reason}. ${routing.mayRequest.map((a) => '@' + a.handle).join(', ')} ` +
+            `did not act. Say something to let them carry on, or tag them yourself.`
+          : `${routing.reason}. Say something to let them carry on.`,
       createdAt: Date.now(),
     });
     return { ran: [], notice: routing.reason };
@@ -363,6 +422,8 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
         conversationId: conversation.id,
         triggerEntryId,
         agentId: agent.id,
+        // So two deliveries of one question collapse into a single turn.
+        text,
         replayed: input.entryId !== undefined,
       });
       if (!turn) return;
@@ -402,6 +463,8 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
         conversationId: conversation.id,
         triggerEntryId,
         agentId: agent.id,
+        // So two deliveries of one question collapse into a single turn.
+        text,
         /*
          * A caller-supplied entry id means this message already had an
          * identity elsewhere — replicated from another node, or redelivered
@@ -462,6 +525,9 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
             authorId: agent.id,
             // One more turn has happened; the chain carries the count.
             agentTurnsSoFar: turnsSoFar + 1,
+            // One more handoff. Resets to 0 whenever a person speaks,
+            // because `chainDepth` is only ever passed along this path.
+            chainDepth: chainDepth + 1,
             channel: input.channel,
             run: input.run,
           });

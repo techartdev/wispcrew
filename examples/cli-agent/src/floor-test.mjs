@@ -13,6 +13,7 @@
  */
 import {
   DEFAULT_TURN_BUDGET,
+  DEFAULT_CHAIN_DEPTH,
   addressesEveryone,
   mentionsIn,
   rememberAddressee,
@@ -206,21 +207,29 @@ console.log('\n[collaboration] an agent may address another explicitly');
 
 console.log('\n[budget] a chain of mentions eventually stops');
 {
+  /*
+   * The budget stops a CHAIN, and a chain needs somebody to have handed off
+   * already. `chainDepth` says how deep the current run of handoffs is.
+   *
+   * This block used to pass `agentTurnsSoFar` alone and expect silence, and
+   * that was the bug: an agent working by itself accrues turns without any
+   * handoff happening, so a budget meant to stop A and B ping-ponging was
+   * spent by A talking to nobody. The next deliberate `@colleague` was then
+   * refused delivery. The user reported it exactly: their own tags worked,
+   * an agent's tags failed almost every time.
+   */
   const r = routeAgentMessage({
     conversation: room(),
     text: '@linux keep going',
     speakerId: ME,
     authorId: 'a_win',
     agentTurnsSoFar: DEFAULT_TURN_BUDGET,
+    chainDepth: 1,
   });
-  /*
-   * The backstop that makes `free` safe to offer. Even with
-   * no-reply-by-default, explicit mentions can chain — and the failure
-   * should be a pause, not a bill.
-   */
   check('the room stops', r.speakers.length === 0);
   check('and says why', r.budgetExhausted === true);
   check('naming the count', new RegExp(String(DEFAULT_TURN_BUDGET)).test(r.reason), r.reason);
+  check('and naming who was held back', r.mayRequest.length === 1, JSON.stringify(r.mayRequest));
 
   const under = routeAgentMessage({
     conversation: room(),
@@ -228,8 +237,48 @@ console.log('\n[budget] a chain of mentions eventually stops');
     speakerId: ME,
     authorId: 'a_win',
     agentTurnsSoFar: DEFAULT_TURN_BUDGET - 1,
+    chainDepth: 1,
   });
   check('but not one turn earlier', under.speakers.length === 1);
+}
+
+console.log('\n[delegation] a first handoff is never refused');
+{
+  /*
+   * The regression that started all this. An agent that has been working
+   * alone -- narrating steps, as a tool-using agent does -- has spent the
+   * turn count without ever handing off. Tagging a colleague for the first
+   * time is a deliberate act and must be delivered.
+   */
+  const r = routeAgentMessage({
+    conversation: room(),
+    text: '@linux please take this one',
+    speakerId: ME,
+    authorId: 'a_win',
+    agentTurnsSoFar: DEFAULT_TURN_BUDGET * 3,
+    chainDepth: 0,
+  });
+  check('the colleague is woken', r.speakers.length === 1, r.reason);
+  check('not reported as exhausted', !r.budgetExhausted);
+}
+
+console.log('\n[loop] a chain folding back on itself stops early');
+{
+  /*
+   * A -> B -> A -> B is visible as a loop long before twelve turns. Depth
+   * catches it while the coarse budget is still nowhere near spent.
+   */
+  const r = routeAgentMessage({
+    conversation: room(),
+    text: '@linux and again',
+    speakerId: ME,
+    authorId: 'a_win',
+    agentTurnsSoFar: 2,
+    chainDepth: DEFAULT_CHAIN_DEPTH,
+  });
+  check('stopped on depth', r.speakers.length === 0 && r.budgetExhausted === true, r.reason);
+  check('the reason mentions handoffs', /handoff/i.test(r.reason), r.reason);
+  check('and names who to tag', r.mayRequest.length === 1);
 }
 
 console.log('\n[empty room] no agents is handled, not crashed');

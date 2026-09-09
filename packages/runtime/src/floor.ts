@@ -20,13 +20,32 @@ import type { AgentParticipant, ConversationRecord, RoomMode } from '@wispcrew/s
 import { agentsIn } from '@wispcrew/shared';
 
 /**
- * How many agent turns may follow one another before the room stops.
+ * How many times agents may hand off to EACH OTHER before the room stops.
  *
- * The backstop that makes `free` safe enough to offer. Even with the
- * no-reply-by-default rule, a chain of explicit `@mentions` can run away, and
- * the failure mode should be a pause rather than a bill.
+ * This counts handoffs, not messages. The distinction was a real bug: the
+ * count used to be "assistant entries at the end of the transcript", so one
+ * agent working alone -- narrating its steps, as a tool-using agent does --
+ * spent the whole allowance by itself. It then tagged a colleague and the
+ * colleague was never woken, because a budget meant to stop A and B
+ * ping-ponging had been exhausted by A talking to nobody.
+ *
+ * Measured by the user as "when I tag him it works, when Claude tags him it
+ * fails 99% of the time", which is exactly right: a human message reset the
+ * count, and an agent's own narration did not.
+ *
+ * A loop needs at least two participants. Only a handoff -- agent A causing
+ * agent B to act -- moves this number.
  */
 export const DEFAULT_TURN_BUDGET = 12;
+
+/**
+ * How deep one unbroken chain of handoffs may go.
+ *
+ * The budget above is the coarse backstop for a whole conversation; this is
+ * the tight one for a single exchange. A -> B -> A -> B is a loop forming,
+ * and it is visible long before twelve turns have passed.
+ */
+export const DEFAULT_CHAIN_DEPTH = 4;
 
 export interface Routing {
   /** Agents that should act on this message. */
@@ -178,48 +197,80 @@ function othersMayRequest(
  * unbounded loop that costs real money, so an agent responds because it was
  * ADDRESSED, not because somebody spoke.
  */
-export function routeAgentMessage(input: RouteInput & { authorId: string }): Routing {
+export function routeAgentMessage(
+  input: RouteInput & {
+    authorId: string;
+    /** How deep the current unbroken handoff chain already is. */
+    chainDepth?: number;
+    /** Override for tests. */
+    maxChainDepth?: number;
+  },
+): Routing {
   const { conversation, text, authorId } = input;
   const budget = input.budget ?? DEFAULT_TURN_BUDGET;
+  const maxDepth = input.maxChainDepth ?? DEFAULT_CHAIN_DEPTH;
   const soFar = input.agentTurnsSoFar ?? 0;
-
-  if (soFar >= budget) {
-    /*
-     * The backstop.
-     *
-     * Even with no-reply-by-default, a chain of explicit mentions can run
-     * away. Stopping and asking is the right failure: a pause costs
-     * attention, a runaway costs money.
-     */
-    return {
-      speakers: [],
-      mayRequest: [],
-      reason: `${soFar} agent turns without you — stopping to check`,
-      budgetExhausted: true,
-    };
-  }
+  const depth = input.chainDepth ?? 0;
 
   const agents = agentsIn(conversation);
   const mentioned = mentionsIn(text);
 
-  // An agent addressing the room is not licence for everyone to answer; that
-  // is precisely how a loop starts.
+  /*
+   * Silence first, and it is the common case.
+   *
+   * An agent addressing the room is not licence for everyone to answer;
+   * that is precisely how a loop starts. Checked BEFORE the budget so an
+   * ordinary quiet turn never reports "the room stopped" -- the previous
+   * order announced a budget failure for messages that were never going to
+   * wake anybody.
+   */
   if (mentioned.length === 0) {
     return { speakers: [], mayRequest: [], reason: 'agents do not reply unless addressed' };
   }
 
-  const tagged = agents.filter(
-    (a) => mentioned.includes(a.handle) && a.id !== authorId,
-  );
+  const tagged = agents.filter((a) => mentioned.includes(a.handle) && a.id !== authorId);
 
   if (tagged.length === 0) {
     return { speakers: [], mayRequest: [], reason: 'nobody addressed' };
   }
 
+  /*
+   * A chain that is folding back on itself.
+   *
+   * This is the failure the budget was really for: A tags B, B tags A, and
+   * so on. Depth counts consecutive handoffs, so it rises only when agents
+   * actually pass work between them and resets the moment a person speaks.
+   */
+  if (depth >= maxDepth) {
+    return {
+      speakers: [],
+      mayRequest: tagged,
+      reason: `${depth} handoffs in a row — stopping to check`,
+      budgetExhausted: true,
+    };
+  }
+
+  /*
+   * The coarse backstop, for a room that has been busy for a long time
+   * without anybody watching.
+   *
+   * Deliberately NOT applied to a direct mention that is also the first
+   * handoff of a fresh chain: an explicit tag is a deliberate act, and
+   * refusing to deliver it is how delegation silently stopped working.
+   */
+  if (soFar >= budget && depth > 0) {
+    return {
+      speakers: [],
+      mayRequest: tagged,
+      reason: `${soFar} agent turns without you — stopping to check`,
+      budgetExhausted: true,
+    };
+  }
+
   return {
     speakers: tagged,
     mayRequest: [],
-    reason: `addressed by another agent`,
+    reason: 'addressed by another agent',
   };
 }
 

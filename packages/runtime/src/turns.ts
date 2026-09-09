@@ -81,6 +81,30 @@ function saveTurns(turns: TurnRecord[]): void {
 }
 
 /** A claim that is running but has not been touched for too long. */
+/**
+ * How long two arrivals of the same question count as one.
+ *
+ * Observed: an agent was asked the same thing by a colleague's routed
+ * message and by the user five seconds apart, under two different entry
+ * ids. Both claims were legitimate under the per-(message, agent) rule, so
+ * it answered twice -- and because the turns overlapped it had not seen its
+ * own first reply when it wrote the second, so the two came out
+ * near-identical and out of order.
+ *
+ * Short on purpose. This is for a race between two deliveries of one
+ * question, not for a person who asks again a minute later because the
+ * first answer was wrong.
+ */
+const SAME_QUESTION_MS = 20_000;
+
+/** A stable shape for comparing two prompts. */
+function questionKey(text: string | undefined): string | null {
+  if (!text) return null;
+  const normalised = text.toLowerCase().replace(/\s+/g, ' ').trim();
+  // Too short to be distinctive: "ok", "yes", "go on" legitimately repeat.
+  return normalised.length >= 24 ? normalised : null;
+}
+
 function isStale(turn: TurnRecord, now: number): boolean {
   if (TERMINAL.has(turn.state)) return false;
   return now - (turn.heartbeatAt ?? turn.startedAt) > STALE_CLAIM_MS;
@@ -96,6 +120,14 @@ export function claimTurn(patch: {
   conversationId: string;
   triggerEntryId: string;
   agentId: string;
+  /**
+   * What the agent was actually asked.
+   *
+   * Optional, and only used to collapse two deliveries of ONE question that
+   * arrive under different entry ids within seconds of each other. Callers
+   * that cannot supply it keep exactly the old behaviour.
+   */
+  text?: string;
   /**
    * True when this message arrived with an identity of its own — replicated
    * from another node, or redelivered after a reconnect.
@@ -120,6 +152,46 @@ export function claimTurn(patch: {
   const existing = all.find(
     (t) => t.triggerEntryId === patch.triggerEntryId && t.agentId === patch.agentId,
   );
+
+  /*
+   * The same question, arriving twice by different routes.
+   *
+   * Entry ids stop a message being processed twice. They cannot see that a
+   * colleague's relay and the user's own message are the SAME request --
+   * different ids, seconds apart, one agent, two answers.
+   */
+  if (!existing) {
+    const key = questionKey(patch.text);
+    if (key) {
+      /*
+       * Still in flight, not merely recent.
+       *
+       * The first version also matched FINISHED turns inside the window,
+       * which is too much: two agents legitimately passing the same short
+       * instruction back and forth ("@linux-builder your turn") were
+       * silently refused, and the chain died with no notice explaining it.
+       * A test caught that, which is the whole reason it exists.
+       *
+       * The real fault is concurrent delivery -- a colleague's relay and
+       * the user's own message arriving five seconds apart while the first
+       * is STILL RUNNING, so the agent answers twice without having seen
+       * its own first reply. That needs the twin to be alive.
+       */
+      const twin = all.find(
+        (t) =>
+          t.agentId === patch.agentId &&
+          t.conversationId === patch.conversationId &&
+          !TERMINAL.has(t.state) &&
+          !isStale(t, now) &&
+          questionKey(t.text) === key &&
+          now - t.startedAt < SAME_QUESTION_MS,
+      );
+      if (twin) {
+        fileLog('[turns] same question already in flight for', patch.agentId, twin.id);
+        return null;
+      }
+    }
+  }
 
   if (existing) {
     // Alive: somebody is on it.
@@ -158,6 +230,7 @@ export function claimTurn(patch: {
     state: 'claimed',
     startedAt: now,
     heartbeatAt: now,
+    ...(patch.text ? { text: patch.text.slice(0, 400) } : {}),
   };
 
   saveTurns([...all.filter((t) => t.id !== existing?.id), turn]);
