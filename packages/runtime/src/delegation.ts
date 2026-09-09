@@ -121,6 +121,54 @@ export function isTerminal(callerId: string, ctx: DelegationContext): boolean {
 }
 
 /**
+ * Which agents this caller may delegate to, as a stable, ordered string.
+ *
+ * Shared by two places that must agree: the tool description lists the
+ * roster, and the engine's session FINGERPRINT decides when to rebuild the
+ * cached session that holds that description.
+ *
+ * The fingerprint used to hold only the description's LENGTH. A newly
+ * created agent changes the roster without changing its length, so the
+ * cached session kept advertising the old list — reported as "newly created
+ * agents were not visible to the ask agent command". The agent created later
+ * saw the full roster, because its first session was built after the fact.
+ */
+export function delegationFingerprint(callerId: string, ctx: DelegationContext): string {
+  const caller = store.listAgents().find((a) => a.id === callerId);
+  return delegationCandidates(callerId, ctx, caller)
+    .map((a) => `${a.id}:${a.name}`)
+    .join('|');
+}
+
+/** The candidates themselves, shared with `makeAskAgentTool`. */
+function delegationCandidates(
+  callerId: string,
+  ctx: DelegationContext,
+  caller: AgentRecord | undefined,
+): AgentRecord[] {
+  const couldPlausiblyHelp = (a: AgentRecord): boolean => {
+    if ((a.nodeId ?? '') !== (caller?.nodeId ?? '')) return true;
+
+    const isDefaultAgent =
+      a.name === 'Assistant' && a.persona === 'general' && !a.description?.trim();
+
+    return !isDefaultAgent;
+  };
+
+  return store
+    .listAgents()
+    .filter(
+      (a) =>
+        !a.archived &&
+        a.id !== callerId &&
+        !ctx.stack.includes(a.id) &&
+        // A room-mate is addressed with @handle, not delegated to.
+        !(ctx.roomMembers ?? []).includes(a.id) &&
+        couldPlausiblyHelp(a),
+    );
+}
+
+/**
  * Build the `ask_agent` tool for one specific caller.
  *
  * The tool is constructed per run rather than registered globally because its
@@ -132,8 +180,6 @@ export function makeAskAgentTool(
   ctx: DelegationContext,
   run: DelegateRunner,
 ): Tool<AskAgentArgs> | null {
-  const caller = store.listAgents().find((a) => a.id === callerId);
-
   /*
    * Could this agent do something the caller cannot?
    *
@@ -146,41 +192,20 @@ export function makeAskAgentTool(
    *
    * Prose did not fix this. Three instructions to answer from its own
    * knowledge were all ignored, because a tool that is offered gets used.
+   *
+   * The default agent is not a delegate either: it is general-purpose by
+   * definition, on this machine, with no stated specialism, so it can never
+   * do anything the caller cannot. Narrowed deliberately to this one case —
+   * "undescribed agents cannot be delegates" also worked, and would have
+   * silently broken delegation for anyone who created "Rust expert" and
+   * forgot the description.
+   *
+   * The filtering lives in `delegationCandidates`, shared with the session
+   * fingerprint, so the two cannot drift: a roster that changed the
+   * candidates without changing the tool description is exactly the bug
+   * being fixed here.
    */
-  const couldPlausiblyHelp = (a: AgentRecord): boolean => {
-    // A different machine is a real capability: the work has to happen there.
-    if ((a.nodeId ?? '') !== (caller?.nodeId ?? '')) return true;
-
-    /*
-     * The default agent is not a delegate.
-     *
-     * Every fresh profile creates one so the roster is not empty. It is
-     * general-purpose by definition, on this machine, with no stated
-     * specialism — so it can never do anything the caller cannot, and
-     * measured behaviour is that a model offered it will use it: "what is
-     * 3 + 4?" went there, came back as "7", and was relayed.
-     *
-     * Narrowed deliberately to this case. "Undescribed agents cannot be
-     * delegates" also worked, and would have silently broken delegation for
-     * anyone who created "Rust expert" and forgot the description.
-     */
-    const isDefaultAgent =
-      a.name === 'Assistant' && a.persona === 'general' && !a.description?.trim();
-
-    return !isDefaultAgent;
-  };
-
-  const candidates = store
-    .listAgents()
-    .filter(
-      (a) =>
-        !a.archived &&
-        a.id !== callerId &&
-        !ctx.stack.includes(a.id) &&
-        // A room-mate is addressed with @handle, not delegated to.
-        !(ctx.roomMembers ?? []).includes(a.id) &&
-        couldPlausiblyHelp(a),
-    );
+  const candidates = delegationCandidates(callerId, ctx, store.listAgents().find((a) => a.id === callerId));
 
   // Nothing to delegate to: do not advertise a tool that can only fail.
   if (candidates.length === 0) return null;

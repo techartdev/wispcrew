@@ -68,6 +68,7 @@ import { buildMcpTools } from './mcp-manager.js';
 import {
   isTerminal,
   makeAskAgentTool,
+  delegationFingerprint,
   rootContext,
   TERMINAL_NOTICE,
   type DelegationContext,
@@ -1168,9 +1169,19 @@ export async function runPrompt(
      * it in the panel would appear to do nothing until the app restarted.
      */
     steps: agent.maxSteps ?? 0,
-    // The delegation roster and depth change the tool set, so a session
-    // built at one depth must not be reused at another.
-    delegates: askAgent ? askAgent.definition.description.length : 0,
+    /*
+     * The delegation ROSTER changes the tool set, so a session must not be
+     * reused across a roster change.
+     *
+     * This held the description's LENGTH, which a newly created agent does
+     * not change — so a cached session kept advertising the roster it was
+     * built with, and "newly created agents were not visible to the ask
+     * agent command". An agent created later saw the full roster, because
+     * its first session was built after the fact. The fingerprint now
+     * carries the candidate ids themselves.
+     */
+    delegates: delegationFingerprint(agentId, chain),
+    delegateDepth: chain.depth,
     // Same reason: `notify_user` is withheld for an attended turn, so a
     // session built for a routine must not be reused for a typed message.
     unattended: Boolean(opts?.unattended),

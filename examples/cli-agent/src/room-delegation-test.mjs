@@ -108,6 +108,30 @@ console.log('\n[a room with no outsiders offers no tool]');
   check('the tool is withheld', tool === null, tool ? 'still offered' : '');
 }
 
+console.log('\n[the roster] a new agent is visible without a reload');
+{
+  /*
+   * Reported as "newly created agents were not visible to the ask agent
+   * command".
+   *
+   * The tool description lists the roster, and the session that holds that
+   * description is cached and reused while its FINGERPRINT is unchanged. The
+   * fingerprint held the description's LENGTH, which a newly created agent
+   * does not change — so the cached session kept advertising the roster it
+   * was built with. An agent created later saw the full roster, because its
+   * first session was built after the fact. Exactly the asymmetry reported.
+   */
+  const { delegationFingerprint } = await import('@wispcrew/runtime');
+  const ctx = () => rootContext('auto', sums.id, members);
+
+  const before = delegationFingerprint(sums.id, ctx());
+  const late = createAgentWithRoom({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Latecomer' });
+  const after = delegationFingerprint(sums.id, ctx());
+
+  check('a new candidate changes the fingerprint', before !== after, `${before} vs ${after}`);
+  check('so the cached session is rebuilt', before !== after);
+}
+
 console.log('\n[asking for a room-mate] answered as the wrong instrument, not a fault');
 {
   /*
