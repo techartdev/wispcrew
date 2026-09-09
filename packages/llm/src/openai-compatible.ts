@@ -221,7 +221,20 @@ export class OpenAICompatibleProvider implements ChatProvider {
             ],
           };
         }
-        return { role: m.role, content: m.content };
+        /*
+         * Who said it, where the API has somewhere to put it.
+         *
+         * `ChatMessage.name` has existed since the interface was written and
+         * no adapter ever sent it -- the same declared-but-never-read fault
+         * as `via`, `authorId` and the age of a tool result. In a room it is
+         * the difference between several agents arriving as one anonymous
+         * assistant voice and the model knowing who is speaking.
+         *
+         * OpenAI restricts the field to a conservative character set, so a
+         * handle is sanitised rather than sent raw and rejected.
+         */
+        const named = m.name ? m.name.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64) : undefined;
+        return { role: m.role, content: m.content, ...(named ? { name: named } : {}) };
       })],
       tools: request.toolDefs?.length
         ? request.toolDefs.map((t) => ({

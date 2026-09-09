@@ -143,7 +143,30 @@ export function rebuildHistory(
          */
         const speaker = speakerPrefix(entry, speakers?.selfId, speakers?.nameFor);
 
-        out.push({ role: entry.role, content: `${speaker}${via}${entry.content}` });
+        /*
+         * Both channels, because no single one works everywhere.
+         *
+         * `name` is what OpenAI-compatible APIs provide for exactly this,
+         * and it is what AutoGen uses (`message["name"] = speaker.name`).
+         * It is structured, unambiguous, and impossible for a model to
+         * confuse with its own words.
+         *
+         * Anthropic's Messages API has no such field, so for Claude the
+         * only channel is the text itself -- which is why the inline prefix
+         * stays. Adapters that support `name` prefer it; the prefix is the
+         * fallback, and the sanitiser on the way IN stops the model's echo
+         * of it ever being stored.
+         */
+        const authored =
+          entry.role === 'assistant' && entry.authorId && speakers?.nameFor
+            ? speakers.nameFor(entry.authorId)
+            : undefined;
+
+        out.push({
+          role: entry.role,
+          content: `${speaker}${via}${entry.content}`,
+          ...(authored ? { name: authored } : {}),
+        });
         break;
       }
       case 'tool-call': {

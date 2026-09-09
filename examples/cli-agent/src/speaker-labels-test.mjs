@@ -20,7 +20,10 @@
  * in branching.ts even cited it as an example of the declared-but-never-read
  * fault, while itself being the code that dropped it.
  */
-import { rebuildHistory } from '@wispcrew/runtime';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { rebuildHistory, stripSpeakerLabel } from '@wispcrew/runtime';
 
 let failures = 0;
 const check = (label, cond, detail) => {
@@ -165,6 +168,100 @@ console.log('\n[9] a solo conversation is untouched');
   const solo = rebuildHistory(mixed);
   const args = solo.flatMap((m) => m.toolCalls ?? []).map((c) => c.args.command);
   check('nothing is filtered without a reader', args.length === 2, args.join(','));
+}
+
+console.log('\n[10] the structured name field is set, where a provider can use it');
+{
+  /*
+   * OpenAI-compatible APIs have a `name` field on a message and AutoGen uses
+   * exactly that -- `message["name"] = speaker.name` -- which is structured
+   * and impossible for a model to mistake for its own prose. Anthropic has no
+   * such field, so the inline prefix stays as the fallback. Both are set.
+   */
+  const asA = rebuildHistory(entries, { selfId: A, nameFor });
+  const theirs = asA.find((m) => m.content.includes('you own the parser'));
+  const mine = asA.find((m) => m.content.includes('I will take the parser'));
+
+  check("a colleague's message carries their name", theirs?.name === 'bob', JSON.stringify(theirs));
+  check('and my own carries mine', mine?.name === 'alice', JSON.stringify(mine));
+  check('the user gets no name', asA.find((m) => m.role === 'user')?.name === undefined);
+}
+
+console.log('\n[11] a label the model echoed back is not stored');
+{
+  /*
+   * THE bug this whole area kept producing. A model reads a transcript full
+   * of "[@claude] ..." prefixes, concludes they are part of the format, and
+   * writes one itself. Storing that echo meant an agent's own message came
+   * back next turn opening with a colleague's handle -- so it read its own
+   * words as somebody else's, described itself in the third person, and
+   * waited for a reply from an agent that had never spoken.
+   *
+   * Attribution is added on the way OUT, per reader. Never on the way in.
+   */
+  check(
+    'a leading label is removed',
+    stripSpeakerLabel('[@claude] That is my assignment echoed back') ===
+      'That is my assignment echoed back',
+    stripSpeakerLabel('[@claude] That is my assignment echoed back'),
+  );
+  check('with any handle', stripSpeakerLabel('[@local-gpt] on it') === 'on it');
+  check('and leading whitespace', stripSpeakerLabel('  [@bob]   hello') === 'hello');
+
+  /*
+   * Narrow on purpose. Only a leading label, only one, and never text that
+   * merely mentions a handle -- an agent quoting a colleague keeps its words.
+   */
+  check('ordinary text is untouched', stripSpeakerLabel('no label here') === 'no label here');
+  check(
+    'a mention mid-sentence survives',
+    stripSpeakerLabel('I told [@claude] it was done') === 'I told [@claude] it was done',
+  );
+  check(
+    'only one label is taken',
+    stripSpeakerLabel('[@a] [@b] text') === '[@b] text',
+    stripSpeakerLabel('[@a] [@b] text'),
+  );
+  check('a bare mention is not a label', stripSpeakerLabel('@claude look') === '@claude look');
+}
+
+console.log('\n[12] the sanitiser is actually WIRED, not merely exported');
+{
+  /*
+   * The fault this repo repeats, and the reason this assertion is ugly.
+   *
+   * Testing `stripSpeakerLabel` in isolation passes whether or not anything
+   * calls it -- verified: removing the call from the engine leaves every
+   * other assertion in this file green. That is precisely how `name`,
+   * `via`, `authorId` and the system prompt each ended up declared and
+   * never used, every one of them shipping a real bug.
+   *
+   * So the assertion is structural: the engine must call it where an
+   * assistant segment is written. Reading source is crude, and it is the
+   * only thing that fails when somebody deletes the call.
+   */
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+  const engine = fs.readFileSync(path.join(root, 'packages/runtime/src/engine.ts'), 'utf8');
+
+  check(
+    'engine.ts strips labels when storing a segment',
+    /content:\s*stripSpeakerLabel\(/.test(engine),
+    'flush() stores raw model text, so an echoed [@handle] becomes permanent',
+  );
+
+  const branching = fs.readFileSync(path.join(root, 'packages/runtime/src/branching.ts'), 'utf8');
+  check(
+    'rebuildHistory sets the name field',
+    /name:\s*authored/.test(branching),
+    'attribution is inline-only, so providers with a name field cannot use it',
+  );
+
+  const adapter = fs.readFileSync(path.join(root, 'packages/llm/src/openai-compatible.ts'), 'utf8');
+  check(
+    'the OpenAI adapter sends it',
+    /name:\s*named/.test(adapter),
+    'ChatMessage.name is set but never reaches the provider',
+  );
 }
 
 console.log('');

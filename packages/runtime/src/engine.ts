@@ -487,6 +487,31 @@ function handleInRoom(conversationId: string, agentId: string): string | undefin
   return found && 'handle' in found ? (found.handle as string) : undefined;
 }
 
+/**
+ * Remove a speaker label the model copied from its own context.
+ *
+ * The harness prefixes OTHER agents' messages with `[@handle] ` so a model
+ * can tell them apart -- Anthropic has no `name` field, so the text is the
+ * only channel available. A model reading a transcript full of such prefixes
+ * reasonably concludes they are part of the format and starts emitting them.
+ *
+ * That echo was then STORED, and it is poison: an agent's own message came
+ * back on the next turn opening with a colleague's handle, so it read its own
+ * words as somebody else's, narrated itself in the third person, and waited
+ * for a reply from an agent that had never spoken. Observed exactly, twice.
+ *
+ * The rule everyone converges on -- AutoGen sets `message["name"]` at send
+ * time and never stores it in content -- is that attribution is added on the
+ * way OUT, per reader, and never on the way in. This enforces that half.
+ *
+ * Deliberately narrow: only a leading label, only at the very start, one of
+ * them. An agent legitimately writing "[@claude] said the build passed" mid
+ * sentence keeps its words.
+ */
+export function stripSpeakerLabel(text: string): string {
+  return text.replace(/^\s*\[@[a-z0-9][a-z0-9-]*\]\s*/i, '');
+}
+
 function systemPromptFor(
   agent: AgentRecord | undefined,
   personaId: string | undefined,
@@ -946,7 +971,12 @@ export async function runPrompt(
       kind: 'message',
       id: segmentId,
       role: 'assistant',
-      content: text,
+      /*
+       * Stripped of any speaker label the model echoed back. The harness owns
+       * that prefix and adds it per reader; a copy of it in stored content
+       * makes an agent unable to recognise its own words.
+       */
+      content: stripSpeakerLabel(text),
       /*
        * WHO said it.
        *
