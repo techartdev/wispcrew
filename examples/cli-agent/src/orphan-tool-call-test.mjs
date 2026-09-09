@@ -132,6 +132,77 @@ console.log('\n[2] a healthy history is left exactly alone');
   check('still valid', unanswered(sent).length === 0);
 }
 
+console.log('\n[3] a result whose call is gone is REMOVED, not kept');
+{
+  /*
+   * The mirror failure, reported by the same user an hour after the first:
+   *
+   *   messages.490.content.2: unexpected `tool_use_id` found in
+   *   `tool_result` blocks: toolu_016s... Each `tool_result` block must
+   *   have a corresponding `tool_use` block in the previous message.
+   *
+   * Filling holes is only half the invariant. A `role:"tool"` message whose
+   * assistant call has been lost -- to a rewind that cut between the two, or
+   * a history rebuilt from a transcript missing the call entry -- cannot be
+   * repaired by adding anything. It has to go.
+   */
+  const provider = recorder();
+  const agent = new Agent({ provider, tools: new ToolRegistry(), systemPrompt: 's' });
+
+  agent.setHistory([
+    { role: 'user', content: 'go' },
+    { role: 'assistant', content: 'thinking' },
+    { role: 'tool', toolCallId: 'toolu_STRAY', toolName: 'shell', content: 'orphaned output' },
+    { role: 'assistant', content: 'done' },
+  ]);
+
+  await agent.run('next');
+  const sent = provider.seen[0];
+
+  check(
+    'the stray result is gone',
+    !sent.some((m) => m.role === 'tool' && m.toolCallId === 'toolu_STRAY'),
+    JSON.stringify(sent.filter((m) => m.role === 'tool')),
+  );
+  check('and nothing else was invented', sent.filter((m) => m.role === 'tool').length === 0);
+  check('the conversation is still valid', unanswered(sent).length === 0);
+}
+
+console.log('\n[4] a mixed step keeps what is real and mends what is not');
+{
+  const provider = recorder();
+  const agent = new Agent({ provider, tools: new ToolRegistry(), systemPrompt: 's' });
+
+  /*
+   * One answered call, one unanswered call, and a result belonging to
+   * neither -- all in the same step. Each needs a different repair, which is
+   * why they are tested together rather than one at a time.
+   */
+  agent.setHistory([
+    { role: 'user', content: 'go' },
+    {
+      role: 'assistant',
+      content: '',
+      toolCalls: [
+        { id: 'A', name: 'shell', args: {} },
+        { id: 'B', name: 'shell', args: {} },
+      ],
+    },
+    { role: 'tool', toolCallId: 'A', toolName: 'shell', content: 'a ran' },
+    { role: 'tool', toolCallId: 'GHOST', toolName: 'shell', content: 'belongs to nobody' },
+    { role: 'assistant', content: 'partial' },
+  ]);
+
+  await agent.run('next');
+  const sent = provider.seen[0];
+  const ids = sent.filter((m) => m.role === 'tool').map((m) => m.toolCallId);
+
+  check('exactly the two real calls are answered', ids.join(',') === 'A,B', ids.join(','));
+  check('the real result was preserved', sent.some((m) => m.toolCallId === 'A' && /a ran/.test(m.content)));
+  check('the ghost is gone', !ids.includes('GHOST'));
+  check('valid overall', unanswered(sent).length === 0);
+}
+
 console.log('');
 if (failures) {
   console.error(`ORPHAN-TOOL-CALL TEST FAILED — ${failures} assertion(s)\n`);

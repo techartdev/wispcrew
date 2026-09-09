@@ -255,16 +255,24 @@ export class Agent {
          * The invariant, restored at the only place that matters: just
          * before the history becomes a request.
          */
-        const filled = this.settleHistory();
-        if (filled) {
-          this.onEvent({
-            type: 'error',
-            message:
-              `Repaired ${filled} unanswered tool call${filled === 1 ? '' : 's'} left by an ` +
-              'earlier turn. The conversation was about to be rejected by the provider.',
-            fatal: false,
-          });
-        }
+        /*
+         * Repaired quietly.
+         *
+         * This raised a non-fatal error event on every repair, which put a
+         * red notice in the conversation announcing that it "was about to be
+         * rejected by the provider". That reads as a fault the user must act
+         * on, and there is nothing to act on: the mend has already happened
+         * by the time it can be read, and the damage was usually done by an
+         * interrupted turn hours earlier.
+         *
+         * Worse, it fired on the exact turns that were already going wrong,
+         * so a user watching a conversation misbehave saw a scary message
+         * about the repair rather than about the cause.
+         *
+         * There is no 'log' variant on AgentEvent, and inventing one to
+         * carry a message nobody reads would be worse than silence.
+         */
+        this.settleHistory();
 
         const request = {
           system: this.systemPrompt,
@@ -607,11 +615,36 @@ export class Agent {
    */
   private settleHistory(): number {
     const repaired: ChatMessage[] = [];
-    let filled = 0;
+    let changes = 0;
 
     for (let i = 0; i < this.history.length; i++) {
       const message = this.history[i];
       if (!message) continue;
+
+      /*
+       * A result with nothing to answer.
+       *
+       * The mirror of the missing-result case, and just as fatal:
+       *
+       *   unexpected `tool_use_id` found in `tool_result` blocks:
+       *   toolu_016s... Each `tool_result` block must have a corresponding
+       *   `tool_use` block in the previous message.
+       *
+       * It happens when the assistant message carrying the call is dropped
+       * while its results survive -- a rewind that cut between the two, a
+       * seeded history assembled from a transcript whose call entry was
+       * lost, or an empty assistant message pruned by something upstream.
+       * A `role:"tool"` message that no immediately-preceding assistant
+       * asked for cannot be repaired by adding anything, so it is removed.
+       *
+       * Only reached for tool messages NOT consumed by the assistant branch
+       * below, which advances `i` past every result it accounts for.
+       */
+      if (message.role === 'tool') {
+        changes++;
+        continue;
+      }
+
       repaired.push(message);
 
       if (message.role !== 'assistant' || !message.toolCalls?.length) continue;
@@ -621,23 +654,34 @@ export class Agent {
        * result further down the history is a result for a LATER identical
        * call, and counting it here would leave the real hole open.
        */
+      const requested = new Set(message.toolCalls.map((c) => c.id));
       const answered = new Set<string>();
       let j = i + 1;
       for (; j < this.history.length; j++) {
         const next = this.history[j];
         if (!next || next.role !== 'tool') break;
-        if (next.toolCallId) answered.add(next.toolCallId);
+
+        /*
+         * A result for a call this step did not make is dropped here rather
+         * than carried along, for the same reason as above: it names an id
+         * the previous message never contained.
+         */
+        if (!next.toolCallId || !requested.has(next.toolCallId)) {
+          changes++;
+          continue;
+        }
+        answered.add(next.toolCallId);
         repaired.push(next);
       }
+      i = j - 1;
+
       /*
        * The real results keep their place; the synthesised ones go after
        * them, so a repaired step reads in the order it actually happened.
        */
-      i = j - 1;
-
       for (const call of message.toolCalls) {
         if (answered.has(call.id)) continue;
-        filled++;
+        changes++;
         repaired.push({
           role: 'tool',
           toolCallId: call.id,
@@ -653,7 +697,7 @@ export class Agent {
      * Spliced in place: `history` is readonly on the instance and other code
      * holds the same array reference.
      */
-    if (filled) this.history.splice(0, this.history.length, ...repaired);
-    return filled;
+    if (changes) this.history.splice(0, this.history.length, ...repaired);
+    return changes;
   }
 }

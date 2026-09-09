@@ -727,6 +727,40 @@ setSummariser(async (agentId, conversationText) => {
   return text;
 });
 
+/**
+ * Mark any tool entry still `running` in a transcript as failed.
+ *
+ * Called when a turn ends. A call that was genuinely still executing has
+ * been abandoned with the turn, so "running" is not merely stale -- it is
+ * false, and it is the one status the UI animates.
+ *
+ * Writes only when there is something to write: the common case is an
+ * ordinary turn where every call already reported, and rewriting the
+ * transcript then would be pure cost.
+ */
+function settleRunningToolEntries(conversationId: string): void {
+  let stuck: TranscriptEntry[];
+  try {
+    stuck = store
+      .loadTranscript(conversationId)
+      .filter((entry) => entry.kind === 'tool-call' && entry.status === 'running');
+  } catch {
+    // A transcript that cannot be read is not worth failing a turn over.
+    return;
+  }
+
+  for (const entry of stuck) {
+    if (entry.kind !== 'tool-call') continue;
+    pushTranscript(conversationId, {
+      ...entry,
+      status: 'failed',
+      content: entry.content?.trim()
+        ? entry.content
+        : 'No result was recorded: the turn ended while this call was still running.',
+    });
+  }
+}
+
 export async function runPrompt(
   agentId: string,
   rawPrompt: string,
@@ -1467,6 +1501,29 @@ export async function runPrompt(
   } finally {
     setRunning(agentId, false);
     flush(false);
+
+    /*
+     * A tool card must never outlive the turn that started it.
+     *
+     * `tool_call_start` writes the entry as `running` and `tool_call_result`
+     * replaces it. If the turn dies in between -- the provider rejects the
+     * request, the process is killed, the user quits mid-call -- the result
+     * event never arrives and the entry stays `running` in the transcript
+     * FOREVER. It is durable state, so restarting does not clear it: the
+     * card sits there with a spinner rotating, claiming work is in progress
+     * on a machine that has been rebooted since.
+     *
+     * Found one still spinning from 25 August. The user reported it as a
+     * glitch after a restart, which is exactly right -- an animation that
+     * says "working" when nothing is working is the UI lying about the
+     * state of the system.
+     *
+     * This is the only place every turn exits through, whether it returned,
+     * threw, or was aborted, which is what makes it the right place: the
+     * alternative is settling at each failure site and forgetting one.
+     */
+    settleRunningToolEntries(outputId);
+
     emitEngineEvent({ type: 'run-state', agentId, state: 'idle' });
   }
   // Callers (routines, delegation) want the turn's whole answer, which may
