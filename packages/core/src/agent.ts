@@ -251,6 +251,21 @@ export class Agent {
       for (let step = 0; step < this.maxSteps; step++) {
         this.onEvent({ type: 'turn_start', turnId, step });
 
+        /*
+         * The invariant, restored at the only place that matters: just
+         * before the history becomes a request.
+         */
+        const filled = this.settleHistory();
+        if (filled) {
+          this.onEvent({
+            type: 'error',
+            message:
+              `Repaired ${filled} unanswered tool call${filled === 1 ? '' : 's'} left by an ` +
+              'earlier turn. The conversation was about to be rejected by the provider.',
+            fatal: false,
+          });
+        }
+
         const request = {
           system: this.systemPrompt,
           messages: this.history,
@@ -486,6 +501,13 @@ export class Agent {
     turnId: string,
     controller: AbortController,
   ): Promise<ChatMessage> {
+    /*
+     * Before the user message goes in, not after: this request is exactly
+     * the "ran out of steps" path, which is reached with the last step's
+     * tool calls potentially still unanswered.
+     */
+    this.settleHistory();
+
     this.history.push({
       role: 'user',
       content:
@@ -558,5 +580,80 @@ export class Agent {
         content: 'Tool call cancelled: the user interrupted this turn.',
       });
     }
+  }
+
+  /**
+   * Every tool call in history is answered, before anything is sent.
+   *
+   * The provider contract is not "usually answered": a single assistant tool
+   * call with no matching result makes the WHOLE conversation permanently
+   * unsendable, and the error names an opaque id rather than the turn that
+   * produced it. Recovering by hand is not something a user can do.
+   *
+   * Settling at each place history is mutated was the previous approach and
+   * it kept failing, because the list of such places grows: an aborted turn,
+   * a step budget that ran out, a tool that threw, a provider that died
+   * mid-stream, steering injected between a call and its result. Every new
+   * path is another chance to forget. This is the choke point instead --
+   * nothing reaches a provider without passing through here -- so forgetting
+   * is no longer possible.
+   *
+   * Results are inserted directly after the call that lacks one, because
+   * "immediately after" is the actual requirement; appending at the end
+   * satisfies a count and still fails validation.
+   *
+   * Returns how many holes were filled, so a caller can log a repair rather
+   * than silently papering over a bug worth finding.
+   */
+  private settleHistory(): number {
+    const repaired: ChatMessage[] = [];
+    let filled = 0;
+
+    for (let i = 0; i < this.history.length; i++) {
+      const message = this.history[i];
+      if (!message) continue;
+      repaired.push(message);
+
+      if (message.role !== 'assistant' || !message.toolCalls?.length) continue;
+
+      /*
+       * Only the messages that directly follow can answer this call. A
+       * result further down the history is a result for a LATER identical
+       * call, and counting it here would leave the real hole open.
+       */
+      const answered = new Set<string>();
+      let j = i + 1;
+      for (; j < this.history.length; j++) {
+        const next = this.history[j];
+        if (!next || next.role !== 'tool') break;
+        if (next.toolCallId) answered.add(next.toolCallId);
+        repaired.push(next);
+      }
+      /*
+       * The real results keep their place; the synthesised ones go after
+       * them, so a repaired step reads in the order it actually happened.
+       */
+      i = j - 1;
+
+      for (const call of message.toolCalls) {
+        if (answered.has(call.id)) continue;
+        filled++;
+        repaired.push({
+          role: 'tool',
+          toolCallId: call.id,
+          toolName: call.name,
+          content:
+            'No result was recorded for this call: the turn ended before it ' +
+            'finished. Treat it as not having run.',
+        });
+      }
+    }
+
+    /*
+     * Spliced in place: `history` is readonly on the instance and other code
+     * holds the same array reference.
+     */
+    if (filled) this.history.splice(0, this.history.length, ...repaired);
+    return filled;
   }
 }
