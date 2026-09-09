@@ -39,6 +39,17 @@ console.log('\n[the gap that caused the misinformation]');
     /do not suggest an external/i.test(prompt),
     prompt.slice(0, 200),
   );
+
+  /*
+   * The half that was still missing after the original fix.
+   *
+   * Stating the Routines panel told the agent what the USER can do, in the
+   * one section it is told to answer capability questions from — so "can
+   * you check back on this later?" still reads as no. The tools existed;
+   * the environment description contradicted them by omission.
+   */
+  check('it knows it can wake ITSELF', /wake yourself later/i.test(prompt));
+  check('and that a one-off needs no approval', /without asking/i.test(prompt));
 }
 
 console.log('\n[persistence is stated, not assumed]');

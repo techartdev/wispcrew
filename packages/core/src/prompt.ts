@@ -237,6 +237,25 @@ function environmentSection(opts: SystemPromptOptions): string[] {
     '- This conversation is saved and reloaded, so you remember it across restarts.',
     '- The user can schedule recurring work for you in the Routines panel, and it runs',
     '  whether or not the app is open.',
+    /*
+     * That an agent can schedule ITSELF, which nothing said.
+     *
+     * The tool schema carries `schedule_follow_up`'s name and description,
+     * so the capability was reachable — but the environment section listed
+     * only what the USER can do in the Routines panel, and this section is
+     * explicitly where an agent is told to answer capability questions
+     * from. "The user can schedule recurring work for you" reads as the
+     * complete story on scheduling, and reasoning from it is honest and
+     * wrong.
+     *
+     * Exactly the failure this file's header records: an agent asked
+     * whether it had cron said no and proposed GitHub Actions, while the
+     * scheduler sat right there. The fix then was to state the panel. The
+     * panel is not the whole capability.
+     */
+    '- You can also wake yourself later, without asking: a one-off check-back, or a',
+    '  recurring routine the user approves once. Use it when work needs settling time',
+    '  rather than making the user come back to you.',
   );
 
   if (opts.routines?.length) {
