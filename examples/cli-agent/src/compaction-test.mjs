@@ -34,6 +34,7 @@ import {
   renderForSummary,
   saveTranscript,
   setHost,
+  getSession,
   setSummariser,
   splitPoint,
 } from '@wispcrew/runtime';
@@ -277,6 +278,30 @@ console.log('\n[rendering] tool output is summarised, not transcribed');
     { kind: 'notice', id: 'n', level: 'error', text: 'fetch failed', createdAt: 1 },
   ]);
   check('errors are left out', !/fetch failed/.test(withError), withError);
+}
+
+/*
+ * A compaction rewrites durable history. The live Agent has its own in-memory
+ * copy, so it MUST be dropped too: otherwise the UI shows the summary while
+ * the provider receives the old history. This was a real recovery failure --
+ * a malformed tool sequence kept being resent after Compact was pressed.
+ */
+console.log('\n[live sessions] compaction drops the old in-memory history');
+{
+  const agent = createAgent({ name: 'Live session', presetId: 'openai', model: 'gpt-5' });
+  saveTranscript(agent.id, Array.from({ length: 24 }, (_, i) => msg(i + 1)));
+
+  const seed = {
+    provider: { label: 'stub', chat: async function* () {} },
+    tools: { list: () => [] },
+    systemPrompt: 'test',
+  };
+  const before = getSession(agent.id, seed);
+  const r = await compactConversation(agent.id, agent.id, { keepRecent: 10, minEntries: 20 });
+  const after = getSession(agent.id, seed);
+
+  check('compacted', r.ok === true, JSON.stringify(r));
+  check('the old Agent was dropped', after !== before);
 }
 
 fs.rmSync(dir, { recursive: true, force: true });

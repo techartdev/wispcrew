@@ -29,8 +29,10 @@
  * subsequent turn fail with a validation error that names nothing useful.
  */
 import type { TranscriptEntry } from '@wispcrew/shared';
+import { clearSession } from './agent-sessions.js';
 import { writeCheckpoint } from './checkpoints.js';
 import { getConversation } from './conversations.js';
+
 import { host } from './host.js';
 import * as store from './store.js';
 import { pushTranscript } from './transcript.js';
@@ -316,6 +318,25 @@ export async function compactConversation(
   };
 
   store.saveTranscript(conversationId, [marker, ...kept], 'compacted');
+
+  /*
+   * The file changed, but every participating agent may still hold its own
+   * pre-compaction copy in memory. Without dropping those sessions the next
+   * request sends the old history anyway, so Compact appears to work in the
+   * UI while changing nothing at the provider. That is exactly the recovery
+   * failure that left a malformed tool sequence retrying forever.
+   */
+  /*
+   * `author` is always the agent whose session supplied the summary. A
+   * one-to-one legacy conversation may not have a room record/participants
+   * yet, so clearing participants alone misses exactly the ordinary case.
+   * A set prevents clearing the author twice when it is also a member.
+   */
+  const sessionsToClear = new Set<string>([author]);
+  for (const participant of getConversation(conversationId)?.participants ?? []) {
+    if (participant.kind === 'agent') sessionsToClear.add(participant.id);
+  }
+  for (const id of sessionsToClear) clearSession(id);
 
   /*
    * Announced from here, because this is where the change happens. A

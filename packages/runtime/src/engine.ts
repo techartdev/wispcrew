@@ -1455,6 +1455,15 @@ export async function runPrompt(
         createdAt: Date.now(),
       });
     }
+
+    /*
+     * A provider rejecting the request means this session's in-memory history
+     * is not usable for another request. Keeping it made the next message
+     * resend the same malformed tool sequence forever, even after the
+     * durable transcript had been repaired or compacted. Rebuild from the
+     * transcript on the next turn instead.
+     */
+    clearSession(agentId);
   } finally {
     setRunning(agentId, false);
     flush(false);
