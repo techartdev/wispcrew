@@ -208,6 +208,12 @@ async function main(): Promise<void> {
       ['groq', 'llama-3.3-70b-versatile', 'OpenAICompatibleProvider'],
       ['openrouter', 'openai/gpt-5.5', 'OpenAICompatibleProvider'],
       ['anthropic', 'claude-sonnet-4-5', 'AnthropicProvider'],
+      // The subscription presets must bill the subscription, not the API.
+      // A ChatGPT token sent to api.openai.com is a permanent 401; a Claude
+      // subscription token must reach the Anthropic provider with the OAuth
+      // identity, not the API-key adapter.
+      ['claude-subscription', 'claude-opus-5', 'AnthropicProvider'],
+      ['chatgpt-subscription', 'gpt-5.6-terra', 'CodexSubscriptionProvider'],
     ];
     for (const [preset, model, expected] of cases) {
       const actual = createProvider(configFromPreset(preset, { apiKey: 'x', model })).constructor
