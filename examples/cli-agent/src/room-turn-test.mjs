@@ -47,6 +47,7 @@ initStore(dir);
 
 const windows = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Windows builder' });
 const linux = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Linux builder' });
+const mac = createAgent({ presetId: 'openai', model: 'gpt-5.6-luna', name: 'Mac builder' });
 migrateAgentsToConversations();
 
 const room = listConversations().find((r) => r.id === windows.id);
@@ -55,6 +56,12 @@ const room = listConversations().find((r) => r.id === windows.id);
 addParticipant(
   room.id,
   { kind: 'agent', id: linux.id, handle: handleFor(linux.name) },
+  LOCAL_HUMAN_ID,
+  'You',
+);
+addParticipant(
+  room.id,
+  { kind: 'agent', id: mac.id, handle: handleFor(mac.name) },
   LOCAL_HUMAN_ID,
   'You',
 );
@@ -256,6 +263,45 @@ console.log('\n[a room is a place] an agent can ask another agent');
   check('and the one IT addressed ran too', ran.includes(linux.id),
     `only ${ran.length} agent(s) ran`);
   check('each exactly once', ran.length === 2, JSON.stringify(ran));
+}
+
+console.log('\n[an agent tags two] both wake, and not one after the other');
+{
+  /*
+   * The user's parallel-work complaint. When ONE agent addresses TWO
+   * colleagues in its reply, both should act on it — and they are
+   * independent, so running the second only after the first finished would
+   * be an arbitrary serialisation of work that has nothing to wait for.
+   *
+   * The sequential part is correct and unavoidable: an agent cannot route a
+   * reply it has not produced yet. What must NOT be sequential is the two
+   * colleagues the reply names.
+   */
+  updateConversation(room.id, { lastAddressed: {} });
+
+  const ran = [];
+  await runRoomTurn({
+    conversationId: room.id,
+    text: '@windows-builder plan the release',
+    speakerId: LOCAL_HUMAN_ID,
+    run: async (agentId) => {
+      ran.push(agentId);
+      if (agentId === windows.id) {
+        // The planner hands off to BOTH builders in one reply.
+        return '@linux-builder and @mac-builder, both of you: check the build.';
+      }
+      // A colleague waking does not reply with a further mention.
+      return 'checked.';
+    },
+  });
+
+  check('the tagger ran', ran.includes(windows.id));
+  check('both colleagues ran too',
+    ran.includes(linux.id) && ran.includes(mac.id),
+    JSON.stringify(ran));
+  check('exactly three turns, each once',
+    ran.length === 3 && new Set(ran).size === 3,
+    JSON.stringify(ran));
 }
 
 console.log('\n[silence is the default] a reply that names nobody ends there');
