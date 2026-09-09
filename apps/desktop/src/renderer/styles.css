@@ -23,6 +23,27 @@
   --warn: #d9a441;
   --ok: #4ec98a;
   --radius: 8px;
+  /*
+   * How wide the conversation is.
+   *
+   * Every element that lines up with a message reads this: the message
+   * itself, the tool strip, an approval card, a notice, the composer and
+   * its hint, the context meter, the skill hints, the attachment row and
+   * the steer queue. Eleven rules, one number.
+   *
+   * It was written out eleven times instead, and it drifted exactly as that
+   * always does: the transcript was narrowed from 860 to 760 and SEVEN
+   * rules were missed, so tool strips and approval cards hung a hundred
+   * pixels wider than the messages they belong to, and the composer was
+   * wider than the conversation above it. I shipped one of those myself and
+   * the user reported it as "the UI looks bad" -- which it did, for a
+   * reason no amount of staring at any single rule would reveal.
+   *
+   * NOT used by `.modal-wide`, which shares the number by coincidence. A
+   * dialog is not the conversation column, and binding them because two
+   * numbers matched today is the same fault pointing the other way.
+   */
+  --column: 760px;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, sans-serif;
   --mono: 'Cascadia Code', 'JetBrains Mono', Consolas, 'SF Mono', monospace;
   color-scheme: dark;
@@ -695,7 +716,7 @@ body {
 }
 
 .msg {
-  max-width: 760px;
+  max-width: var(--column);
   margin: 0 auto 22px;
 }
 
@@ -840,7 +861,7 @@ body {
  */
 
 .tool-run {
-  max-width: 860px;
+  max-width: var(--column);
   margin: 0 auto 10px;
 }
 
@@ -966,7 +987,7 @@ body {
 /* Approvals */
 
 .approval-card {
-  max-width: 860px;
+  max-width: var(--column);
   margin: 0 auto 12px;
   padding: 12px 14px;
   border-radius: var(--radius);
@@ -1039,7 +1060,7 @@ body {
  * an error IS worth stopping for.
  */
 .notice {
-  max-width: 760px;
+  max-width: var(--column);
   margin: 2px auto 14px;
   padding: 4px 12px;
   border-radius: var(--radius);
@@ -1075,7 +1096,7 @@ body {
   display: flex;
   gap: 8px;
   align-items: flex-end;
-  max-width: 760px;
+  max-width: var(--column);
   margin: 0 auto;
 }
 
@@ -1098,7 +1119,7 @@ body {
 }
 
 .composer-hint {
-  max-width: 760px;
+  max-width: var(--column);
   margin: 6px auto 0;
   font-size: 11.5px;
 }
@@ -1143,7 +1164,7 @@ body {
 /* ---- context meter ------------------------------------------------
  *
  * How full the conversation's context is. Sits above the hint line, on
- * the same 860px column as the composer, so it reads as belonging to the
+ * the same column as the composer, so it reads as belonging to the
  * box you are typing in rather than to the transcript.
  *
  * Quiet by default and coloured only near the limit: the number is worth
@@ -1151,7 +1172,7 @@ body {
  */
 .context-meter-wrap {
   position: relative;
-  max-width: 860px;
+  max-width: var(--column);
   margin: 6px auto 0;
   display: flex;
   justify-content: flex-end;
@@ -1161,7 +1182,7 @@ body {
  * In the room panel the meter is its own line under the member.
  *
  * The panel is about two hundred pixels wide: a third item in the name
- * row leaves nothing legible, and the composer's 860px column is
+ * row leaves nothing legible, and the composer's column is
  * meaningless here.
  */
 .room-pane-member-item {
@@ -1328,7 +1349,7 @@ body {
 .notice-summary {
   white-space: pre-wrap;
   text-align: left;
-  max-width: 860px;
+  max-width: var(--column);
   margin: 14px auto;
   padding: 10px 14px;
   border: 1px dashed var(--border-strong);
@@ -1353,7 +1374,7 @@ body {
 }
 
 .skill-hints {
-  max-width: 860px;
+  max-width: var(--column);
   margin: 0 auto 8px;
   display: flex;
   flex-direction: column;
@@ -1386,7 +1407,7 @@ body {
 }
 
 .attach-pending {
-  max-width: 860px;
+  max-width: var(--column);
   margin: 0 auto 8px;
 }
 
@@ -1399,7 +1420,7 @@ body {
  * anything that looked like the transcript would claim otherwise.
  */
 .steer-queue {
-  max-width: 860px;
+  max-width: var(--column);
   margin: 0 auto 8px;
   display: flex;
   flex-direction: column;
