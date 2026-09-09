@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rebuildHistory, stripSpeakerLabel } from '@wispcrew/runtime';
+import { defaultSystemPrompt } from '@wispcrew/core';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -306,6 +307,41 @@ console.log('\n[13] one attribution channel, never two');
     'inline is not selected per provider',
   );
   check('and passes it to rebuildHistory', /inline:\s*inlineSpeaker/.test(engine));
+}
+
+console.log('\n[14] the wake rule is stated, not implied');
+{
+  /*
+   * routeAgentMessage wakes an agent only when its handle is in the text.
+   * That is mechanism, and the prompt has to say so: an agent finished a
+   * delegated task, wrote "Done -- b32a687, suite green" with no handle, and
+   * the delegator was never scheduled. Correct work, delivered nowhere.
+   */
+  const prompt = defaultSystemPrompt({
+    name: 'Local GPT',
+    handle: 'local-gpt',
+    room: {
+      mode: 'open',
+      title: 'dev',
+      participants: [
+        { kind: 'human', name: 'You' },
+        { kind: 'agent', name: 'Local GPT', handle: 'local-gpt', self: true },
+        { kind: 'agent', name: 'Claude', handle: 'claude' },
+      ],
+    },
+  });
+
+  check('says a handle is what wakes someone', /Writing .@their-handle. is what wakes them/.test(prompt));
+  check('says untagged prose wakes nobody', /No handle: nobody is woken/.test(prompt));
+  check(
+    'tells a delegate to tag whoever assigned the work',
+    /Finishing work someone delegated to you, tag them/.test(prompt),
+  );
+  check('and excludes humans from the rule', /Tag agents, not humans/.test(prompt));
+
+  /* A one-agent conversation must not carry room mechanics. */
+  const alone = defaultSystemPrompt({ name: 'Solo', handle: 'solo' });
+  check('a solo agent is not told about waking colleagues', !/Reaching another agent/.test(alone));
 }
 
 console.log('');

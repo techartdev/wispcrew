@@ -77,7 +77,15 @@ console.log('\n[in company] the agent is told who it is and who else is here');
    */
   check('it is told to answer directly', /Answer directly/i.test(prompt));
   check('and not to delegate to a room-mate', /Do not hand the question to another participant/i.test(prompt));
-  check('but may draw someone in deliberately', /mention them by handle/i.test(prompt));
+  /*
+   * This used to pin the words "mention them by handle" — etiquette advice.
+   * It is now stated as mechanism, because a handle is literally what makes
+   * `routeAgentMessage` schedule the other agent, and an agent that reads it
+   * as politeness can reasonably skip it. One did: it finished a delegated
+   * task, reported "Done" with no handle, and nobody was ever woken.
+   */
+  check('but may draw someone in deliberately', /is what wakes them/i.test(prompt));
+  check('and knows silence is the alternative', /nobody is woken/i.test(prompt));
 }
 
 console.log('\n[one agent named] a room of one is described honestly');

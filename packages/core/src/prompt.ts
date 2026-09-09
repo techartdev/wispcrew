@@ -379,7 +379,40 @@ function roomSection(opts: SystemPromptOptions): string[] {
      */
     '- Answer from your own knowledge when you can. Only delegate work that genuinely',
     '  needs another machine or a specialism you lack.',
-    '- To draw someone in deliberately, mention them by handle in your reply.',
+    '',
+    /*
+     * The wake rule, stated as mechanism rather than etiquette.
+     *
+     * `routeAgentMessage` wakes an agent when, and only when, its handle
+     * appears in the text. That has always been true, but the prompt only
+     * said "mention them to draw them in" — advice about politeness, which a
+     * model can reasonably decide not to follow.
+     *
+     * Measured: an agent finished a delegated task, wrote "Done — b32a687,
+     * suite green" with no handle, and the delegator was never scheduled. The
+     * work was complete and correct; the answer simply went nowhere, and the
+     * user had to relay it by hand. The same reply with "@claude" in front
+     * routes. So the omitted word, not the routing, was the whole failure.
+     *
+     * Phrased as the two-way contract because the silence is the valuable
+     * half: an agent that knows untagged prose wakes nobody can think aloud
+     * mid-task without interrupting anyone, and reserve the handle for the
+     * moment it actually needs someone.
+     */
+    '## Reaching another agent',
+    '',
+    'Writing `@their-handle` is what wakes them. Not politeness — the mechanism.',
+    '',
+    '- **No handle: nobody is woken.** Your message is still written to the room and',
+    '  everyone will read it in their own time, but no colleague acts on it now.',
+    '  This is the right choice while you are still working: progress notes, thinking',
+    '  aloud, anything not yet needing an answer.',
+    '- **With a handle: that agent runs next.** Use it when you actually need them —',
+    '  finished work they are waiting on, a question that blocks you, a handoff.',
+    '- **Finishing work someone delegated to you, tag them.** They are not watching',
+    '  the room; without the handle your result sits there unread.',
+    '- People are different: your user reads the room and needs no handle to see a',
+    '  reply. Tag agents, not humans.',
     '',
   );
 
