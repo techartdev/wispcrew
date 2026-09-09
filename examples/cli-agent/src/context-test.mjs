@@ -75,6 +75,29 @@ console.log('\n[limits] unknown is a real answer');
     String(contextWindowFor('nvidia/nemotron-3-super-120b-a12b')));
 
   /*
+   * The two families reported wrong by a user: the 5 generation of Claude
+   * ships 1M, and DeepSeek V4 is 1M. Both were being shown as 200k (or, for
+   * `deepseek-v4-pro`, no limit at all, which read as the used amount).
+   *
+   * A hand-maintained table goes stale the week a model ships — the same
+   * lesson as the model-pairing rule, one layer over — so the escape hatch is
+   * the per-agent override in Configure. But the families people actually use
+   * must be right, or the meter misleads them in the one place it matters.
+   */
+  check('claude 5 generation is 1M', contextWindowFor('claude-opus-5') === 1_000_000,
+    String(contextWindowFor('claude-opus-5')));
+  check('and so are its siblings', contextWindowFor('claude-sonnet-5') === 1_000_000
+    && contextWindowFor('claude-fable-5') === 1_000_000);
+  check('while the 4 generation stays 200k', contextWindowFor('claude-opus-4-8') === 200_000,
+    String(contextWindowFor('claude-opus-4-8')));
+  check('deepseek v4 is 1M', contextWindowFor('deepseek-v4-pro') === 1_000_000,
+    String(contextWindowFor('deepseek-v4-pro')));
+  check('and the vendor-prefixed form too',
+    contextWindowFor('nvidia/deepseek-v4-pro') === 1_000_000);
+  check('deepseek r1 resolves', contextWindowFor('deepseek-r1') === 128_000,
+    'r1 used to fall through to unknown');
+
+  /*
    * The important one. A model newer than this build, or somebody's own
    * fine-tune, must produce NO number rather than a plausible one.
    */

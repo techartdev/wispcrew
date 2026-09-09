@@ -119,12 +119,19 @@ const WINDOWS: { match: RegExp; tokens: number }[] = [
   { match: /^o[1-9]/, tokens: 200_000 },
 
   // Anthropic
-  { match: /^claude-(opus|sonnet)-[5-9]/, tokens: 200_000 },
+  // The 5 generation ships a 1M window (measured live against the model);
+  // the 4 generation and everything older is 200k.
+  { match: /^claude-(opus|sonnet|fable)-[5-9]/, tokens: 1_000_000 },
+  { match: /^claude-(opus|sonnet|haiku)-4/, tokens: 200_000 },
   { match: /^claude-haiku/, tokens: 200_000 },
   { match: /^claude-/, tokens: 200_000 },
 
   // DeepSeek
+  // V4 is 1M; the V3/R1 era is 128k. `deepseek-r1` is named separately from
+  // `deepseek-reasoner` and used to fall through to unknown.
+  { match: /^deepseek-v[4-9]/, tokens: 1_000_000 },
   { match: /^deepseek-(chat|reasoner)/, tokens: 128_000 },
+  { match: /^deepseek-r1/, tokens: 128_000 },
 
   // Meta Llama, as served by most hosts
   { match: /llama-3\.[123]/, tokens: 128_000 },

@@ -133,10 +133,19 @@ export function ContextMeter({
   const pct = report.fraction !== undefined ? Math.round(report.fraction * 100) : undefined;
   const approx = report.measured ? '' : '~';
 
+  /*
+   * "tokens used", not just "tokens".
+   *
+   * With a known limit the label is a percentage and cannot be misread. With
+   * no limit it is a bare number, and "~200K tokens" was read as "this model
+   * has 200K context" — which is the opposite of what it means, and the exact
+   * confusion that sent somebody hunting for a wrong limit. "used" says which
+   * of the two numbers it is.
+   */
   const label =
     pct !== undefined
       ? `${pct}% of context`
-      : `${approx}${short(report.used)} tokens`;
+      : `${approx}${short(report.used)} tokens used`;
 
   const title = report.measured
     ? `Reported by the provider for the last turn${report.model ? ` (${report.model})` : ''}.`
