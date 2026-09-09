@@ -276,6 +276,19 @@ export interface WispBridge {
   flushQueuedSteer(agentId: string): Promise<void>;
   /** Native file picker for attachments; returns absolute paths. */
   pickFiles(): Promise<string[]>;
+
+  /**
+   * Save an image pasted or dropped into the composer, and return its path.
+   *
+   * Attachments travel as file PATHS — the agent reads them from disk, and a
+   * conversation reloaded next week has to find them again. A clipboard
+   * image has no path, so it needs one before it can be sent at all.
+   *
+   * Takes the raw bytes rather than a data URL: a base64 string of a 4MB
+   * screenshot is 5.3MB of JSON crossing the IPC boundary, and the renderer
+   * already has the bytes.
+   */
+  saveAttachment(name: string, bytes: Uint8Array): Promise<string>;
   /** Abort the in-flight turn, leaving a provider-valid history. */
   interrupt(agentId: string): Promise<void>;
   /** Clear history for a fresh start (keeps the agent itself). */

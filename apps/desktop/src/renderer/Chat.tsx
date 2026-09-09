@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ClipboardEvent,
 } from 'react';
 import type {
   AgentRunState,
@@ -91,6 +92,8 @@ interface ChatProps {
   onResolveApproval(requestId: string, resolution: 'allow-once' | 'allow-always' | 'deny'): void;
   onOpenSettings(): void;
   onPickFiles(): Promise<string[]>;
+  /** Save pasted/dropped bytes to a file and return its path. */
+  onSaveAttachment(name: string, bytes: Uint8Array): Promise<string>;
   onRewind(entryId: string, mode: 'through' | 'before'): void;
   onBranch(entryId: string): void;
   /** Text from a retried message, to prefill the composer. */
@@ -314,6 +317,7 @@ export function Chat({
   onResolveApproval,
   onOpenSettings,
   onPickFiles,
+  onSaveAttachment,
   onRewind,
   onBranch,
   retryDraft,
@@ -783,6 +787,54 @@ export function Chat({
     });
   }, [onPickFiles, addFiles]);
 
+  /*
+   * Images pasted or dropped into the composer.
+   *
+   * Attachments are paths everywhere in this app, and a clipboard image has
+   * none — which is exactly why pasting a screenshot did nothing at all.
+   * The bytes are written to a file first, and the path joins the same
+   * pending list the file picker fills, so everything downstream is
+   * unchanged.
+   *
+   * Files dragged in are handled the same way rather than through their
+   * `path` property: a browser File from a drop has no usable path under
+   * `sandbox: true`, and reading the bytes works for both cases.
+   */
+  const addImageFiles = useCallback(
+    async (files: File[]) => {
+      const saved: string[] = [];
+      for (const file of files) {
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          // `file.name` is empty for a clipboard image; the handler falls
+          // back to the type, so give it something with an extension.
+          const name = file.name || `pasted.${(file.type.split('/')[1] ?? 'png').split('+')[0]}`;
+          saved.push(await onSaveAttachment(name, bytes));
+        } catch {
+          // One unreadable file must not discard the others.
+        }
+      }
+      if (saved.length) addFiles(saved);
+    },
+    [onSaveAttachment, addFiles],
+  );
+
+  const onPaste = useCallback(
+    (e: ClipboardEvent<HTMLTextAreaElement>) => {
+      const files = [...e.clipboardData.items]
+        .filter((i) => i.kind === 'file' && i.type.startsWith('image/'))
+        .map((i) => i.getAsFile())
+        .filter((f): f is File => f !== null);
+
+      // Only intercept when there is actually an image. Pasting text must
+      // keep behaving exactly as it always has.
+      if (!files.length) return;
+      e.preventDefault();
+      void addImageFiles(files);
+    },
+    [addImageFiles],
+  );
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     /*
      * An open menu owns the keyboard first.
@@ -870,11 +922,23 @@ export function Chat({
     e.preventDefault();
     setDragging(false);
     const paths: string[] = [];
+    /*
+     * A dropped item with no `path` is not necessarily a mistake.
+     *
+     * Dragging an image out of a browser, or from another app that offers
+     * only bytes, produces a File with an empty path — and those were
+     * silently discarded, which looks identical to the drop not registering.
+     * Anything without a path is saved from its bytes instead, the same way
+     * a pasted screenshot is.
+     */
+    const byteFiles: File[] = [];
     for (const file of Array.from(e.dataTransfer.files)) {
       const p = (file as File & { path?: string }).path;
       if (p) paths.push(p);
+      else byteFiles.push(file);
     }
     if (paths.length) addFiles(paths);
+    if (byteFiles.length) void addImageFiles(byteFiles);
   };
 
   return (
@@ -1157,6 +1221,7 @@ export function Chat({
             className="composer-input"
             rows={1}
             value={draft}
+            onPaste={onPaste}
             placeholder={
               !hasProvider
                 ? 'Configure a provider in Settings to start chatting…'

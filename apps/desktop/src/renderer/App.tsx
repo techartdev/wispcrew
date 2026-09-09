@@ -533,6 +533,7 @@ export function App() {
           onResolveApproval={(id, res) => void actions.resolveApproval(id, res)}
           onOpenSettings={() => setPanel('settings')}
           onPickFiles={actions.pickFiles}
+          onSaveAttachment={actions.saveAttachment}
           onRewind={(id, mode) => {
             void actions.rewind(id, mode).then((text) => {
               // "Retry from here" hands the removed text back so the user can

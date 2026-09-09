@@ -39,6 +39,7 @@ const bridge: WispBridge = {
     ipcRenderer.invoke('wc:setQueuedSteer', agentId, messages),
   flushQueuedSteer: (agentId) => ipcRenderer.invoke('wc:flushQueuedSteer', agentId),
   pickFiles: () => ipcRenderer.invoke('wc:pickFiles'),
+  saveAttachment: (name, bytes) => ipcRenderer.invoke('wc:saveAttachment', name, bytes),
   interrupt: (agentId) => ipcRenderer.invoke('wc:interrupt', agentId),
   clearConversation: (agentId) => ipcRenderer.invoke('wc:clearConversation', agentId),
   rewindConversation: (agentId, entryId, mode) =>

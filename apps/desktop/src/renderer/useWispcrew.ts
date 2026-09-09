@@ -868,6 +868,9 @@ export function useWispcrew() {
       },
 
       pickFiles: api.pickFiles,
+      // Pasted and dropped bytes become a file, because attachments travel
+      // as paths and a clipboard image has none.
+      saveAttachment: api.saveAttachment,
 
       /**
        * Edit or drop messages still waiting to be sent.

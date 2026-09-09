@@ -67,6 +67,8 @@ import {
   setQueuedSteer,
 } from '@wispcrew/runtime';
 import { prefixBefore, prefixThrough, rebuildHistory } from '@wispcrew/runtime';
+import path from 'node:path';
+import fsp from 'node:fs/promises';
 import { isClientOnlyMethod } from '@wispcrew/shared';
 import { existingLink, linkToNode, presetsForNode } from './node-links.js';
 import {
@@ -567,6 +569,16 @@ export function registerBridge(context: BridgeContext): void {
     'presetsForNode',
 
     /*
+     * Writes a file on the machine somebody is sitting at.
+     *
+     * Forwarded, a pasted screenshot would be written into the NODE's data
+     * directory and the path handed back would name a file this machine does
+     * not have — so the attachment would vanish on the way to being sent.
+     * The bytes are already here; the file belongs here.
+     */
+    'saveAttachment',
+
+    /*
      * Answered by gathering, not by forwarding.
      *
      * Grants live on whichever machine will act on them, and this call names
@@ -904,6 +916,36 @@ export function registerBridge(context: BridgeContext): void {
     };
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
     return result.canceled ? [] : result.filePaths;
+  });
+
+  /*
+   * A pasted or dropped image, given a path so it can be sent.
+   *
+   * Attachments are paths everywhere else in this app: the agent opens the
+   * file, and a transcript reloaded later still points at something real. A
+   * clipboard image has no path, which is the whole reason pasting one did
+   * nothing — there was no way to name it.
+   *
+   * Written under the app's own data directory rather than the OS temp dir,
+   * because temp is swept and a conversation from last week would come back
+   * with its screenshots missing.
+   */
+  handle('saveAttachment', async (name: string, bytes: Uint8Array) => {
+    const dir = path.join(ctx.userDataDir, 'attachments');
+    await fsp.mkdir(dir, { recursive: true });
+
+    /*
+     * The caller's name is a suggestion, not a path.
+     *
+     * It arrives from the renderer — for a dropped file it is whatever the
+     * file was called, and `../../` in there would write wherever it liked.
+     * Only the extension is worth keeping, so only that is taken.
+     */
+    const ext = (/\.([a-z0-9]{1,8})$/i.exec(name ?? '')?.[1] ?? 'png').toLowerCase();
+    const file = path.join(dir, `${store.newId('att')}.${ext}`);
+
+    await fsp.writeFile(file, Buffer.from(bytes));
+    return file;
   });
 
   handle('interrupt', (agentId: string) => {
