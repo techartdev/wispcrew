@@ -203,6 +203,78 @@ console.log('\n[4] a mixed step keeps what is real and mends what is not');
   check('valid overall', unanswered(sent).length === 0);
 }
 
+console.log('\n[5] two results for one call collapse to the first');
+{
+  /*
+   * The third face of this invariant, and the one that shipped:
+   *
+   *   each tool_use must have a single result. Found multiple
+   *   `tool_result` blocks with id: toolu_01Q7...
+   *
+   * The repair recorded each id as answered but never checked whether it
+   * already was, so a duplicated result was carried through untouched. All
+   * three variants -- missing, orphaned, duplicated -- are the same rule
+   * read from three sides, which is why they are pinned together.
+   */
+  const provider = recorder();
+  const agent = new Agent({ provider, tools: new ToolRegistry(), systemPrompt: 's' });
+
+  agent.setHistory([
+    { role: 'user', content: 'go' },
+    { role: 'assistant', content: '', toolCalls: [{ id: 'DUP', name: 'shell', args: {} }] },
+    { role: 'tool', toolCallId: 'DUP', toolName: 'shell', content: 'first result' },
+    { role: 'tool', toolCallId: 'DUP', toolName: 'shell', content: 'second result' },
+    { role: 'assistant', content: 'done' },
+  ]);
+
+  await agent.run('next');
+  const sent = provider.seen[0];
+  const forDup = sent.filter((m) => m.role === 'tool' && m.toolCallId === 'DUP');
+
+  check('exactly one result survives', forDup.length === 1, forDup.length + ' results');
+  check(
+    'and it is the one the model already saw',
+    forDup[0] && /first result/.test(forDup[0].content),
+    forDup[0]?.content,
+  );
+  check('still valid', unanswered(sent).length === 0);
+}
+
+console.log('\n[6] every variant at once');
+{
+  /*
+   * Missing, orphaned and duplicated in a single history. Repairing one
+   * kind must not create another -- which is exactly what happened when the
+   * orphan fix was written without the duplicate case in mind.
+   */
+  const provider = recorder();
+  const agent = new Agent({ provider, tools: new ToolRegistry(), systemPrompt: 's' });
+
+  agent.setHistory([
+    { role: 'user', content: 'go' },
+    {
+      role: 'assistant',
+      content: '',
+      toolCalls: [
+        { id: 'X', name: 'shell', args: {} },
+        { id: 'Y', name: 'shell', args: {} },
+      ],
+    },
+    { role: 'tool', toolCallId: 'X', toolName: 'shell', content: 'x once' },
+    { role: 'tool', toolCallId: 'X', toolName: 'shell', content: 'x twice' },
+    { role: 'tool', toolCallId: 'NOPE', toolName: 'shell', content: 'orphan' },
+    { role: 'assistant', content: 'partial' },
+  ]);
+
+  await agent.run('next');
+  const sent = provider.seen[0];
+  const ids = sent.filter((m) => m.role === 'tool').map((m) => m.toolCallId);
+
+  check('exactly one result per real call', ids.join(',') === 'X,Y', ids.join(','));
+  check('no orphan survived', !ids.includes('NOPE'));
+  check('valid overall', unanswered(sent).length === 0);
+}
+
 console.log('');
 if (failures) {
   console.error(`ORPHAN-TOOL-CALL TEST FAILED — ${failures} assertion(s)\n`);

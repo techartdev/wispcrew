@@ -670,6 +670,32 @@ export class Agent {
           changes++;
           continue;
         }
+
+        /*
+         * ONE result per call, and the first one wins.
+         *
+         * The third face of this same invariant, and the one I shipped:
+         *
+         *   each tool_use must have a single result. Found multiple
+         *   `tool_result` blocks with id: toolu_01Q7...
+         *
+         * This loop recorded each id as answered but never checked whether
+         * it already was, so a history holding two results for one call
+         * carried both through the repair and into the request. A duplicate
+         * arises the same way the other two do -- an interrupted turn
+         * retried, a relayed message settled twice -- and it is just as
+         * fatal, because the provider counts blocks rather than reading
+         * them.
+         *
+         * The first is kept because it is the one the model actually saw
+         * when it decided what to do next; a later duplicate is a replay of
+         * work already reflected in the conversation.
+         */
+        if (answered.has(next.toolCallId)) {
+          changes++;
+          continue;
+        }
+
         answered.add(next.toolCallId);
         repaired.push(next);
       }
