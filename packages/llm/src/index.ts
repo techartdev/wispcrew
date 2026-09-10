@@ -21,6 +21,15 @@ export * from './retry.js';
 export * as claudeOAuth from './oauth-flow.js';
 export * as chatgptOAuth from './chatgpt-oauth.js';
 export type { OAuthCredential } from './oauth-flow.js';
+/*
+ * Named exports, not just the `claudeOAuth` namespace.
+ *
+ * A caller has to distinguish "the refresh token is dead" from "the token
+ * endpoint was busy" to decide whether signing the user out is right, and
+ * `instanceof` across a namespace re-export is easy to get wrong. Both are
+ * vendor-neutral: the ChatGPT flow throws the same class.
+ */
+export { TokenEndpointError, isCredentialRejected } from './oauth-flow.js';
 export type { ChatGptCredential, PendingLogin } from './chatgpt-oauth.js';
 export * from './catalogue.js';
 

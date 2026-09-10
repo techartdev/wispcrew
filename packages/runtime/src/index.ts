@@ -46,6 +46,7 @@ export * from './settings-file.js';
 export * from './secrets-store.js';
 export * from './provider-keys.js';
 export * from './oauth-store.js';
+export * from './oauth-audit.js';
 export * from './grants.js';
 
 export * from './cron.js';

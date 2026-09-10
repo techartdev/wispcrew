@@ -45,6 +45,7 @@ import { fileLog } from './filelog.js';
 import { writeCheckpoint } from './checkpoints.js';
 import { revokeForAgent } from './grants.js';
 import { clearSession } from './agent-sessions.js';
+import { initOAuthAudit } from './oauth-audit.js';
 
 let baseDir = '';
 
@@ -52,6 +53,19 @@ let baseDir = '';
 export function initStore(userDataDir: string): void {
   baseDir = userDataDir;
   fs.mkdirSync(transcriptDir(), { recursive: true });
+
+  /*
+   * The OAuth audit lives in the same directory and needs the same one fact.
+   *
+   * Wired here rather than in each host because that is the shape of fault
+   * this repo keeps hitting: a thing that must be initialised in the desktop
+   * AND the daemon AND the CLI, where forgetting one leaves a silent gap.
+   * `initStore` is already the single call every host makes before touching
+   * a profile, so the audit cannot be enabled in one host and dark in
+   * another -- which is precisely how the last incident produced no
+   * evidence.
+   */
+  initOAuthAudit(userDataDir);
 }
 
 function filePath(name: string): string {

@@ -23,12 +23,15 @@ import {
   chatgptOAuth,
   claudeOAuth,
   describeUsage,
+  isCredentialRejected,
+  TokenEndpointError,
   type ChatGptCredential,
   type OAuthCredential,
   type UsageSnapshot,
 } from '@wispcrew/llm';
 import { getSecret, upsertSecrets, removeSecrets } from './secrets-store.js';
 import { fileLog } from './filelog.js';
+import { auditOAuth, credentialFingerprint } from './oauth-audit.js';
 
 export type OAuthVendor = 'anthropic' | 'chatgpt';
 
@@ -85,6 +88,14 @@ export function signOut(userDataDir: string, vendor: OAuthVendor): void {
   fileLog('[oauth] signed out', vendor);
 }
 
+/**
+ * Where the audit file lives.
+ *
+ * Exposed so a host can point diagnosis at it without importing the audit
+ * module; the file is plain JSONL and safe to read or send.
+ */
+export { readOAuthAudit } from './oauth-audit.js';
+
 export function saveCredential(
   userDataDir: string,
   vendor: OAuthVendor,
@@ -92,6 +103,10 @@ export function saveCredential(
 ): void {
   write(userDataDir, vendor, credential);
   fileLog('[oauth] signed in', vendor);
+  auditOAuth('signed-in', vendor, {
+    credential: credentialFingerprint(credential.refresh),
+    expires: credential.expires,
+  });
 }
 
 /** Status for the settings screen. */
@@ -120,18 +135,67 @@ async function refreshNow(
   vendor: OAuthVendor,
   current: StoredCredential,
 ): Promise<StoredCredential | undefined> {
+  const before = credentialFingerprint(current.refresh);
+  auditOAuth('refresh-started', vendor, { credential: before });
+
   try {
     const refreshed =
       vendor === 'anthropic'
         ? await claudeOAuth.refreshCredential(current as OAuthCredential)
         : await chatgptOAuth.refreshCredential(current as ChatGptCredential);
     write(userDataDir, vendor, refreshed);
+    /*
+     * Both fingerprints, because a rotation is the interesting case: if two
+     * processes ever do race, the trail shows one credential refreshed from
+     * the same `before` twice, which no amount of reasoning about process
+     * lists can establish.
+     */
+    auditOAuth('refresh-succeeded', vendor, {
+      credential: before,
+      rotatedTo: credentialFingerprint(refreshed.refresh),
+    });
     return refreshed;
   } catch (err) {
-    // The refresh token is spent or revoked; a fresh sign-in is the only fix.
-    fileLog('[oauth] refresh failed', vendor, (err as Error).message);
-    signOut(userDataDir, vendor);
-    return undefined;
+    /*
+     * Sign out ONLY when the server rejected the grant.
+     *
+     * This used to discard the credential on any thrown error, on the
+     * reasoning that a failed refresh means a spent token. That is true of
+     * `invalid_grant` and false of everything else: a 429, a 5xx, a DNS
+     * hiccup or a 30-second timeout all threw the same bare `Error`, and
+     * each one signed the user out of a subscription whose refresh token
+     * was still perfectly good.
+     *
+     * The asymmetry decides it. Keeping a dead token costs one more failed
+     * turn and an accurate error message. Discarding a live one costs an
+     * interactive browser sign-in the user did not ask for — which is
+     * exactly what was observed here: "OAuth access token has been revoked",
+     * followed by recovery on its own once the transient condition passed.
+     *
+     * Same lesson as c0a4a05, which taught the messages adapter to retry
+     * Anthropic's 529 instead of dying. The token endpoint sits behind the
+     * same infrastructure and was never given the same treatment.
+     */
+    const rejected = isCredentialRejected(err);
+    auditOAuth(rejected ? 'refresh-rejected' : 'refresh-failed', vendor, {
+      ...(err instanceof TokenEndpointError && err.status !== undefined
+        ? { status: err.status }
+        : {}),
+      message: (err as Error).message,
+      signedOut: rejected,
+    });
+
+    if (rejected) {
+      signOut(userDataDir, vendor);
+      return undefined;
+    }
+
+    /*
+     * Hand back what we already had. It may still work — the access token
+     * outlives the five-minute safety margin — and if it does not, the
+     * request fails with a real auth error and the next turn tries again.
+     */
+    return current;
   }
 }
 
@@ -163,6 +227,10 @@ export async function resolveToken(
    */
   if (!current.refresh) {
     fileLog('[oauth] borrowed credential expired, clearing', vendor);
+    auditOAuth('signed-out', vendor, {
+      message: 'borrowed CLI credential expired; it has no refresh token',
+      signedOut: true,
+    });
     signOut(userDataDir, vendor);
     return undefined;
   }
@@ -179,7 +247,20 @@ export async function resolveToken(
         vendor === 'anthropic'
           ? claudeOAuth.isExpired(latest as OAuthCredential)
           : chatgptOAuth.isExpired(latest as ChatGptCredential);
-      return stillExpired ? refreshNow(userDataDir, vendor, latest) : latest;
+      if (!stillExpired) {
+        /*
+         * Someone else refreshed while we queued. Recorded because it is the
+         * single-flight lock doing its job, and a trail that shows only
+         * refreshes cannot distinguish "coalesced correctly" from "never
+         * contended" — which was half of what made the last incident
+         * unfalsifiable.
+         */
+        auditOAuth('refresh-coalesced', vendor, {
+          credential: credentialFingerprint(latest.refresh),
+        });
+        return latest;
+      }
+      return refreshNow(userDataDir, vendor, latest);
     });
 
   refreshChains.set(

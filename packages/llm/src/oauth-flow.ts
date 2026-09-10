@@ -46,6 +46,40 @@ export const ANTHROPIC_OAUTH = {
 const TOKEN_TIMEOUT_MS = 30_000;
 
 /**
+ * A token-endpoint failure that knows whether the CREDENTIAL was the problem.
+ *
+ * The caller signs the user out when a refresh fails, which is right for a
+ * spent or revoked refresh token and wrong for everything else. Without this
+ * flag the two are one `Error` and indistinguishable, so a rate limit, a
+ * 5xx or a dropped connection cost the user a browser sign-in.
+ */
+export class TokenEndpointError extends Error {
+  /** True only when the server rejected the grant itself. */
+  readonly credentialRejected: boolean;
+  /** HTTP status, when there was a response at all. */
+  readonly status?: number;
+
+  constructor(message: string, opts: { credentialRejected: boolean; status?: number }) {
+    super(message);
+    this.name = 'TokenEndpointError';
+    this.credentialRejected = opts.credentialRejected;
+    if (opts.status !== undefined) this.status = opts.status;
+  }
+}
+
+/**
+ * Did this failure mean the credential is dead?
+ *
+ * Anything that is not explicitly a rejected grant is treated as transient,
+ * because the asymmetry is stark: keeping a dead token costs one more failed
+ * turn and a clear error, while discarding a live one costs the user an
+ * interactive sign-in they did not ask for.
+ */
+export function isCredentialRejected(err: unknown): boolean {
+  return err instanceof TokenEndpointError && err.credentialRejected;
+}
+
+/**
  * A refreshed token is treated as expiring five minutes early, so a long
  * streaming turn cannot die mid-flight on a token that lapsed after the
  * request began.
@@ -59,6 +93,8 @@ export interface OAuthCredential {
   /** Epoch ms, already reduced by the safety margin. */
   expires: number;
 }
+
+
 
 export interface PkcePair {
   verifier: string;
@@ -141,12 +177,25 @@ async function postToken(body: Record<string, string>, label: string): Promise<{
   error?: string;
   error_description?: string;
 }> {
-  const res = await fetch(ANTHROPIC_OAUTH.tokenUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
-  });
+  let res: Response;
+  try {
+    res = await fetch(ANTHROPIC_OAUTH.tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
+    });
+  } catch (err) {
+    /*
+     * The network never reached Anthropic, so the refresh token is untouched
+     * and still valid. Marked as such: the caller signs the user out on a
+     * refresh failure, and doing that because the wifi dropped is a real
+     * cost -- a browser sign-in to recover from a five-second outage.
+     */
+    throw new TokenEndpointError(`${label} could not reach Anthropic: ${(err as Error).message}`, {
+      credentialRejected: false,
+    });
+  }
   const text = await res.text();
 
   if (!res.ok) {
@@ -165,7 +214,35 @@ async function postToken(body: Record<string, string>, label: string): Promise<{
     } catch {
       /* keep the raw excerpt */
     }
-    throw new Error(`${label} failed (HTTP ${res.status}): ${detail}`);
+    /*
+     * Only the server saying "this grant is no good" means the credential is
+     * actually dead. A 429, a 500 or a 529 says nothing about the refresh
+     * token -- Anthropic was busy, and the same token will work in a moment.
+     *
+     * This distinction is the whole point: `refreshNow` signs the user out
+     * on any thrown error, so before this an overloaded token endpoint
+     * revoked a perfectly good session and demanded a browser sign-in. We
+     * had just fixed exactly that class of bug in the messages adapter
+     * (c0a4a05) while the token endpoint kept doing it.
+     */
+    const parsedError = (() => {
+      try {
+        return (JSON.parse(text) as { error?: string }).error;
+      } catch {
+        return undefined;
+      }
+    })();
+    const credentialRejected =
+      res.status === 400 ||
+      res.status === 401 ||
+      res.status === 403 ||
+      parsedError === 'invalid_grant' ||
+      parsedError === 'invalid_client';
+
+    throw new TokenEndpointError(`${label} failed (HTTP ${res.status}): ${detail}`, {
+      credentialRejected,
+      status: res.status,
+    });
   }
 
   try {
