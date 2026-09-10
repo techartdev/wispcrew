@@ -94,7 +94,10 @@ console.log('\n[last seen]');
 {
   check('a fresh node has never been seen', listNodes(dir)[0].lastSeenAt === undefined);
   markNodeSeen(dir, node.id);
-  check('and records it once it answers', typeof listNodes(dir)[0].lastSeenAt === 'number');
+  const firstSeen = listNodes(dir)[0].lastSeenAt;
+  check('and records it once it answers', typeof firstSeen === 'number');
+  markNodeSeen(dir, node.id);
+  check('does not rewrite it again within the persistence interval', listNodes(dir)[0].lastSeenAt === firstSeen);
 }
 
 console.log('\n[forgetting takes the credential too]');

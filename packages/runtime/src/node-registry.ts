@@ -24,6 +24,19 @@ import { fileLog } from './filelog.js';
 
 const NODES_FILE = 'nodes.json';
 
+/*
+ * A busy remote turn can emit many protocol frames per second. The UI needs
+ * a recent liveness indication, not every millisecond of it persisted to a
+ * shared JSON file. Keep the latest persisted observation per profile/node
+ * and write at most twice a minute; the first observation always writes.
+ */
+const SEEN_WRITE_INTERVAL_MS = 30_000;
+const lastSeenWrites = new Map<string, number>();
+
+function seenWriteKey(dataDir: string, nodeId: string): string {
+  return `${path.resolve(dataDir)}\u0000${nodeId}`;
+}
+
 /** Where a node's token is kept in the encrypted store. */
 function tokenKey(nodeId: string): string {
   return `WISPCREW_NODE_TOKEN_${nodeId.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
@@ -115,11 +128,24 @@ export function removeNode(dataDir: string, nodeId: string): void {
   fileLog('[nodes] removed', nodeId);
 }
 
-/** Note that a node answered, so the UI can show what is reachable. */
+/**
+ * Note that a node answered, so the UI can show what is reachable.
+ *
+ * The timestamp is an observation, but persisting every streaming frame would
+ * rewrite nodes.json continuously. A process remembers its latest flush per
+ * node and records at most once per interval; a restart simply makes the next
+ * authentic observation write immediately.
+ */
 export function markNodeSeen(dataDir: string, nodeId: string): void {
+  const now = Date.now();
+  const key = seenWriteKey(dataDir, nodeId);
+  const previous = lastSeenWrites.get(key);
+  if (previous !== undefined && now - previous < SEEN_WRITE_INTERVAL_MS) return;
+
   const nodes = readNodes(dataDir);
   const node = nodes.find((n) => n.id === nodeId);
   if (!node) return;
-  node.lastSeenAt = Date.now();
+  node.lastSeenAt = now;
   writeJson(path.join(dataDir, NODES_FILE), nodes);
+  lastSeenWrites.set(key, now);
 }
