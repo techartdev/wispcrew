@@ -939,7 +939,24 @@ export async function runPrompt(
        * are held rather than lost. `steer_applied` writes the transcript
        * entry when it actually reaches the model.
        */
-      emitEngineEvent({ type: 'steer-queued', agentId, queued: queuedSteer(agentId) });
+      /*
+       * Announced against the CONVERSATION, not the agent.
+       *
+       * The queue belongs to the agent's session -- that is where the
+       * message waits -- but the renderer keys everything it displays by
+       * the conversation it is showing. In a one-to-one chat those ids are
+       * the same and this looked right for as long as rooms did not exist.
+       *
+       * In a room they differ: the session is `agent_...`, the open
+       * conversation is `room_...`, so the lookup missed every time and the
+       * pending message was never drawn. The user steered repeatedly, saw
+       * nothing appear under the composer, and reasonably concluded the
+       * message had been sent as an ordinary prompt.
+       *
+       * Same agent-id-versus-room-id seam as 6bb601c, which is twice in one
+       * evening -- worth treating as a pattern rather than an accident.
+       */
+      emitEngineEvent({ type: 'steer-queued', agentId: outputId, queued: queuedSteer(agentId) });
       return '';
     }
     /*

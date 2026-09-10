@@ -156,7 +156,25 @@ console.log('\n[4] the engine enforces one loop per agent');
 
   check('runPrompt checks whether a turn is live', /if \(!opts\?\.steerRetry && isRunning\(agentId\)\)/.test(engine));
   check('and steers instead of starting a loop', /const accepted = steerSession\(agentId, rawPrompt\)/.test(engine));
-  check('returning without a second run', /if \(accepted\) \{[\s\S]{0,2000}?return '';/.test(engine));
+  /*
+   * Anchored on the code either side, not on a character budget.
+   *
+   * This assertion has now broken TWICE by counting distance: each time a
+   * comment was added inside the branch, `return ''` moved past the window
+   * and a correct file reported a bug. A test that fails when prose grows
+   * is worse than no test, because the obvious repair is to delete the
+   * explanation.
+   *
+   * `[^}]*` cannot cross out of the branch, so this still proves the return
+   * is inside it rather than somewhere later in the function.
+   */
+  check(
+    'returning without a second run',
+    /steered into the live turn[\s\S]*?return '';[\s\S]*?steer refused/.test(
+      engine.replace(/\/\*[\s\S]*?\*\//g, ''),
+    ),
+    'the steer branch must return instead of running a turn',
+  );
   check(
     'a refused steer falls through to a normal run',
     /steer refused, turn already ended/.test(engine),

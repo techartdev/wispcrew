@@ -43,7 +43,7 @@ import type {
   ToolGrant,
   TranscriptEntry,
 } from '@wispcrew/shared';
-import { handleFor } from '@wispcrew/shared';
+import { agentsIn, handleFor } from '@wispcrew/shared';
 import * as store from '@wispcrew/runtime';
 /*
  * Creating an agent must also create its room.
@@ -65,6 +65,7 @@ import {
   steerSession,
   queuedSteer,
   setQueuedSteer,
+  isRunning,
 } from '@wispcrew/runtime';
 import { prefixBefore, prefixThrough, rebuildHistory } from '@wispcrew/runtime';
 import path from 'node:path';
@@ -319,6 +320,31 @@ export function attachWindowEventSink(): () => void {
  */
 export function pushTranscript(agentId: string, entry: TranscriptEntry): void {
   runtimePushTranscript(agentId, entry);
+}
+
+/**
+ * Whose session holds the steering queue for the conversation on screen.
+ *
+ * The renderer knows one id: the conversation it is showing. A queue lives
+ * on an `Agent`, and in a room those are not the same thing — the
+ * conversation is `room_...` while the session is `agent_...`.
+ *
+ * For a one-to-one chat the two ids are identical, which is why this went
+ * unnoticed: the steering queue simply never appeared in a room, and a
+ * message typed mid-turn fell through to a full turn instead.
+ *
+ * Returns the member that is actually RUNNING, because that is the only one
+ * with a live loop to steer into. With nobody running there is nothing to
+ * queue onto and the caller should send an ordinary prompt.
+ */
+function sessionTargetFor(conversationId: string): string | undefined {
+  if (isRunning(conversationId)) return conversationId;
+
+  const room = getConversation(conversationId);
+  if (!room) return undefined;
+
+  const busy = agentsIn(room).find((member) => isRunning(member.id));
+  return busy?.id;
 }
 
 export function emitAgents(): void {
@@ -878,8 +904,18 @@ export function registerBridge(context: BridgeContext): void {
      * Attachments are not queued: they belong to the message that opened the
      * turn, and re-sending files mid-run is a different feature.
      */
-    if (text && paths.length === 0 && steerSession(agentId, text)) {
-      emitEvent({ type: 'steer-queued', agentId, queued: queuedSteer(agentId) });
+    /*
+     * `agentId` here is whatever the renderer has open, which in a room is
+     * the ROOM's id -- and a room has no session of its own. So this looked
+     * up an empty queue, refused to steer, and fell through to a full turn.
+     * The engine's own guard caught it a moment later, which is why steering
+     * worked at all; this path simply never fired in a room.
+     */
+    const steerTarget = sessionTargetFor(agentId);
+    if (text && paths.length === 0 && steerTarget && steerSession(steerTarget, text)) {
+      // Keyed by the open conversation, because that is what the renderer
+      // looks the queue up by.
+      emitEvent({ type: 'steer-queued', agentId, queued: queuedSteer(steerTarget) });
       return;
     }
 
@@ -1074,17 +1110,28 @@ export function registerBridge(context: BridgeContext): void {
    * Routed to the owning node for a remote agent by `AGENT_SCOPED`; these
    * handlers answer only when the work is local.
    */
-  handle('getQueuedSteer', (agentId: string) => queuedSteer(agentId));
+  /*
+   * Every one of these takes the id the renderer has open, which in a room
+   * is the room's. The QUEUE lives on an agent session, so each resolves to
+   * the running member first — see `sessionTargetFor`.
+   */
+  handle('getQueuedSteer', (agentId: string) => {
+    const target = sessionTargetFor(agentId);
+    return target ? queuedSteer(target) : [];
+  });
 
   handle('setQueuedSteer', (agentId: string, messages: string[]) => {
-    setQueuedSteer(agentId, Array.isArray(messages) ? messages.map(String) : []);
-    const queued = queuedSteer(agentId);
+    const target = sessionTargetFor(agentId);
+    if (!target) return [];
+    setQueuedSteer(target, Array.isArray(messages) ? messages.map(String) : []);
+    const queued = queuedSteer(target);
     emitEvent({ type: 'steer-queued', agentId, queued });
     return queued;
   });
 
   handle('flushQueuedSteer', (agentId: string) => {
-    emitEvent({ type: 'steer-queued', agentId, queued: queuedSteer(agentId) });
+    const target = sessionTargetFor(agentId);
+    emitEvent({ type: 'steer-queued', agentId, queued: target ? queuedSteer(target) : [] });
   });
 
   /* -- subscription sign-in ------------------------------------ */
@@ -1731,18 +1778,27 @@ export function registerBridge(context: BridgeContext): void {
      * Queue when that agent is mid-turn, rather than starting a second one.
      *
      * This is the path the composer actually uses, so the guard has to be
-     * here and not only on `sendPrompt`. A one-to-one room shares the
-     * agent's id, which is what `steerSession` keys on; a multi-agent room
-     * has a `room_…` id that matches no session, so `steerSession` returns
-     * false and the message runs as an ordinary turn — which is right, since
-     * there is no single running agent to steer.
+     * here and not only on `sendPrompt`.
+     *
+     * This comment used to say a multi-agent room correctly ran an ordinary
+     * turn, "since there is no single running agent to steer". That was
+     * wrong, and being written down as intended is what kept it alive: when
+     * ONE member is mid-turn there is exactly one agent to steer, and
+     * `room_…` matching no session meant the queue never appeared in the
+     * only place the user actually types. Every steer fell through to a
+     * fresh turn until the engine's own guard caught it.
+     *
+     * `sessionTargetFor` resolves the room to its running member, and
+     * returns nothing when none is — which is the real case this described.
      */
     const steerText = String(text ?? '').trim();
-    if (steerText && paths.length === 0 && steerSession(conversationId, steerText)) {
+    const steerTarget = sessionTargetFor(conversationId);
+    if (steerText && paths.length === 0 && steerTarget && steerSession(steerTarget, steerText)) {
       emitEvent({
         type: 'steer-queued',
+        // Keyed by the conversation on screen; the renderer knows no other id.
         agentId: conversationId,
-        queued: queuedSteer(conversationId),
+        queued: queuedSteer(steerTarget),
       });
       return;
     }
