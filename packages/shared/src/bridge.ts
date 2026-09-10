@@ -43,6 +43,17 @@ import type { ConversationRecord, RoomMode } from './conversation.js';
 export type BridgeEvent =
   /** An entry was added or updated (streaming deltas arrive as updates). */
   | { type: 'transcript'; agentId: string; entry: TranscriptEntry }
+  /**
+   * An entry that was written and then withdrawn.
+   *
+   * The steer path needs this: the caller commits the user's message before
+   * anyone knows a turn is running, and the engine removes it once it
+   * decides to steer. Without an event the renderer keeps showing a message
+   * that is no longer in the transcript — it reappears correctly at
+   * injection, so the user sees their words twice and concludes the steer
+   * was ignored and sent as an ordinary prompt.
+   */
+  | { type: 'transcript-removed'; agentId: string; entryId: string }
   /** The agent's run state changed (drives the roster status dot). */
   | { type: 'run-state'; agentId: string; state: AgentRunState }
   /**

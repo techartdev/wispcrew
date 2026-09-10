@@ -1270,21 +1270,31 @@ export function Chat({
                     onEditQueuedSteer(next);
                   }}
                   onKeyDown={(e) => {
+                    /*
+                     * Enter commits the edit and returns focus to the
+                     * composer. It does not "send": the message was already
+                     * on its way the moment it was queued, and pretending
+                     * otherwise is what made this row feel broken.
+                     */
                     if (e.key === 'Enter') {
                       e.preventDefault();
                       onFlushQueuedSteer();
+                      (e.target as HTMLInputElement).blur();
                     }
                   }}
                 />
-                <button
-                  type="button"
-                  className="steer-send"
-                  onClick={onFlushQueuedSteer}
-                  title="Send at the next step — as soon as any running tool finishes"
-                  aria-label="Send now"
-                >
-                  <IconSend />
-                </button>
+                {/*
+                  * No "send now", because there is no such thing.
+                  *
+                  * A steer can only be injected at a step boundary: pushing
+                  * it mid-step leaves a tool call unanswered and the
+                  * provider rejects the whole request. The button promised
+                  * an immediacy the protocol cannot give, did nothing when
+                  * pressed, and taught the user that the queue was broken.
+                  *
+                  * The message is already on its way. What remains useful is
+                  * editing it before it goes, and dropping it — both below.
+                  */}
                 <button
                   type="button"
                   className="steer-remove"
@@ -1297,8 +1307,8 @@ export function Chat({
               </div>
             ))}
             <div className="steer-hint muted">
-              {queuedSteer.length === 1 ? 'Queued' : `${queuedSteer.length} queued`} — goes to the
-              agent after the running step finishes
+              {queuedSteer.length === 1 ? 'Queued' : `${queuedSteer.length} queued`} — goes in when
+              the running step finishes. Edit or ✕ while it waits.
             </div>
           </div>
         )}

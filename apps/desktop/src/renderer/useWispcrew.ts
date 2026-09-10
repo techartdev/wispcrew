@@ -340,6 +340,19 @@ export function useWispcrew() {
           });
           return;
         }
+        /*
+         * An entry withdrawn after it was written.
+         *
+         * The steer path commits the user's message before anyone knows a
+         * turn is running, then removes it once the engine decides to
+         * steer. Without acting on this the renderer keeps the withdrawn
+         * copy AND draws the real one at injection — the user sees their
+         * words twice and concludes the steer was ignored.
+         */
+        case 'transcript-removed':
+          if (event.agentId !== selectedRef.current) return;
+          setTranscript((prev) => prev.filter((e) => e.id !== event.entryId));
+          return;
         case 'steer-queued':
           setQueuedSteer((prev) => ({ ...prev, [event.agentId]: event.queued }));
           return;

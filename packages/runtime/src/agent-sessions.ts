@@ -151,6 +151,23 @@ export function queuedSteer(agentId: string): readonly string[] {
 }
 
 /** Replace the queue — the user editing or dropping something not yet sent. */
+/**
+ * Deliver the queue at the next step boundary, rather than waiting for one.
+ *
+ * "Send now" was a no-op: it re-emitted the queue and returned, so pressing
+ * it did nothing observable and the message went at its own pace anyway.
+ *
+ * There is no honest way to make it arrive sooner than the next boundary --
+ * injecting mid-step leaves a tool call unanswered and the provider rejects
+ * the request outright. What the button CAN do is stop the user holding the
+ * queue open for editing, which is what it always meant. So this is the
+ * honest version of it: report whether anything is waiting, so the caller
+ * can say "on its way" instead of pretending it has already gone.
+ */
+export function hasQueuedSteer(agentId: string): boolean {
+  return (sessions.get(agentId)?.agent.queuedSteer.length ?? 0) > 0;
+}
+
 export function setQueuedSteer(agentId: string, messages: string[]): void {
   sessions.get(agentId)?.agent.setQueuedSteer(messages);
 }

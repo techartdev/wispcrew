@@ -147,9 +147,77 @@ console.log('\n[5] the pending message is rendered, editable and cancellable');
   check('a queue renders when it has items', /\{queuedSteer\.length > 0 && \(/.test(chat));
   check('each item is editable', /className="steer-text"[\s\S]{0,300}?onChange=/.test(chat));
   check('and removable', /onEditQueuedSteer\(queuedSteer\.filter/.test(chat));
+  /*
+   * Matched on the load-bearing words rather than the whole sentence. The
+   * first version pinned the exact copy and failed the moment the wording
+   * improved — a test that forbids editing the text it checks.
+   */
+  check('the hint says when it will be sent', /goes in when/.test(chat));
+}
+
+console.log('\n[6] the queue behaves like a queue');
+{
+  /*
+   * Three faults the user found by using it, all of which made a working
+   * mechanism look broken:
+   *
+   *   "i saw the steer twice"  — the caller's copy was removed from the
+   *   file but the renderer was never told, so it kept showing it and then
+   *   drew the injected copy as well.
+   *
+   *   "i simply clicked the x to remove this waiting message" — the row
+   *   stayed after the message had already gone to the model, still
+   *   offering to edit text that was no longer editable.
+   *
+   *   "to steer by send now ... none of this works" — the send button was
+   *   a no-op. It could never be anything else: injecting mid-step leaves a
+   *   tool call unanswered and the provider rejects the request. The button
+   *   promised an immediacy the protocol does not have.
+   *
+   * Comments are stripped before matching. Two assertions in this file have
+   * already broken by measuring distance from a landmark, and a test that
+   * fails when prose grows teaches people to delete the prose.
+   */
+  const code = engine.replace(/\/\*[\s\S]*?\*\//g, '');
+  const shared = fs.readFileSync(path.join(root, 'packages/shared/src/bridge.ts'), 'utf8');
+
   check(
-    'the hint says when it will be sent',
-    /goes to the\s*\n?\s*agent after the running step finishes/.test(chat),
+    'a withdrawal has an event of its own',
+    /'transcript-removed'; agentId: string; entryId: string/.test(shared),
+  );
+  check(
+    'the engine announces one when it steers',
+    /emitEngineEvent\(\{ type: 'transcript-removed', agentId: outputId, entryId: opts\.triggerEntryId \}\)/.test(code),
+  );
+  check(
+    'and only when an entry was really removed',
+    /if \(opts\?\.triggerEntryId && store\.removeTranscriptEntry\(/.test(code),
+    'announcing a removal that did not happen would drop the wrong message',
+  );
+  check(
+    'the renderer acts on it',
+    /case 'transcript-removed':[\s\S]{0,240}?filter\(\(e\) => e\.id !== event\.entryId\)/.test(
+      hook.replace(/\/\*[\s\S]*?\*\//g, ''),
+    ),
+  );
+
+  /*
+   * `drainSteer` empties the queue on the session, but nothing told the
+   * renderer, so the row outlived the message it represented.
+   */
+  const applied = code.slice(code.indexOf("e.type === 'steer_applied'"));
+  check(
+    'the pending row clears when the message lands',
+    /type: 'steer-queued'/.test(applied.slice(0, applied.indexOf('tool_call_start'))),
+    'the row must not outlive the message it represents',
+  );
+
+  check('no button promises to send it sooner', !/className="steer-send"/.test(chat));
+  check('the hint says when it will go', /goes in when/.test(chat));
+  check(
+    'editing and cancelling still work',
+    /className="steer-text"/.test(chat) && /className="steer-remove"/.test(chat),
+    'the queue is the user\'s until the model reads it',
   );
 }
 

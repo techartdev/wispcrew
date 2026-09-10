@@ -933,7 +933,22 @@ export async function runPrompt(
        * function knows a steer happened — the decision is made after the
        * caller has already committed the entry.
        */
-      if (opts?.triggerEntryId) store.removeTranscriptEntry(outputId, opts.triggerEntryId);
+      if (opts?.triggerEntryId && store.removeTranscriptEntry(outputId, opts.triggerEntryId)) {
+        /*
+         * Tell the renderer, or the removal is invisible to it.
+         *
+         * `removeTranscriptEntry` writes the file and says nothing. The
+         * renderer had already drawn the message from the `transcript`
+         * event, so it kept showing it — and then `steer_applied` drew it
+         * again at injection. The user saw their words twice and reasonably
+         * concluded the steer had been ignored: "I saw the steer twice".
+         *
+         * Announced only when something was actually removed, so a caller
+         * that wrote no entry cannot make the renderer drop somebody
+         * else's message.
+         */
+        emitEngineEvent({ type: 'transcript-removed', agentId: outputId, entryId: opts.triggerEntryId });
+      }
       /*
        * The queue is shown in the composer, so the user can see their words
        * are held rather than lost. `steer_applied` writes the transcript
@@ -1569,6 +1584,20 @@ export async function runPrompt(
         content: e.text,
         createdAt: Date.now(),
       });
+
+      /*
+       * The message has gone, so the pending row must go with it.
+       *
+       * The queue on the session is already empty -- `drainSteer` took the
+       * whole thing -- but nothing said so, and the renderer only updates
+       * its copy when a `steer-queued` event arrives. So the row sat under
+       * the composer after the message had landed in the transcript, still
+       * offering to edit and send text that was already with the model.
+       *
+       * Announced against the conversation, like every other steer event:
+       * the renderer knows no other id.
+       */
+      emitEngineEvent({ type: 'steer-queued', agentId: outputId, queued: queuedSteer(agentId) });
     } else if (e.type === 'tool_call_start') {
       // Close any prose written before this call so the card lands *after*
       // it, and the answer the model writes next lands after the card.

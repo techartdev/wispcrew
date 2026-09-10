@@ -590,6 +590,15 @@ export function removeTranscriptEntry(agentId: string, entryId: string): boolean
   return true;
 }
 
+/**
+ * Whether an entry is still in a transcript.
+ *
+ * Used by callers that must not announce a removal they did not make.
+ */
+export function hasTranscriptEntry(agentId: string, entryId: string): boolean {
+  return loadTranscript(agentId).some((e) => e.id === entryId);
+}
+
 export function clearTranscript(agentId: string): void {
   // Named, so the recovery list reads "before the chat was cleared" rather
   // than a generic "write". That label is the whole basis on which someone
