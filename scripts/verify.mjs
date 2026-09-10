@@ -403,6 +403,9 @@ if (!process.argv.includes('--fast')) {
           timeout: 60_000,
           env: {
             ...process.env,
+            // The desktop host runs as Electron's Node process. A verification
+            // child must be a real Electron app, not inherit that mode.
+            ELECTRON_RUN_AS_NODE: undefined,
             WISPCREW_CAPTURE: shot,
             WISPCREW_CAPTURE_DELAY: '9000',
           },
