@@ -116,6 +116,8 @@ export async function connectRemoteNode(
   options: {
     clientName?: string;
     onEvent?: (event: unknown) => void;
+    /** A parsed protocol frame arrived from the remote node. */
+    onActivity?: () => void;
     /**
      * Answer a node asking this client for permission.
      *
@@ -144,6 +146,7 @@ export async function connectRemoteNode(
     token: target.token,
     clientName: options.clientName,
     onEvent: options.onEvent,
+    onActivity: options.onActivity,
     onAsk: options.onAsk,
     onClose: options.onClose,
   });

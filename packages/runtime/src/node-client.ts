@@ -26,6 +26,8 @@ export interface NodeClientOptions {
   /** Identifies this client in node logs. */
   clientName?: string;
   onEvent?: (event: unknown) => void;
+  /** A frame arrived from the authenticated node, proving the link is live. */
+  onActivity?: () => void;
 
   /**
    * Answer a node asking this client for permission.
@@ -61,7 +63,7 @@ export interface NodeClient {
  * rather than on the first method call.
  */
 export function connectNode(options: NodeClientOptions): Promise<NodeClient> {
-  const { socket, token, clientName = 'wispcrew-desktop', onEvent, onAsk, onClose } = options;
+  const { socket, token, clientName = 'wispcrew-desktop', onEvent, onActivity, onAsk, onClose } = options;
 
   return new Promise((resolve, reject) => {
     let buffered = '';
@@ -83,6 +85,9 @@ export function connectNode(options: NodeClientOptions): Promise<NodeClient> {
       buffered = rest;
 
       for (const raw of frames) {
+        // A parsed protocol frame is activity from the pinned, authenticated
+        // peer — unlike a local timer, it is an honest liveness signal.
+        onActivity?.();
         const frame = raw as NodeFrame;
         switch (frame.t) {
           case 'welcome':

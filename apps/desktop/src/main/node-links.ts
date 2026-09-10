@@ -218,6 +218,9 @@ export function linkToNode(
     {
       clientName: 'wispcrew-desktop',
       onEvent,
+      // Only an actual authenticated protocol frame proves liveness. A timer
+      // would make an unplugged machine look healthy.
+      onActivity: () => markNodeSeen(dataDir, nodeId),
 
       /* A node asking this desktop for permission. */
       onAsk: async (request) =>
