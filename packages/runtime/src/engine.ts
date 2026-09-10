@@ -63,7 +63,14 @@ import { providerSecretKey } from './provider-keys.js';
 import { allStatuses, recordUsage, resolveToken, type OAuthVendor } from './oauth-store.js';
 import { attachmentsToPromptText } from './attachments.js';
 import { rebuildHistory } from './branching.js';
-import { getSession, setRunning, clearSession } from './agent-sessions.js';
+import {
+  getSession,
+  setRunning,
+  isRunning,
+  steerSession,
+  queuedSteer,
+  clearSession,
+} from './agent-sessions.js';
 import { buildMcpTools } from './mcp-manager.js';
 import {
   isTerminal,
@@ -624,6 +631,19 @@ export interface RunOptions {
    * combined answer, which reads as a malfunction.
    */
   unattended?: boolean;
+
+  /**
+   * Run even though a turn is already in flight for this agent.
+   *
+   * The default is to steer instead: a message arriving mid-turn belongs to
+   * the loop that is running, not to a second one beside it. Two loops on
+   * one Agent shred the transcript, and `agent.ts` documents why.
+   *
+   * This escape hatch exists for the caller that has already decided the
+   * live turn is finished with -- notably a retry after `steer` refused
+   * because the turn ended between the check and the call.
+   */
+  steerRetry?: boolean;
 }
 
 /**
@@ -853,6 +873,50 @@ export async function runPrompt(
    * empty while two runs were happening.
    */
   const outputId = transcriptId ?? agentId;
+
+  /*
+   * One loop per agent, enforced.
+   *
+   * A second turn for an agent that is already running must NOT start a
+   * parallel loop. `agent.ts` spells out what that costs: two loops push
+   * onto one history, the second overwrites `abortController` so Stop can no
+   * longer reach the first, and the transcript comes out as `user, user,
+   * assistant, assistant`.
+   *
+   * It is worse than that in a room. Both loops stream prose into the same
+   * conversation, each holding its own segment id, so the text arrives
+   * shredded at character granularity -- one sentence spliced through
+   * another mid-word. Observed on disk across four messages, and mistaken
+   * twice for a rendering fault and once for a store race.
+   *
+   * `setRunning`/`isRunning` were written for exactly this and never read
+   * anywhere. `agent-sessions.ts` says so in its own comment. The guard
+   * existed, was maintained on the write side, and enforced nothing --
+   * which is why a turn arriving 81 seconds into another turn simply ran.
+   *
+   * Steering is the correct answer, not refusal. The message reaches the
+   * SAME loop at its next step boundary, which is what the user meant by
+   * typing while it worked, and `Agent.steer` already guarantees the
+   * history stays well-formed. Refusing would silently drop what they said.
+   */
+  if (!opts?.steerRetry && isRunning(agentId)) {
+    const accepted = steerSession(agentId, rawPrompt);
+    if (accepted) {
+      fileLog('[engine] steered into the live turn for', agentId);
+      /*
+       * The queue is shown in the composer, so the user can see their words
+       * are held rather than lost. `steer_applied` writes the transcript
+       * entry when it actually reaches the model.
+       */
+      emitEngineEvent({ type: 'steer-queued', agentId, queued: queuedSteer(agentId) });
+      return '';
+    }
+    /*
+     * `steer` refused: the turn ended between the check and the call. Fall
+     * through and run normally -- there is no live loop to collide with.
+     */
+    fileLog('[engine] steer refused, turn already ended for', agentId);
+  }
 
   const expanded = expandSkill(rawPrompt);
   // Non-image attachments are inlined ahead of the user's own words so the
