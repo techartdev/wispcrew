@@ -497,6 +497,13 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
           undefined,
           input.channel,
           conversation.id,
+          /*
+           * Which entry this message was written as, so the engine can drop
+           * it if the message turns out to be a steer rather than a new
+           * turn. Only this function knows the id; only `runPrompt` knows
+           * whether a turn was already running.
+           */
+          { triggerEntryId },
         );
         updateTurn(turn.id, { state: 'completed' });
 

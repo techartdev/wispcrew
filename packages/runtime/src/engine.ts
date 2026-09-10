@@ -644,6 +644,16 @@ export interface RunOptions {
    * because the turn ended between the check and the call.
    */
   steerRetry?: boolean;
+
+  /**
+   * The transcript entry the caller already wrote for this message.
+   *
+   * Only used when the message turns out to be a steer: that entry is
+   * removed, because `steer_applied` writes the message again at the point
+   * it actually reaches the model. Without it the user sees their words
+   * twice — once on send, once on injection.
+   */
+  triggerEntryId?: string;
 }
 
 /**
@@ -903,6 +913,27 @@ export async function runPrompt(
     const accepted = steerSession(agentId, rawPrompt);
     if (accepted) {
       fileLog('[engine] steered into the live turn for', agentId);
+
+      /*
+       * The caller already wrote this message; drop that copy.
+       *
+       * `runRoomTurn` writes the user's entry before calling here, because
+       * for an ordinary turn that is exactly right — the message must be
+       * visible the instant it is sent. A steered message is different: it
+       * is written a SECOND time by `steer_applied` when it actually
+       * reaches the model, which is deliberate (it belongs after the tool
+       * call it was meant to redirect, not above it).
+       *
+       * So the two writes are each correct alone and wrong together. The
+       * user saw "testing steer" appear immediately as a normal message and
+       * then again six seconds later, which reads as the steer having been
+       * ignored and sent as a fresh prompt.
+       *
+       * Removed here rather than skipped in `runRoomTurn`, because only this
+       * function knows a steer happened — the decision is made after the
+       * caller has already committed the entry.
+       */
+      if (opts?.triggerEntryId) store.removeTranscriptEntry(outputId, opts.triggerEntryId);
       /*
        * The queue is shown in the composer, so the user can see their words
        * are held rather than lost. `steer_applied` writes the transcript

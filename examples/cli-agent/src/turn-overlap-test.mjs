@@ -32,10 +32,19 @@
  * which is what the user meant by typing while it worked.
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Agent } from '@wispcrew/core';
 import { ToolRegistry } from '@wispcrew/tools';
+import {
+  createNodeCrypto,
+  initStore,
+  loadTranscript,
+  pushTranscript,
+  removeTranscriptEntry,
+  setHost,
+} from '@wispcrew/runtime';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 let failures = 0;
@@ -147,7 +156,7 @@ console.log('\n[4] the engine enforces one loop per agent');
 
   check('runPrompt checks whether a turn is live', /if \(!opts\?\.steerRetry && isRunning\(agentId\)\)/.test(engine));
   check('and steers instead of starting a loop', /const accepted = steerSession\(agentId, rawPrompt\)/.test(engine));
-  check('returning without a second run', /if \(accepted\) \{[\s\S]{0,400}?return '';/.test(engine));
+  check('returning without a second run', /if \(accepted\) \{[\s\S]{0,2000}?return '';/.test(engine));
   check(
     'a refused steer falls through to a normal run',
     /steer refused, turn already ended/.test(engine),
@@ -160,6 +169,70 @@ console.log('\n[4] the engine enforces one loop per agent');
     'utf8',
   );
   check('the session tracks run state', /export function isRunning/.test(sessions));
+}
+
+console.log('\n[5] a steered message is written once, not twice');
+{
+  /*
+   * Two writers, each correct alone.
+   *
+   * `runRoomTurn` commits the user's entry before calling the engine,
+   * because for an ordinary turn the message must appear the instant it is
+   * sent. `steer_applied` writes it again when it reaches the model, which
+   * is also deliberate: a steer belongs AFTER the tool call it was meant to
+   * redirect, not above it.
+   *
+   * Together they showed the user's words twice — once on send, once six
+   * seconds later — which reads as the steer having been ignored and sent
+   * as a fresh prompt. Observed live:
+   *
+   *   usr_mtvjyzp1p4816t  13:18:14  "testing steer"   <- steered
+   *   usr_mtvjz3zs7owkfd  13:18:20  "testing steer"   <- written again
+   *
+   * Only `runPrompt` can resolve it: the caller has already committed the
+   * entry by the time anyone knows a turn was running.
+   */
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wisp-steer-'));
+  setHost({ dataDir: dir, defaultWorkspaceRoot: dir, nodeName: 'test', crypto: createNodeCrypto(dir) });
+  initStore(dir);
+
+  const ROOM = 'room_steer';
+  pushTranscript(ROOM, {
+    kind: 'message',
+    id: 'usr_early',
+    role: 'user',
+    content: 'testing steer',
+    createdAt: Date.now(),
+  });
+  check('the caller commits the message', loadTranscript(ROOM).length === 1);
+
+  check('the early copy can be removed', removeTranscriptEntry(ROOM, 'usr_early') === true);
+
+  pushTranscript(ROOM, {
+    kind: 'message',
+    id: 'usr_injected',
+    role: 'user',
+    content: 'testing steer',
+    createdAt: Date.now(),
+  });
+
+  const copies = loadTranscript(ROOM).filter((e) => e.content === 'testing steer');
+  check('the message appears exactly once', copies.length === 1, `${copies.length} copies`);
+  check('and it is the injected one', copies[0]?.id === 'usr_injected', copies[0]?.id);
+
+  /* A caller that never wrote an entry must not be punished for it. */
+  check('removing an unknown id is a no-op', removeTranscriptEntry(ROOM, 'usr_missing') === false);
+
+  const engine = fs.readFileSync(path.join(root, 'packages/runtime/src/engine.ts'), 'utf8');
+  check(
+    'the engine drops the caller copy when it steers',
+    /store\.removeTranscriptEntry\(outputId, opts\.triggerEntryId\)/.test(engine),
+  );
+
+  const roomTurn = fs.readFileSync(path.join(root, 'packages/runtime/src/room-turn.ts'), 'utf8');
+  check('and the room tells it which entry that was', /\{ triggerEntryId \}/.test(roomTurn));
+
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 console.log('');

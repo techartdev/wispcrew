@@ -566,6 +566,30 @@ export function upsertTranscriptEntry(agentId: string, entry: TranscriptEntry): 
   return entries;
 }
 
+/**
+ * Remove one entry by id.
+ *
+ * Written for the steer path: the caller commits a user message before the
+ * engine decides whether it opens a turn or joins one, and a steered
+ * message is written again at the point it reaches the model. Deleting the
+ * early copy is what stops the same words appearing twice.
+ *
+ * Returns true when something was removed, so a caller can tell "already
+ * gone" from "never there" rather than assuming.
+ */
+export function removeTranscriptEntry(agentId: string, entryId: string): boolean {
+  const entries = loadTranscript(agentId);
+  const kept = entries.filter((e) => e.id !== entryId);
+  if (kept.length === entries.length) return false;
+  /*
+   * Named, because this write SHRINKS the transcript and `saveTranscript`
+   * checkpoints those. A recovery list reading "write" for a deliberate
+   * single-entry removal would be indistinguishable from data loss.
+   */
+  saveTranscript(agentId, kept, 'steered message merged');
+  return true;
+}
+
 export function clearTranscript(agentId: string): void {
   // Named, so the recovery list reads "before the chat was cleared" rather
   // than a generic "write". That label is the whole basis on which someone
