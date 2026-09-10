@@ -29,6 +29,8 @@
  * at all, so there was nothing to clear it with.
  */
 import type { ChannelId, ConversationRecord } from '@wispcrew/shared';
+import { agentsIn } from '@wispcrew/shared';
+import { isRunning } from './agent-sessions.js';
 import { createConversation, getConversation, recordRoomEvent, updateConversation } from './conversations.js';
 import { pushTranscript, runPrompt } from './engine.js';
 import { fileLog } from './filelog.js';
@@ -196,7 +198,31 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
    * user message, no less — would show the same paragraph twice and put it
    * in the wrong voice.
    */
-  if (!input.authorId) {
+  /*
+   * Is this message going to STEER a running turn rather than open one?
+   *
+   * Decided before anything is written, because writing first is what
+   * produced the flicker the user reported: the entry was committed here,
+   * drawn by the renderer, and then withdrawn ~150ms later when `runPrompt`
+   * discovered a turn was already running. Correct, and visibly wrong --
+   * "the short appear of the steer in the message history before it became
+   * a steer message was little glitchy".
+   *
+   * 4a74ec9 made that withdrawal work. This makes it unnecessary: nothing
+   * is drawn, so nothing has to be taken back. The withdrawal path stays as
+   * the safety net for the race below.
+   *
+   * The race: a turn can finish between this check and `runPrompt` acting
+   * on it. Then the message runs as an ordinary turn and `runPrompt` writes
+   * it at injection instead -- a few hundred milliseconds later than today,
+   * and self-correcting. That is the right trade against a flicker on every
+   * single steer.
+   */
+  const steerTarget = input.authorId
+    ? undefined
+    : agentsIn(conversation).find((member) => isRunning(member.id));
+
+  if (!input.authorId && !steerTarget) {
   pushTranscript(conversation.id, {
     kind: 'message',
     id: triggerEntryId,
@@ -498,12 +524,21 @@ export async function runRoomTurn(input: RoomTurnInput): Promise<RoomTurnResult>
           input.channel,
           conversation.id,
           /*
-           * Which entry this message was written as, so the engine can drop
-           * it if the message turns out to be a steer rather than a new
-           * turn. Only this function knows the id; only `runPrompt` knows
-           * whether a turn was already running.
+           * The entry this message was written as, when it WAS written.
+           *
+           * Undefined once the steer is predicted above: nothing was
+           * committed, so there is nothing for `runPrompt` to withdraw. It
+           * still matters for the race — a turn that ended between the
+           * prediction and here writes the entry normally, and the engine
+           * needs the id to take it back.
            */
-          { triggerEntryId },
+          {
+            triggerEntryId: steerTarget ? undefined : triggerEntryId,
+            // So the engine can write the message itself if the steer is
+            // refused — nobody else has recorded it.
+            steerPredicted: Boolean(steerTarget),
+            speakerId: input.speakerId,
+          },
         );
         updateTurn(turn.id, { state: 'completed' });
 

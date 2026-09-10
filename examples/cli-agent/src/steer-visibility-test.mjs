@@ -221,6 +221,61 @@ console.log('\n[6] the queue behaves like a queue');
   );
 }
 
+console.log('\n[7] a steered message is never drawn in the wrong place first');
+{
+  /*
+   * The user, after everything else worked: "steer test showed in the
+   * messages for a fraction of a second then moved above the message box".
+   *
+   * 4a74ec9 made the withdrawal correct — the entry was committed, drawn,
+   * and taken back ~150ms later once `runPrompt` found a turn running. This
+   * makes the withdrawal unnecessary for the ordinary case: `runRoomTurn`
+   * asks whether any member is mid-turn BEFORE writing, and writes nothing
+   * when one is.
+   *
+   * The withdrawal path stays, because prediction can be wrong.
+   */
+  const roomTurn = fs
+    .readFileSync(path.join(root, 'packages/runtime/src/room-turn.ts'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+
+  check(
+    'the room asks before writing',
+    /const steerTarget = input\.authorId[\s\S]{0,140}?isRunning\(member\.id\)\)/.test(roomTurn),
+  );
+  check(
+    'and skips the write when a member is running',
+    /if \(!input\.authorId && !steerTarget\) \{/.test(roomTurn),
+    'the entry is still committed before the decision',
+  );
+  check(
+    'passing no entry id when it wrote nothing',
+    /triggerEntryId: steerTarget \? undefined : triggerEntryId/.test(roomTurn),
+    'the engine would try to withdraw an entry that never existed',
+  );
+
+  /*
+   * The race this opens, and why it must be closed here.
+   *
+   * A turn can finish between the prediction and `steer()`. The steer is
+   * then refused and the message runs as a normal turn — but nobody wrote
+   * it, so without this the user's words are absent from the conversation
+   * altogether. That is much worse than the flicker being removed.
+   */
+  const code = engine.replace(/\/\*[\s\S]*?\*\//g, '');
+  check('the caller says it predicted a steer', /steerPredicted: Boolean\(steerTarget\)/.test(roomTurn));
+  check(
+    'and the engine writes the message if that prediction fails',
+    /if \(opts\?\.steerPredicted && !opts\?\.triggerEntryId\) \{[\s\S]{0,300}?pushTranscript\(outputId/.test(code),
+    'a refused steer must not lose the message',
+  );
+  check(
+    'attributed to whoever sent it',
+    /authorId: opts\.speakerId/.test(code),
+    'an unattributed user message reads as the agent talking to itself',
+  );
+}
+
 console.log('');
 if (failures) {
   console.log(`STEER-VISIBILITY TEST FAILED — ${failures} assertion(s)`);

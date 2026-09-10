@@ -248,7 +248,19 @@ console.log('\n[5] a steered message is written once, not twice');
   );
 
   const roomTurn = fs.readFileSync(path.join(root, 'packages/runtime/src/room-turn.ts'), 'utf8');
-  check('and the room tells it which entry that was', /\{ triggerEntryId \}/.test(roomTurn));
+  /*
+   * The room passes the id it wrote, so the engine can withdraw that entry.
+   *
+   * Now conditional: since the flicker fix, `runRoomTurn` writes nothing at
+   * all when it can see a member already running, and passes `undefined` in
+   * that case — there is no entry to take back. The id still travels for the
+   * race where the running turn ends in between and the message IS written.
+   */
+  check(
+    'and the room tells it which entry that was',
+    /triggerEntryId: steerTarget \? undefined : triggerEntryId/.test(roomTurn),
+    'the engine cannot withdraw an entry it was never told about',
+  );
 
   fs.rmSync(dir, { recursive: true, force: true });
 }

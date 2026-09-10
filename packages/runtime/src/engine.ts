@@ -654,6 +654,18 @@ export interface RunOptions {
    * twice — once on send, once on injection.
    */
   triggerEntryId?: string;
+
+  /**
+   * The caller expected this message to steer, so it wrote no entry.
+   *
+   * Lets `runPrompt` close the race it cannot otherwise see: if the running
+   * turn ends before `steer()` is called, nobody has recorded the message
+   * and it would be lost from the conversation entirely.
+   */
+  steerPredicted?: boolean;
+
+  /** Who said it, for the entry written when that race is lost. */
+  speakerId?: string;
 }
 
 /**
@@ -979,6 +991,30 @@ export async function runPrompt(
      * through and run normally -- there is no live loop to collide with.
      */
     fileLog('[engine] steer refused, turn already ended for', agentId);
+
+    /*
+     * The caller predicted a steer and therefore wrote nothing.
+     *
+     * `runRoomTurn` skips its transcript write when it sees a running
+     * member, so that a steered message is never drawn and withdrawn. If
+     * the turn then ends before `steer()` is called, nobody has recorded
+     * the message and it would run as a normal turn with no entry in the
+     * conversation at all -- the user's words simply missing, which is far
+     * worse than the flicker this avoids.
+     *
+     * Written here, at the moment that race is detected, so the window is
+     * closed where it opens rather than by a caller that cannot see it.
+     */
+    if (opts?.steerPredicted && !opts?.triggerEntryId) {
+      pushTranscript(outputId, {
+        kind: 'message',
+        id: store.newId('usr'),
+        role: 'user',
+        content: rawPrompt,
+        authorId: opts.speakerId,
+        createdAt: Date.now(),
+      });
+    }
   }
 
   const expanded = expandSkill(rawPrompt);
