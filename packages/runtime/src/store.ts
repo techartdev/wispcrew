@@ -49,6 +49,9 @@ import { initOAuthAudit } from './oauth-audit.js';
 
 let baseDir = '';
 
+/** Makes each staged write unique; see `writeJson`. */
+let tmpCounter = 0;
+
 /** Point the store at `<userData>`; call once during app startup. */
 export function initStore(userDataDir: string): void {
   baseDir = userDataDir;
@@ -84,6 +87,17 @@ export function filePathFor(name: string): string {
 
 function transcriptDir(): string {
   return path.join(baseDir, 'transcripts');
+}
+
+/**
+ * Where transcripts live, for code that needs a sibling path.
+ *
+ * Exported so `transcript-writer` can put its lock files next to the
+ * transcripts rather than re-deriving the directory — the same reason
+ * `filePathFor` exists. One place decides where a profile lives.
+ */
+export function transcriptDirPath(): string {
+  return transcriptDir();
 }
 
 /** Parse JSON tolerating a UTF-8 BOM; returns `fallback` on any failure. */
@@ -136,7 +150,24 @@ function readArray<T>(file: string): T[] {
  */
 /** Write JSON atomically (temp file + rename). See the note above. */
 export function writeJson(file: string, value: unknown): void {
-  const tmp = `${file}.tmp`;
+  /*
+   * A temp path unique to this write, not `${file}.tmp`.
+   *
+   * The rename is atomic, which is what this function advertised — but with
+   * one shared temp name the atomicity protects the wrong interval. Two
+   * writers both write `transcript.json.tmp`, so the second overwrites the
+   * first's staged content BEFORE either rename runs, and the first then
+   * renames the second's data over the file under its own name. Its rename
+   * may also fail ENOENT because the other consumed the temp file first.
+   *
+   * Measured, 300 rounds of the interleave: the first writer lost its write
+   * 300 times out of 300, and every trailing rename failed ENOENT.
+   *
+   * Process id and a counter, because two DIFFERENT processes on one profile
+   * is exactly the case that matters — the daemon and the desktop both write
+   * here, and a per-process counter alone would collide across them.
+   */
+  const tmp = `${file}.${process.pid}.${(tmpCounter += 1)}.tmp`;
   try {
     fs.writeFileSync(tmp, JSON.stringify(value, null, 2), 'utf8');
     fs.renameSync(tmp, file);

@@ -24,6 +24,7 @@ import type { ChannelId, ConversationRecord, TranscriptEntry } from '@wispcrew/s
 import { emitEngineEvent } from './engine-events.js';
 import * as store from './store.js';
 import { mirrorEntry } from './channel-mirror.js';
+import { upsertEntryLocked } from './transcript-writer.js';
 
 /** Persist a transcript entry and tell whoever is listening. */
 export function pushTranscript(
@@ -38,7 +39,25 @@ export function pushTranscript(
    */
   origin?: ChannelId,
 ): void {
-  store.upsertTranscriptEntry(agentId, entry);
+  /*
+   * Serialised, because a room has more than one writer.
+   *
+   * `upsertTranscriptEntry` is read-modify-write over a whole JSON file and
+   * streaming rewrites that file on every token. Two turns at once — or the
+   * daemon and the desktop, which are two PROCESSES on one profile — each
+   * read a snapshot, edit their own entry and write everything back, so the
+   * second silently discards the first. Observed on disk as one agent's
+   * sentence spliced into another's mid-word, and as the same message
+   * stored twice under two ids.
+   *
+   * Synchronous on purpose. An earlier version queued this on a promise and
+   * broke eleven tests: `pushTranscript` promises the entry is stored when
+   * it returns, and callers all over the codebase read it back on the next
+   * line. Deferring the write turned every one of those into a
+   * read-before-write. A transcript write is a sub-millisecond file
+   * operation, so briefly blocking beats rewriting every call site.
+   */
+  upsertEntryLocked(agentId, entry);
   emitEngineEvent({ type: 'transcript', agentId, entry });
 
   /*

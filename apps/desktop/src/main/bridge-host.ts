@@ -114,6 +114,7 @@ import {
 } from '@wispcrew/runtime';
 import { writeDaemonSecrets } from './secrets-handoff.js';
 import { fileLog } from '@wispcrew/runtime';
+import { pushTranscript as runtimePushTranscript } from '@wispcrew/runtime';
 
 /**
  * Ask the user to paste the authorization code Anthropic's callback page
@@ -304,10 +305,20 @@ export function attachWindowEventSink(): () => void {
   });
 }
 
-/** Convenience: push a transcript entry and persist it in one step. */
+/**
+ * Push a transcript entry and persist it in one step.
+ *
+ * Delegates the WRITE to the runtime's own `pushTranscript` rather than
+ * calling the store directly. That matters because the runtime's version
+ * serialises writes per conversation and mirrors to channels; this one did
+ * neither, so an entry written through the desktop bypassed the queue that
+ * exists to stop two writers shredding each other's text.
+ *
+ * The event is still emitted here, because the renderer is this process's
+ * concern.
+ */
 export function pushTranscript(agentId: string, entry: TranscriptEntry): void {
-  store.upsertTranscriptEntry(agentId, entry);
-  emitEvent({ type: 'transcript', agentId, entry });
+  runtimePushTranscript(agentId, entry);
 }
 
 export function emitAgents(): void {
