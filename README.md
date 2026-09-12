@@ -183,7 +183,7 @@ connected — single-machine agents and routines keep running regardless.
 | **Rewind & branch** | Undo a bad turn, or fork a conversation into a new agent from any point |
 | **Permission gates** | Every write or command asks first — per agent, and per channel |
 | **Routines & watches** | Cron schedules, self-scheduled follow-ups, filesystem triggers |
-| **Skills** | Reusable instruction sets, invoked with `/name` |
+| **Skills** | Reusable instruction sets, invoked with `/name`. Ships with a reference for its own CLI and three for building [ShellCanvas](https://shellcanvas.com) apps, adapters and packages. They cost nothing until you invoke one |
 | **MCP servers** | Extend agents with any Model Context Protocol server |
 | **Encrypted keys** | Sealed with the OS keychain (DPAPI / Keychain / libsecret) |
 | **Works offline** | Point it at Ollama or LM Studio and it never touches the internet |

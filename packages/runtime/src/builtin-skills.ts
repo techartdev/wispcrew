@@ -23,6 +23,20 @@ import { fileLog } from './filelog.js';
 /** The generated CLI reference, embedded at build time. */
 import cliSkill from './generated/wispcrew-cli.json' with { type: 'json' };
 
+/*
+ * ShellCanvas extension authoring, converted from that project's published
+ * SKILL.md files by `npm run skills:shellcanvas`.
+ *
+ * They are here because building an app or a device adapter is work somebody
+ * asks an agent to do, and getting it wrong is expensive in a specific way:
+ * the SDK commands look like ordinary npm and cargo, so a model invents
+ * plausible flags and produces a package that will not install. Costing
+ * nothing until invoked, they are worth shipping.
+ */
+import shellcanvasApp from './generated/shellcanvas-app.json' with { type: 'json' };
+import shellcanvasAdapter from './generated/shellcanvas-adapter.json' with { type: 'json' };
+import shellcanvasPackage from './generated/shellcanvas-package.json' with { type: 'json' };
+
 interface SeedSkill {
   name: string;
   description: string;
@@ -30,7 +44,12 @@ interface SeedSkill {
   sections?: { name: string; description: string; body: string }[];
 }
 
-const BUILTIN: SeedSkill[] = [cliSkill as SeedSkill];
+const BUILTIN: SeedSkill[] = [
+  cliSkill as SeedSkill,
+  shellcanvasApp as SeedSkill,
+  shellcanvasAdapter as SeedSkill,
+  shellcanvasPackage as SeedSkill,
+];
 
 /**
  * Which builtins have already been offered.

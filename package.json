@@ -19,6 +19,8 @@
     "//typecheck": "Typechecking also needs the declaration files, so build the packages first. On a fresh clone this is the difference between a clean run and a wall of TS2307.",
     "version:show": "node scripts/set-version.mjs",
     "version:set": "node scripts/set-version.mjs",
+    "//skills": "Builtin skills are generated, never hand-written, so they cannot describe a surface that is not there. The ShellCanvas ones come from that project's published SKILL.md files; pass --source <checkout>/skills to build from a local clone instead of GitHub. The output is committed.",
+    "skills:shellcanvas": "node scripts/build-shellcanvas-skills.mjs",
     "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
     "test": "npm run build:packages && npm run test --workspaces --if-present",
     "agent": "npm run agent --workspace @wispcrew/examples-cli",

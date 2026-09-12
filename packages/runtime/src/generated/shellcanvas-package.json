@@ -1,0 +1,38 @@
+{
+  "name": "shellcanvas-package",
+  "description": "Package, validate, install, update or troubleshoot a ShellCanvas app package or native adapter package, including GitHub distribution and what happens to running windows and connections. Use for extension delivery and lifecycle, not operating-system installers.",
+  "body": "Two artifact kinds exist and they are not interchangeable. An **app package** is\na single JSON file containing bundled code, styles and a manifest; it runs\nsandboxed with reviewed permissions. An **adapter package** is a directory of\nnative files with hashes; it runs as a process with the user's own permissions.\n\nDecide which one you are handling before touching anything, and never present a\nnative executable as a sandboxed app.\n\n```sh\nnpx shellcanvas-app validate dist/app.shellcanvas.json     # app\nshellcanvas-adapter validate ./dist/my-device/adapter.json # adapter\n```\n\nBoth commands only parse and hash. Neither installs, connects, or proves the\nextension works. Building each kind is covered by the `shellcanvas-app` and\n`shellcanvas-adapter` skills; this one is about delivery and what happens after.",
+  "sections": [
+    {
+      "name": "produce-a-reviewable-artifact",
+      "description": "Build into a new output and leave existing artifacts intact, because a package someone already installed must stay exactly as it was.",
+      "body": "# Produce a reviewable artifact\n\nBuild into a new output and leave existing artifacts intact, because a package\nsomeone already installed must stay exactly as it was.\n\nFor an app, `npm run build` type-checks and packs; `--version 0.2.0` on\n`shellcanvas-app build` overrides the artifact version without editing the\nmanifest. For an adapter, `shellcanvas-adapter build DIR NEW_OUTPUT` compiles and\npacks a generated Rust project, while `pack SOURCE_JSON EXECUTABLE NEW_OUTPUT`\npackages an already-built executable from any language.\n\nAn update means a new version and a new output directory — never an overwrite in\nplace. A failed build or copy leaves an incomplete directory: retry into a fresh\none rather than repairing it by hand. Exclude credentials and private device\ndata; a password configuration field may not carry a packaged default.\n\nMetadata and hash validation is not publisher authentication."
+    },
+    {
+      "name": "distribute-through-github",
+      "description": "A repository can serve an app directly, with no registry, no token and no build step on the user's machine.",
+      "body": "# Distribute through GitHub\n\nA repository can serve an app directly, with no registry, no token and no build\nstep on the user's machine.\n\n```sh\nnpm run build\nnpx shellcanvas-app repository . --description \"What your app does.\"\n```\n\nCommit the built `dist/app.shellcanvas.json` and the generated root\n`shellcanvas.repo.json` together, and protect the bytes with\n`dist/app.shellcanvas.json -text` in `.gitattributes`. The descriptor records the\npackage's SHA-256, so any rewrite — including an automatic line-ending\nconversion — breaks installation with a hash mismatch.\n\nUsers install with **App Manager → Add apps → From GitHub**, review the exact\ndownloaded package, and update the same way.\n<https://shellcanvas.com/docs/extensions/install-apps.html>"
+    },
+    {
+      "name": "know-what-an-update-does-to-running-work",
+      "description": "Installing a new version never reaches into what is already running, which is deliberate and occasionally surprising.",
+      "body": "# Know what an update does to running work\n\nInstalling a new version never reaches into what is already running, which is\ndeliberate and occasionally surprising.\n\nAn open app window keeps the code and the grants it started with until it is\nclosed; a new window gets the new version. An active adapter connection keeps\nits own executable generation, so removing an adapter package can leave a\nrunning connection alive — disconnecting or replacing it is a separate,\nexplicit act.\n\nNothing silently migrates in-flight operations to new code. Draft protection and\nbusy guards still apply, so removal cannot bypass a window's unsaved-changes\nprompt. Plan updates around that rather than assuming a restart semantics that\ndoes not exist."
+    },
+    {
+      "name": "review-trust-before-installing-every-time",
+      "description": "Installation is the moment a person decides what this code may do, and it is the only such moment.",
+      "body": "# Review trust before installing, every time\n\nInstallation is the moment a person decides what this code may do, and it is the\nonly such moment.\n\nFor an app, read the declared permissions and ask whether the feature genuinely\nneeds each one. For an adapter, understand that you are approving native code\nthat runs with your own operating-system permissions: hashes tell you the bytes\nmatch what was reviewed, not that the author is trustworthy. There is no\nsigning, no marketplace and no vetting.\n\nExisting user authorisation decides whether to install or merely to hand the\nartifact over for review. This work does not authorise publishing to a registry,\nconnecting to a live device, or changing machine configuration.\n<https://shellcanvas.com/docs/extensions/permissions.html>"
+    },
+    {
+      "name": "troubleshoot-a-refused-package",
+      "description": "Most failures are the package, not the desktop, and the message says which.",
+      "body": "# Troubleshoot a refused package\n\nMost failures are the package, not the desktop, and the message says which.\n\nA schema or manifest refusal means the package was built against different rules\n— rebuild it with a current SDK. A compatibility refusal means the package\ndeclares a client platform this desktop does not satisfy. In App Manager,\nselection stays disabled until the installed-app catalog has loaded; acting\nearly produces a complaint that clears on refresh, so wait for the control to\nenable rather than retrying.\n\nFor an adapter that installs but will not run, the host-side timeline in\n**Connection adapters → Connection diagnostics** is the useful artifact, and it\nis redacted by design.\n\nDo not delete package files or staged directories by hand to force a retry, and\nnever re-run an uncertain device mutation as a packaging repair.\n<https://shellcanvas.com/docs/troubleshooting/apps.html>"
+    },
+    {
+      "name": "report-what-was-actually-verified",
+      "description": "Keep the artifact, its version, the platform and the checks apart from each other in any handoff, because they prove different things.",
+      "body": "# Report what was actually verified\n\nKeep the artifact, its version, the platform and the checks apart from each\nother in any handoff, because they prove different things.\n\nValidation proves the bytes parse. An installed window or a connected adapter\nproves the desktop accepted it. Only exercising the real workflow proves it\nworks, and only against a real device does it prove device support. State which\nof these you did, and name what you did not verify rather than leaving it\nimplied.\n\nA debug build is not a signed release, and ShellCanvas installers themselves are\nunsigned. Do not describe either as more than it is."
+    }
+  ],
+  "enabled": true
+}
